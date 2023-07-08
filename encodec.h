@@ -118,4 +118,4 @@ struct encodec_model {
 };
 
 
-bool encodec_model_load(const std::string& fname, encodec_model& model);
+bool encodec_model_load(std::ifstream& fin, encodec_model& model);

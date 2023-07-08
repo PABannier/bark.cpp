@@ -9,25 +9,7 @@
 #include <string>
 #include <vector>
 
-bool encodec_model_load(const std::string& fname, encodec_model& model) {
-    fprintf(stderr, "%s: loading model from '%s'\n", __func__, fname.c_str());
-
-    auto infile = std::ifstream(fname, std::ios::binary);
-    if (!infile) {
-        fprintf(stderr, "%s: failed to open '%s'\n", __func__, fname.c_str());
-        return false;
-    }
-
-    // verify magic (i.e. ggml signature in hex format)
-    {
-        uint32_t magic;
-        read_safe(infile, magic);
-        if (magic != GGML_FILE_MAGIC) {
-            fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname.c_str());
-            return false;
-        }
-    }
-
+bool encodec_model_load(std::ifstream& fin, encodec_model& model) {
     auto & ctx = model.ctx;
     size_t ctx_size = 0;
 
@@ -218,24 +200,24 @@ bool encodec_model_load(const std::string& fname, encodec_model& model) {
             int32_t length;
             int32_t ftype;
 
-            read_safe(infile, n_dims);
-            read_safe(infile, length);
-            read_safe(infile, ftype);
+            read_safe(fin, n_dims);
+            read_safe(fin, length);
+            read_safe(fin, ftype);
 
-            if (infile.eof()) {
+            if (fin.eof()) {
                 break;
             }
 
             int32_t nelements = 1;
             int32_t ne[3] = {1, 1, 1};
             for (int i = 0; i < n_dims; i++) {
-                read_safe(infile, ne[i]);
+                read_safe(fin, ne[i]);
                 nelements *= ne[i];
             }
 
             std::string name;
             std::vector<char> buf(length);
-            infile.read(&buf[0], buf.size());
+            fin.read(&buf[0], buf.size());
             name.assign(&buf[0], buf.size());
 
             if (model.tensors.find(name.data()) == model.tensors.end()) {
@@ -262,7 +244,7 @@ bool encodec_model_load(const std::string& fname, encodec_model& model) {
                 return false;
             }
 
-            infile.read(reinterpret_cast<char *>(tensor->data), ggml_nbytes(tensor));
+            fin.read(reinterpret_cast<char *>(tensor->data), ggml_nbytes(tensor));
 
             printf("%48s - [%5d, %5d, %5d], type = %6s, %6.2f MB\n", name.data(), ne[0], ne[1], ne[2], ftype == 0 ? "float" : "f16", ggml_nbytes(tensor)/1024.0/1024.0);
 
@@ -273,7 +255,7 @@ bool encodec_model_load(const std::string& fname, encodec_model& model) {
         fprintf(stderr, "%s: model size    = %7.2f MB\n", __func__, total_size/1024.0/1024.0);
     }
 
-    infile.close();
+    fin.close();
 
     return true;
 }
