@@ -1,1 +1,7 @@
 ggml_weights/
+
+bark
+encodec
+
+*.o
+*.plist
