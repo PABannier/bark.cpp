@@ -2,8 +2,6 @@
 
 #include <fstream>
 
-#define GGML_FILE_MAGIC      'ggml'
-
 #define BARK_ASSERT(x) \
     do { \
         if (!(x)) { \
