@@ -1,0 +1,12 @@
+{
+    "tasks": [
+        {
+            "type": "shell",
+            "label": "run makefile",
+            "command": "make",
+            "args": ["bark"],
+            "problemMatcher": [],
+        }
+    ],
+    "version": "2.0.0"
+}
