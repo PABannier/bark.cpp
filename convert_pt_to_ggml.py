@@ -32,6 +32,7 @@ Example
 import argparse
 from pathlib import Path
 import json
+import re
 import struct
 
 import numpy as np
@@ -107,19 +108,32 @@ def parse_vocab(dir_model, outfile):
 
 def parse_hparams(hparams, outfile):
     """Parse GPT hyperparameters."""
-    outfile.write(struct.pack("i", 0x67676d6c))
     outfile.write(struct.pack("i", hparams["n_layer"]))
     outfile.write(struct.pack("i", hparams["n_head"]))
     outfile.write(struct.pack("i", hparams["n_embd"]))
     outfile.write(struct.pack("i", hparams["block_size"]))
 
     try:
-        outfile.write(struct.pack("i", hparams["vocab_size"]))
+        outfile.write(struct.pack("ii", hparams["vocab_size"], hparams["vocab_size"]))
     except KeyError:
-        outfile.write(struct.pack("i", hparams["output_vocab_size"]))
+        outfile.write(
+            struct.pack("ii", hparams["input_vocab_size"], hparams["output_vocab_size"])
+        )
+
+    n_lm_heads, n_wtes = None, None
+    try:
+        # only for fine text model
+        n_lm_heads = hparams["n_codes_total"] - hparams["n_codes_given"]
+        n_wtes = hparams["n_codes_total"]
+    except KeyError:
+        n_lm_heads, n_wtes = 1, 1
+
+    outfile.write(struct.pack("ii", n_lm_heads, n_wtes))
 
 def parse_text_models(checkpoint, outfile):
     """Load GPT model checkpoint (text, fine, coarse)."""
+    outfile.write(struct.pack("i", len(checkpoint.keys())))
+
     for name in checkpoint.keys():
         var_data = checkpoint[name].squeeze().numpy()
         print(f"Processing variable: {name} with shape: {var_data.shape}")
@@ -133,8 +147,70 @@ def parse_text_models(checkpoint, outfile):
             ftype_cur = 0
 
         # strip `_orig_mod.transformer.` prefix
-        clean_name = ".".join(name.split(".")[2:])
-        encoded_name = clean_name.encode("utf-8")
+        if name == "_orig_mod.lm_head.weight":
+            name = "lm_head.weight"
+        elif "lm_heads" in name:
+            name = ".".join(name.split(".")[1:])
+        else:
+            name = ".".join(name.split(".")[2:])
+
+        # rename headers to keep compatibility
+        if name == "ln_f.weight":
+            name = "model/ln_f/g"
+        elif name == "ln_f.bias":
+            name = "model/ln_f/b"
+        elif name == "wte.weight":
+            name = "model/wte/0"
+        elif name == "wpe.weight":
+            name = "model/wpe"
+        elif name == "lm_head.weight":
+            name = "model/lm_head/0"
+        elif re.match(r"wtes\.\d+\.weight", name):
+            i = re.findall("\d+", name)[0]
+            name = f"model/wte/{i}"
+        elif re.match(r"h\.\d+\.ln_1\.weight", name):
+            i = re.findall("\d+", name)[0]
+            name = f"model/h{i}/ln_1/g"
+        elif re.match(r"h\.\d+\.ln_1\.bias", name):
+            i = re.findall("\d+", name)[0]
+            name = f"model/h{i}/ln_1/b"
+        elif re.match(r"h\.\d+\.attn\.c_attn\.weight", name):
+            i = re.findall("\d+", name)[0]
+            name = f"model/h{i}/attn/c_attn/w"
+        elif re.match(r"h\.\d+\.attn\.c_attn\.bias", name):
+            i = re.findall("\d+", name)[0]
+            name = f"model/h{i}/attn/c_attn/b"
+        elif re.match(r"h\.\d+\.attn\.c_proj\.weight", name):
+            i = re.findall("\d+", name)[0]
+            name = f"model/h{i}/attn/c_proj/w"
+        elif re.match(r"h.\d+.attn.c_proj.bias", name):
+            i = re.findall("\d+", name)[0]
+            name = f"model/h{i}/attn/c_proj/b"
+        elif re.match(r"h.\d+.ln_2.weight", name):
+            i = re.findall("\d+", name)[0]
+            name = f"model/h{i}/ln_2/g"
+        elif re.match(r"h.\d+.ln_2.bias", name):
+            i = re.findall("\d+", name)[0]
+            name = f"model/h{i}/ln_2/b"
+        elif re.match(r"h.\d+.mlp.c_fc.weight", name):
+            i = re.findall("\d+", name)[0]
+            name = f"model/h{i}/mlp/c_fc/w"
+        elif re.match(r"h.\d+.mlp.c_fc.bias", name):
+            i = re.findall("\d+", name)[0]
+            name = f"model/h{i}/mlp/c_fc/b"
+        elif re.match(r"h.\d+.mlp.c_proj.weight", name):
+            i = re.findall("\d+", name)[0]
+            name = f"model/h{i}/mlp/c_proj/w"
+        elif re.match(r"h.\d+.mlp.c_proj.bias", name):
+            i = re.findall("\d+", name)[0]
+            name = f"model/h{i}/mlp/c_proj/b"
+        elif re.match(r"lm_heads\.\d+\.weight", name):
+            i = re.findall("\d+", name)[0]
+            name = f"model/lm_head/{i}"
+        else:
+            print(f"Unrecognized variable name: {name}")
+
+        encoded_name = name.encode("utf-8")
 
         outfile.write(struct.pack("iii", n_dims, len(encoded_name), ftype_cur))
         for i in range(n_dims):
@@ -156,6 +232,11 @@ if __name__ == "__main__":
     outfile = open(out_dir / "ggml-model.bin", "wb")
     outfile.write(struct.pack("i", 0x67676d6c))  # ggml magic
 
+    text_chkpt = torch.load(dir_model / "text_2.pt", map_location="cpu")
+    parse_hparams(text_chkpt["model_args"], outfile)
+    parse_text_models(text_chkpt["model"], outfile)
+    print(" Text model loaded.")
+
     coarse_chkpt = torch.load(dir_model / "coarse_2.pt", map_location="cpu")
     parse_hparams(coarse_chkpt["model_args"], outfile)
     parse_text_models(coarse_chkpt["model"], outfile)
@@ -165,11 +246,6 @@ if __name__ == "__main__":
     parse_hparams(fine_chkpt["model_args"], outfile)
     parse_text_models(fine_chkpt["model"], outfile)
     print(" Fine model loaded.")
-
-    text_chkpt = torch.load(dir_model / "text_2.pt", map_location="cpu")
-    parse_hparams(text_chkpt["model_args"], outfile)
-    parse_text_models(text_chkpt["model"], outfile)
-    print(" Text model loaded.")
 
     codec_chkpt = torch.load(codec_path / "encodec_24khz-d7cc33bc.th", map_location="cpu")
     parse_codec_model(codec_chkpt, outfile)
