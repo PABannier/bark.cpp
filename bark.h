@@ -3,6 +3,9 @@
 #include <map>
 #include <vector>
 
+#define CLS_TOKEN_ID 101
+#define SEP_TOKEN_ID 102
+
 struct gpt_hparams {
     int32_t n_in_vocab;
     int32_t n_out_vocab;
@@ -14,15 +17,18 @@ struct gpt_hparams {
     int32_t n_wtes;
 };
 
-struct gpt_vocab {
+struct bark_vocab {
     using id    = int32_t;
     using token = std::string;
 
     std::map<token, id> token_to_id;
     std::map<id, token> id_to_token;
-    std::vector<std::string> special_tokens;
 
-    void add_special_token(const std::string & token);
+    std::map<token, id> subword_token_to_id;
+    std::map<id, token> id_to_subword_token;
+
+    // std::vector<std::string> special_tokens;
+    // void add_special_token(const std::string & token);
 };
 
 struct gpt_layer {
@@ -84,6 +90,9 @@ struct bark_model {
 
     // decoder
     encodec_model codec_model;
+
+    // vocab
+    bark_vocab vocab;
 
     int32_t memsize = 0;
 };
