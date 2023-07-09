@@ -26,6 +26,7 @@ https://github.com/skeskinen/bert.cpp/blob/master/bert.cpp
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <random>
 #include <regex>
 #include <string>
 
@@ -465,22 +466,197 @@ void bert_tokenize(
     *n_tokens = t;
 }
 
-void bark_generate_audio(bark_model model, const bark_vocab& vocab, const char * text) {
-    // tokenize text (bert tokenizer)
-    int32_t max_ctx_size = model.text_model.hparams.block_size;
-    int32_t n_tokens;
+bool gpt_eval(
+        const bark_model & model,
+        const int n_threads,
+        const int n_past,
+        const std::vector<bark_vocab::id> & embd_inp,
+              std::vector<float>          & embd_w,
+              size_t                      & mem_per_token) {
 
+}
+
+bark_vocab::id gpt_sample_top_k_top_p(
+        const bark_vocab & vocab,
+        const float * logits,
+        int    top_k,
+        double top_p,
+        double temp,
+        std::mt19937 & rng,
+        float * eos_p) {
+    int n_logits = vocab.id_to_token.size();
+
+    std::vector<std::pair<double, bark_vocab::id>> logits_id;
+    logits_id.reserve(n_logits);
+
+    {
+        const double scale = 1.0/temp;
+        for (int i = 0; i < n_logits; ++i) {
+            logits_id.push_back(std::make_pair(logits[i]*scale, i));
+        }
+    }
+
+    // find the top K tokens
+    std::partial_sort(
+            logits_id.begin(),
+            logits_id.begin() + top_k, logits_id.end(),
+            [](const std::pair<double, bark_vocab::id> & a, const std::pair<double, bark_vocab::id> & b) {
+        return a.first > b.first;
+    });
+
+    logits_id.resize(top_k);
+
+    double maxl = -INFINITY;
+    for (const auto & kv : logits_id) {
+        maxl = std::max(maxl, kv.first);
+    }
+
+    // compute probs for the top K tokens
+    std::vector<double> probs;
+    probs.reserve(logits_id.size());
+
+    double sum = 0.0;
+    for (const auto & kv : logits_id) {
+        double p = exp(kv.first - maxl);
+        probs.push_back(p);
+        sum += p;
+    }
+
+    // normalize the probs
+    for (auto & p : probs) {
+        p /= sum;
+    }
+
+    if (top_p < 1.0f) {
+        double cumsum = 0.0f;
+        for (int i = 0; i < top_k; i++) {
+            cumsum += probs[i];
+            if (cumsum >= top_p) {
+                top_k = i + 1;
+                probs.resize(top_k);
+                logits_id.resize(top_k);
+                break;
+            }
+        }
+
+        cumsum = 1.0/cumsum;
+        for (int i = 0; i < (int) probs.size(); i++) {
+            probs[i] *= cumsum;
+        }
+    }
+
+    std::discrete_distribution<> dist(probs.begin(), probs.end());
+    int idx = dist(rng);
+
+    // likelihood of EOS token
+    *eos_p = probs.back();
+
+    return logits_id[idx].second;
+}
+
+bool bark_generate_audio(
+        bark_model model, 
+        const bark_vocab& vocab, 
+        const char * text,
+        const int n_predict,
+        const int n_threads) {
     std::vector<bark_vocab::id> tokens;
-    tokens.resize(max_ctx_size);
-    bert_tokenize(vocab, text, tokens.data(), &n_tokens, max_ctx_size);
 
-    printf("\ntokens: ");
-    for (int i = 0; i < n_tokens; i++) {
+    const int top_k = 10;
+    const int top_p = 0.2;
+    const int temp  = 0.7;
+    const int seed  = 0;
+
+    const int early_stop = true;
+    const int min_eos_p = 0.2;
+
+    std::mt19937 rng(seed);
+
+    // tokenize text (bert tokenizer)
+    {
+        // max bark length: 256
+        int32_t max_ctx_size = std::min(model.text_model.hparams.block_size, 256);
+        int32_t n_tokens;
+        tokens.resize(max_ctx_size);
+        bert_tokenize(vocab, text, tokens.data(), &n_tokens, max_ctx_size);
+
+        // add encoding offset
+        tokens[n_tokens] = TEXT_ENCODING_OFFSET;
+        n_tokens += 1;
+
+        if (n_tokens < max_ctx_size) {
+            for (int i = n_tokens; i < max_ctx_size; i++)
+                tokens[i] = TEXT_PAD_TOKEN;
+        } else if (n_tokens > max_ctx_size) {
+            fprintf(stderr, "%s: input sequence is too long (%d > 256), truncating sequence", __func__, n_tokens);
+        }
+
+        tokens.resize(max_ctx_size);
+
+        // TODO: add semantic history
+        for (int i = 0; i < 256; i++)
+            tokens.push_back(SEMANTIC_PAD_TOKEN);
+        
+        tokens.push_back(SEMANTIC_INFER_TOKEN);
+
+        assert(tokens.size() == 256 + 256 + 1);
+    }
+
+    printf("%s: prompt: '%s'\n", __func__, text);
+    printf("%s: number of tokens in prompt = %zu, first 8 tokens: ", __func__, tokens.size());
+    for (int i = 0; i < std::min(8, (int) tokens.size()); i++) {
         printf("%d ", tokens[i]);
     }
-    printf("\n");
+    printf("\n\n");
 
-    // encode text
+    // encode text (text model)
+    std::vector<bark_vocab::id> out_seq;
+    {
+        int n_past = 0;
+
+        float eos_p;
+
+        std::vector<bark_vocab::id> embd;
+        std::vector<float> logits;
+
+        // dry run to estimate mem_per_token
+        size_t mem_per_token = 0;
+        gpt_eval(model, n_threads, 0, { 0, 1, 2, 3 }, logits, mem_per_token);
+
+        for (int i = embd.size(); i < tokens.size() + n_predict; i++) {
+            if (embd.size() > 0) {
+                if (!gpt_eval(model, n_threads, n_past, embd, logits, mem_per_token)) {
+                    printf("Failed to predict\n");
+                    return false;
+                }
+            }
+
+            n_past += embd.size();
+            embd.clear();
+
+            logits.resize(SEMANTIC_VOCAB_SIZE);
+
+            if (i >= tokens.size()) {
+                // sample next token and add it to context
+                bark_vocab::id id = gpt_sample_top_k_top_p(vocab, logits.data(), top_k, top_p, temp, rng, &eos_p);
+                embd.push_back(id);
+                out_seq.push_back(id);
+            } else {
+                // if here, it means we are still processing the input prompt
+                for (int k = i; k < tokens.size(); k++) {
+                    embd.push_back(tokens[k]);
+                }
+                i += embd.size() - 1;
+            }
+
+            if (early_stop && ((embd.back() == SEMANTIC_VOCAB_SIZE) || (eos_p > min_eos_p)))
+                break;
+        }
+
+        for(int i = 0; i < out_seq.size(); i++) {
+            assert((out_seq[i] > 0) && (out_seq[i] < SEMANTIC_VOCAB_SIZE));
+        }
+    }
 
     // generate audio (encodec)
 }
@@ -512,7 +688,7 @@ int main(int argc, char **argv) {
         const int64_t t_eval_us_start = ggml_time_us();
 
         // call to generate audio
-        bark_generate_audio(model, model.vocab, prompt.data());
+        bark_generate_audio(model, model.vocab, prompt.data(), 768, 4);
 
         t_eval_us = ggml_time_us() - t_eval_us_start;
     }

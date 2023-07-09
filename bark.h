@@ -6,6 +6,13 @@
 #define CLS_TOKEN_ID 101
 #define SEP_TOKEN_ID 102
 
+#define TEXT_ENCODING_OFFSET 10048
+#define TEXT_PAD_TOKEN 129595
+#define SEMANTIC_PAD_TOKEN 10000
+#define SEMANTIC_INFER_TOKEN 129599
+
+#define SEMANTIC_VOCAB_SIZE 10000
+
 struct gpt_hparams {
     int32_t n_in_vocab;
     int32_t n_out_vocab;
