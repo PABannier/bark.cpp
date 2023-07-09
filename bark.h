@@ -71,6 +71,8 @@ struct gpt_model {
     //
     struct ggml_context * ctx;
     std::map<std::string, struct ggml_tensor *> tensors;
+
+    int32_t memsize = 0;
 };
 
 
@@ -82,4 +84,6 @@ struct bark_model {
 
     // decoder
     encodec_model codec_model;
+
+    int32_t memsize = 0;
 };

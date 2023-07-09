@@ -9,7 +9,23 @@
 #include <string>
 #include <vector>
 
-bool encodec_model_load(std::ifstream& fin, encodec_model& model) {
+bool encodec_model_load(const std::string& fname, encodec_model& model) {
+    auto fin = std::ifstream(fname, std::ios::binary);
+    if (!fin) {
+        fprintf(stderr, "%s: failed to open '%s'\n", __func__, fname.c_str());
+        return false;
+    }
+
+    // verify magic (i.e. ggml signature in hex format)
+    {
+        uint32_t magic;
+        read_safe(fin, magic);
+        if (magic != GGML_FILE_MAGIC) {
+            fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname.c_str());
+            return false;
+        }
+    }
+
     auto & ctx = model.ctx;
     size_t ctx_size = 0;
 
@@ -23,6 +39,7 @@ bool encodec_model_load(std::ifstream& fin, encodec_model& model) {
         const int kernel_size   = hparams.kernel_size;
         const int res_kernel_sz = hparams.residual_kernel_size;
         const int n_q           = hparams.n_q;
+        const int n_bins        = hparams.n_bins;
         const int *ratios       = hparams.ratios;
 
         // decoder
@@ -67,9 +84,7 @@ bool encodec_model_load(std::ifstream& fin, encodec_model& model) {
 
         // quantizer
         {
-            ctx_size +=                   n_q; // inited
-            ctx_size +=              n_q*1024; // cluster_size
-            ctx_size += 2*n_q*hidden_dim*1024; // embed and embed_avg
+            ctx_size += n_q*hidden_dim*n_bins; // embed
         }
 
         ctx_size += 10ull*MB;  // object overhead
@@ -246,7 +261,7 @@ bool encodec_model_load(std::ifstream& fin, encodec_model& model) {
 
             fin.read(reinterpret_cast<char *>(tensor->data), ggml_nbytes(tensor));
 
-            printf("%48s - [%5d, %5d, %5d], type = %6s, %6.2f MB\n", name.data(), ne[0], ne[1], ne[2], ftype == 0 ? "float" : "f16", ggml_nbytes(tensor)/1024.0/1024.0);
+            // printf("%48s - [%5d, %5d, %5d], type = %6s, %6.2f MB\n", name.data(), ne[0], ne[1], ne[2], ftype == 0 ? "float" : "f16", ggml_nbytes(tensor)/1024.0/1024.0);
 
             total_size += ggml_nbytes(tensor);
             model.n_loaded++;

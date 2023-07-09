@@ -64,10 +64,7 @@ struct encodec_lstm {
 };
 
 struct encodec_quant_block {
-    struct ggml_tensor * inited;
-    struct ggml_tensor * cluster_size;
     struct ggml_tensor * embed;
-    struct ggml_tensor * embed_avg;
 };
 
 struct encodec_quantizer {
@@ -118,4 +115,4 @@ struct encodec_model {
 };
 
 
-bool encodec_model_load(std::ifstream& fin, encodec_model& model);
+bool encodec_model_load(const std::string& fname, encodec_model& model);

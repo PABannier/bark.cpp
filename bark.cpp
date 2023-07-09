@@ -10,7 +10,22 @@
 #include <map>
 #include <string>
 
-bool gpt_model_load(std::ifstream & fin, gpt_model & model) {
+bool gpt_model_load(const std::string& fname, gpt_model & model) {
+    auto fin = std::ifstream(fname, std::ios::binary);
+    if (!fin) {
+        fprintf(stderr, "%s: failed to open '%s'\n", __func__, fname.c_str());
+        return false;
+    }
+
+    // verify magic
+    {
+        uint32_t magic;
+        fin.read((char *) &magic, sizeof(magic));
+        if (magic != GGML_FILE_MAGIC) {
+            fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname.c_str());
+            return false;
+        }
+    }
 
     // load hparams
     {
@@ -215,10 +230,7 @@ bool gpt_model_load(std::ifstream & fin, gpt_model & model) {
     {
         size_t total_size = 0;
 
-        int32_t n_tensors;
-        read_safe(fin, n_tensors);
-
-        for(int i = 0; i < n_tensors; i++) {
+        while(true) {
             int32_t n_dims;
             int32_t length;
             int32_t ttype;
@@ -226,6 +238,10 @@ bool gpt_model_load(std::ifstream & fin, gpt_model & model) {
             read_safe(fin, n_dims);
             read_safe(fin, length);
             read_safe(fin, ttype);
+
+            if (fin.eof()) {
+                break;
+            }
 
             int32_t nelements = 1;
             int32_t ne[2] = { 1, 1 };
@@ -264,12 +280,13 @@ bool gpt_model_load(std::ifstream & fin, gpt_model & model) {
 
             fin.read(reinterpret_cast<char *>(tensor->data), ggml_nbytes(tensor));
 
-            printf("%48s - [%5d, %5d], type = %6s, %6.2f MB\n", name.data(), ne[0], ne[1], "float", ggml_nbytes(tensor)/1024.0/1024.0);
+            // printf("%48s - [%5d, %5d], type = %6s, %6.2f MB\n", name.data(), ne[0], ne[1], "float", ggml_nbytes(tensor)/1024.0/1024.0);
 
             total_size += ggml_nbytes(tensor);
         }
 
         printf("%s: model size  = %8.2f MB\n", __func__, total_size/1024.0/1024.0);
+        model.memsize = total_size;
     }
 
     fin.close();
@@ -277,48 +294,54 @@ bool gpt_model_load(std::ifstream & fin, gpt_model & model) {
     return true;
 }
 
-bool bark_model_load(const std::string & fname, bark_model & model) {
-    printf("%s: loading model from '%s'\n", __func__, fname.c_str());
+bool bark_model_load(std::string & dirname, bark_model & model) {
+    printf("%s: loading model from '%s'\n", __func__, dirname.c_str());
 
-    auto fin = std::ifstream(fname, std::ios::binary);
-    if (!fin) {
-        fprintf(stderr, "%s: failed to open '%s'\n", __func__, fname.c_str());
-        return false;
-    }
-
-    // verify magic
+    // text
     {
-        uint32_t magic;
-        fin.read((char *) &magic, sizeof(magic));
-        if (magic != GGML_FILE_MAGIC) {
-            fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname.c_str());
+        printf("%s: reading bark text model\n", __func__);
+        const std::string fname = dirname + "/ggml_weights_text.bin";
+        if(!gpt_model_load(fname, model.text_model)) {
+            fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
             return false;
         }
+        model.memsize += model.text_model.memsize;
     }
 
-    printf("\n%s: reading bark text model\n", __func__);
-    if(!gpt_model_load(fin, model.text_model)) {
-        fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
-        return false;
+    // coarse
+    {
+        printf("\n%s: reading bark coarse model\n", __func__);
+        const std::string fname = dirname + "/ggml_weights_coarse.bin";
+        if(!gpt_model_load(fname, model.coarse_model)) {
+            fprintf(stderr, "%s: invalid model file '%s' (bad coarse)\n", __func__, fname.c_str());
+            return false;
+        }
+        model.memsize += model.coarse_model.memsize;
     }
 
-    printf("%s: reading bark coarse model\n\n", __func__);
-    if(!gpt_model_load(fin, model.coarse_model)) {
-        fprintf(stderr, "%s: invalid model file '%s' (bad coarse)\n", __func__, fname.c_str());
-        return false;
+    // fine
+    {
+        printf("\n%s: reading bark fine model\n", __func__);
+        const std::string fname = dirname + "/ggml_weights_fine.bin";
+        if(!gpt_model_load(fname, model.fine_model)) {
+            fprintf(stderr, "%s: invalid model file '%s' (bad fine)\n", __func__, fname.c_str());
+            return false;
+        }
+        model.memsize += model.fine_model.memsize;
     }
 
-    printf("\n%s: reading bark fine model\n", __func__);
-    if(!gpt_model_load(fin, model.fine_model)) {
-        fprintf(stderr, "%s: invalid model file '%s' (bad fine)\n", __func__, fname.c_str());
-        return false;
+    // codec
+    {
+        printf("\n%s: reading bark codec model\n", __func__);
+        const std::string fname = dirname + "/ggml_weights_codec.bin";
+        if(!encodec_model_load(fname, model.codec_model)) {
+            fprintf(stderr, "%s: invalid model file '%s' (bad codec)\n", __func__, fname.c_str());
+            return false;
+        }
+        model.memsize += model.coarse_model.memsize;
     }
 
-    printf("\n%s: reading bark codec model\n", __func__);
-    if(!encodec_model_load(fin, model.codec_model)) {
-        fprintf(stderr, "%s: invalid model file '%s' (bad codec)\n", __func__, fname.c_str());
-        return false;
-    }
+    printf("\n%s: total model size  = %8.2f MB\n", __func__, model.memsize/1024.0/1024.0);
 
     return true;
 }
@@ -327,9 +350,10 @@ int main(int argc, char **argv) {
     const int64_t t_main_start_us = ggml_time_us();
 
     int64_t t_load_us = 0;
+    int64_t t_eval_us = 0;
 
     bark_model model;
-    std::string fname = "./ggml_weights/ggml-model.bin";
+    std::string fname = "./ggml_weights";
 
     // load the model
     {
@@ -341,6 +365,14 @@ int main(int argc, char **argv) {
         }
 
         t_load_us = ggml_time_us() - t_start_us;
+    }
+
+    // forward pass
+    const std::string prompt = "This is an audio";
+    {
+        const int64_t t_eval_us_start = ggml_time_us();
+
+        t_eval_us = ggml_time_us() - t_eval_us_start;
     }
 
     // report timing

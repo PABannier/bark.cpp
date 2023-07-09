@@ -44,8 +44,11 @@ parser.add_argument("--codec-path", type=str, required=True)
 parser.add_argument("--out-dir", type=str, required=True)
 
 
-def parse_codec_model(checkpoint, outfile):
+def parse_codec_model(checkpoint, out_dir):
     """Load encodec model checkpoint."""
+    outfile = open(out_dir, "wb")
+    outfile.write(struct.pack("i", 0x67676d6c))  # ggml magic
+
     for name in checkpoint.keys():
         if "encoder." in name:
             # bark only uses Encodec's quantizer and decoder.
@@ -55,6 +58,11 @@ def parse_codec_model(checkpoint, outfile):
             # the tensor has already been parsed with the corresponding "weight_v"
             # tensor to form the final weights tensor of the convolution, therefore
             # we skip it
+            continue
+
+        if "inited" in name or "cluster_size" in name or "embed_avg" in name:
+            # "inited", "cluster_size" and "embed_avg" tensors in quantizer are not used
+            # for the forward pass
             continue
 
         var_data = checkpoint[name]
@@ -91,6 +99,8 @@ def parse_codec_model(checkpoint, outfile):
         outfile.write(encoded_name)
 
         var_data.tofile(outfile)
+
+    outfile.close()
 
 def parse_vocab(dir_model, outfile):
     """Parse GPT vocabulary."""
@@ -132,8 +142,6 @@ def parse_hparams(hparams, outfile):
 
 def parse_text_models(checkpoint, outfile):
     """Load GPT model checkpoint (text, fine, coarse)."""
-    outfile.write(struct.pack("i", len(checkpoint.keys())))
-
     for name in checkpoint.keys():
         var_data = checkpoint[name].squeeze().numpy()
         print(f"Processing variable: {name} with shape: {var_data.shape}")
@@ -219,6 +227,16 @@ def parse_text_models(checkpoint, outfile):
 
         var_data.tofile(outfile)
 
+def generate_file(in_file, out_dir):
+    outfile = open(out_dir, "wb")
+    outfile.write(struct.pack("i", 0x67676d6c))  # ggml magic
+
+    checkpoint = torch.load(in_file, map_location="cpu")
+    parse_hparams(checkpoint["model_args"], outfile)
+    parse_text_models(checkpoint["model"], outfile)
+
+    outfile.close()
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -229,28 +247,17 @@ if __name__ == "__main__":
     out_dir = Path(args.out_dir)
     out_dir.mkdir(exist_ok=True, parents=True)
 
-    outfile = open(out_dir / "ggml-model.bin", "wb")
-    outfile.write(struct.pack("i", 0x67676d6c))  # ggml magic
-
-    text_chkpt = torch.load(dir_model / "text_2.pt", map_location="cpu")
-    parse_hparams(text_chkpt["model_args"], outfile)
-    parse_text_models(text_chkpt["model"], outfile)
+    generate_file(dir_model / "text_2.pt", out_dir / "ggml_weights_text.bin")
     print(" Text model loaded.")
 
-    coarse_chkpt = torch.load(dir_model / "coarse_2.pt", map_location="cpu")
-    parse_hparams(coarse_chkpt["model_args"], outfile)
-    parse_text_models(coarse_chkpt["model"], outfile)
+    generate_file(dir_model / "coarse_2.pt", out_dir / "ggml_weights_coarse.bin")
     print(" Coarse model loaded.")
 
-    fine_chkpt = torch.load(dir_model / "fine_2.pt", map_location="cpu")
-    parse_hparams(fine_chkpt["model_args"], outfile)
-    parse_text_models(fine_chkpt["model"], outfile)
+    generate_file(dir_model / "fine_2.pt", out_dir / "ggml_weights_fine.bin")
     print(" Fine model loaded.")
 
     codec_chkpt = torch.load(codec_path / "encodec_24khz-d7cc33bc.th", map_location="cpu")
-    parse_codec_model(codec_chkpt, outfile)
+    parse_codec_model(codec_chkpt, out_dir / "ggml_weights_codec.bin")
     print(" Codec model loaded.")
-
-    outfile.close()
 
     print("Done.")
