@@ -1,3 +1,21 @@
+/*
+Port of Suno's Bark to C/C++.
+
+Author: Pierre-Antoine Bannier<pierreantoine.bannier@gmail.com>
+
+Note on tokenization
+--------------------
+Even if bark relies on GPT to generate semantic tokens, the tokenizer is based on
+Bert's multilingual cased tokenizer. This uses the WordPiece algorithm to split raw text
+into tokens.
+
+This file contains an unofficial (Google has not released an official implementation of
+WordPiece) implementation of WordPiece.
+
+Source:
+https://github.com/skeskinen/bert.cpp/blob/master/bert.cpp
+
+*/
 #include "bark.h"
 #include "ggml.h"
 #include "util.h"
@@ -8,9 +26,10 @@
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <regex>
 #include <string>
 
-bool gpt_model_load(const std::string& fname, gpt_model & model) {
+bool gpt_model_load(const std::string& fname, gpt_model& model, bark_vocab& vocab, bool has_vocab) {
     auto fin = std::ifstream(fname, std::ios::binary);
     if (!fin) {
         fprintf(stderr, "%s: failed to open '%s'\n", __func__, fname.c_str());
@@ -50,9 +69,36 @@ bool gpt_model_load(const std::string& fname, gpt_model & model) {
         printf("%s: n_wtes      = %d\n", __func__, hparams.n_wtes);
     }
 
-    // TODO: load vocab
-    {
+    if (has_vocab) {
+        int32_t n_vocab;
+        read_safe(fin, n_vocab);
 
+        // 5 special tokens: [UNK, SEP, MASK, PAD, CLS]
+        if (n_vocab != model.hparams.n_in_vocab - model.hparams.n_out_vocab - 5) {
+            fprintf(stderr, "%s: wrong voculary size (%d != %d)\n", __func__, n_vocab, model.hparams.n_in_vocab);
+            return false;
+        }
+
+        std::string word;
+        std::vector<char> tmp;
+
+        tmp.reserve(128);
+
+        for (int i = 0; i < n_vocab; i++) {
+            uint32_t len;
+            read_safe(fin, len);
+
+            if (len > 0) {
+                tmp.resize(len);
+                fin.read(&tmp[0], tmp.size()); // read to buffer
+                word.assign(&tmp[0], tmp.size());
+            } else {
+                word = "";
+            }
+
+            vocab.token_to_id[word] = i;
+            vocab.id_to_token[i] = word;
+        }
     }
 
     // for the big tensors, we have the option to store the data in 16-bit floats or quantized
@@ -301,7 +347,7 @@ bool bark_model_load(std::string & dirname, bark_model & model) {
     {
         printf("%s: reading bark text model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_text.bin";
-        if(!gpt_model_load(fname, model.text_model)) {
+        if(!gpt_model_load(fname, model.text_model, model.vocab, true)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
             return false;
         }
@@ -312,7 +358,7 @@ bool bark_model_load(std::string & dirname, bark_model & model) {
     {
         printf("\n%s: reading bark coarse model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_coarse.bin";
-        if(!gpt_model_load(fname, model.coarse_model)) {
+        if(!gpt_model_load(fname, model.coarse_model, model.vocab, false)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad coarse)\n", __func__, fname.c_str());
             return false;
         }
@@ -323,7 +369,7 @@ bool bark_model_load(std::string & dirname, bark_model & model) {
     {
         printf("\n%s: reading bark fine model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_fine.bin";
-        if(!gpt_model_load(fname, model.fine_model)) {
+        if(!gpt_model_load(fname, model.fine_model, model.vocab, false)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad fine)\n", __func__, fname.c_str());
             return false;
         }
@@ -344,6 +390,99 @@ bool bark_model_load(std::string & dirname, bark_model & model) {
     printf("\n%s: total model size  = %8.2f MB\n", __func__, model.memsize/1024.0/1024.0);
 
     return true;
+}
+
+std::string bert_normalize_prompt(const std::string &text) {
+    std::string text2 = strip_accents(text);
+    for (size_t i = 0; i < text2.size(); i += utf8_len(text2[i])) {
+        char c = text2[i];
+        if (c >= 'A' && c <= 'Z')
+            text2[i] = c - 'A' + 'a';
+    }
+    return text2;
+}
+
+void bert_tokenize(
+    const bark_vocab& vocab,
+    const char * text,
+    int32_t * tokens,
+    int32_t * n_tokens,
+    int32_t n_max_tokens) {
+    std::string str = text;
+    std::vector<std::string> words;
+
+    // first split the text into words
+    {
+        str = bert_normalize_prompt(str);
+
+        std::string pat = R"([[:punct:]]|[[:alpha:]]+|[[:digit:]]+)";
+
+        std::regex re(pat);
+        std::smatch m;
+
+        while (std::regex_search(str, m, re)) {
+            for (std::string x : m)
+                words.push_back(x);
+            str = m.suffix();
+        }
+    }
+
+    int32_t t = 0;
+    tokens[t++] = CLS_TOKEN_ID;
+
+    // find the longest tokens that form the words:
+    for (const auto &word : words) {
+        if (word.size() == 0)
+            continue;
+
+        int i = 0;
+        int n = word.size();
+        auto *token_map = &vocab.token_to_id;
+    loop:
+        while (i < n) {
+            if (t >= n_max_tokens - 1)
+                break;
+
+            int j = n;
+            while (j > i) {
+                auto it = token_map->find(word.substr(i, j - i));
+                if (it != token_map->end()) {
+                    tokens[t++] = it->second;
+                    i = j;
+                    token_map = &vocab.subword_token_to_id;
+                    goto loop;
+                }
+                --j;
+            }
+            if (j == i) {
+                fprintf(stderr, "%s: unknown token '%s'\n", __func__, word.substr(i, 1).data());
+                token_map = &vocab.subword_token_to_id;
+                ++i;
+            }
+        }
+    }
+    tokens[t++] = SEP_TOKEN_ID;
+    *n_tokens = t;
+}
+
+void bark_generate_audio(bark_model model, const bark_vocab& vocab, const char * text) {
+    // tokenize text (bert tokenizer)
+    int32_t max_ctx_size = model.text_model.hparams.block_size;
+    int32_t n_tokens;
+
+    std::vector<bark_vocab::id> tokens;
+    tokens.resize(max_ctx_size);
+    bert_tokenize(vocab, text, tokens.data(), &n_tokens, max_ctx_size);
+
+    printf("\ntokens: ");
+    for (int i = 0; i < n_tokens; i++) {
+        printf("%d ", tokens[i]);
+    }
+    printf("\n");
+
+    // encode text
+
+    // generate audio (encodec)
 }
 
 int main(int argc, char **argv) {
@@ -371,6 +510,9 @@ int main(int argc, char **argv) {
     const std::string prompt = "This is an audio";
     {
         const int64_t t_eval_us_start = ggml_time_us();
+
+        // call to generate audio
+        bark_generate_audio(model, model.vocab, prompt.data());
 
         t_eval_us = ggml_time_us() - t_eval_us_start;
     }

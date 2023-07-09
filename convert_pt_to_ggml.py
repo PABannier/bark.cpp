@@ -26,21 +26,23 @@ Example
     python convert_pt_to_ggml.py \
         --dir-model ~/.cache/suno/bark_v0 \
         --codec-path ~/Documents/encodec.cpp/ggml_weights \
+        --vocab-path ./ggml_weights/ \
         --out-dir ./ggml_weights/
 ```
 """
 import argparse
 from pathlib import Path
-import json
 import re
 import struct
 
 import numpy as np
 import torch
 
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--dir-model", type=str, required=True)
 parser.add_argument("--codec-path", type=str, required=True)
+parser.add_argument("--vocab-path", type=str, required=True)
 parser.add_argument("--out-dir", type=str, required=True)
 
 
@@ -103,18 +105,18 @@ def parse_codec_model(checkpoint, out_dir):
     outfile.close()
 
 def parse_vocab(dir_model, outfile):
-    """Parse GPT vocabulary."""
-    with open(dir_model / "vocab.json", "r", encoding="utf-8") as infile:
-        vocab = json.load(infile)
+    """Parse vocabulary."""
+    # Even if bark relies on GPT to encode text, it relies on BertTokenizer (WordPiece)
+    with open(dir_model / "vocab.txt", "r", encoding="utf-8") as f:
+        vocab = f.readlines()
 
-    tokens = sorted(vocab.items(), key=lambda x: x[1])
-    outfile.write(struct.pack("i", len(tokens)))
-    print("Vocab size:", len(tokens))
+    outfile.write(struct.pack("i", len(vocab)))
+    print("Vocab size:", len(vocab))
 
-    for token, _ in tokens:
-        text = bytearray(token, "utf-8")
-        outfile.write(struct.pack("i", len(text)))
-        outfile.write(text)
+    for token in vocab:
+        data = bytearray(token[:-1], "utf-8")  # strip newline at the end
+        outfile.write(struct.pack("i", len(data)))
+        outfile.write(data)
 
 def parse_hparams(hparams, outfile):
     """Parse GPT hyperparameters."""
@@ -227,12 +229,14 @@ def parse_text_models(checkpoint, outfile):
 
         var_data.tofile(outfile)
 
-def generate_file(in_file, out_dir):
+def generate_file(in_file, out_dir, vocab_path=None):
     outfile = open(out_dir, "wb")
     outfile.write(struct.pack("i", 0x67676d6c))  # ggml magic
-
     checkpoint = torch.load(in_file, map_location="cpu")
+
     parse_hparams(checkpoint["model_args"], outfile)
+    if vocab_path:
+        parse_vocab(vocab_path, outfile)
     parse_text_models(checkpoint["model"], outfile)
 
     outfile.close()
@@ -243,11 +247,12 @@ if __name__ == "__main__":
 
     dir_model = Path(args.dir_model)
     codec_path = Path(args.codec_path)
+    vocab_path = Path(args.vocab_path)
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(exist_ok=True, parents=True)
 
-    generate_file(dir_model / "text_2.pt", out_dir / "ggml_weights_text.bin")
+    generate_file(dir_model / "text_2.pt", out_dir / "ggml_weights_text.bin", vocab_path)
     print(" Text model loaded.")
 
     generate_file(dir_model / "coarse_2.pt", out_dir / "ggml_weights_coarse.bin")
