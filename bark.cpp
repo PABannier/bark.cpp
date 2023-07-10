@@ -901,6 +901,7 @@ bool bark_generate_audio(
         const int n_threads) {
     std::vector<bark_vocab::id> tokens;
 
+    // TODO move into params
     const int top_k = 10;
     const int seed  = 0;
 
@@ -949,7 +950,6 @@ bool bark_generate_audio(
     }
 
     printf("\n\n");
-    fprintf(stdout, "%s: out seq = ", __func__);
 
     // encode text (text model)
     std::vector<bark_vocab::id> out_seq;
@@ -995,9 +995,6 @@ bool bark_generate_audio(
                 }
                 i += embd.size() - 1;
             }
-
-            if (out_seq.size() > 0)
-                printf("%d ", out_seq.back());
 
             if (early_stop && ((embd.back() == SEMANTIC_VOCAB_SIZE) || (eos_p > min_eos_p)))
                 break;
