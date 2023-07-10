@@ -487,7 +487,7 @@ bool gpt_eval(
     static void * buf = malloc(buf_size);
 
     if (mem_per_token > 0 && mem_per_token*N > buf_size) {
-        const size_t buf_size_new = 1.1*(mem_per_token*N); // add 10% to account for ggml object overhead
+        const size_t buf_size_new = 1.2*(mem_per_token*N); // add 10% to account for ggml object overhead
 
         // reallocate
         buf_size = buf_size_new;
@@ -845,21 +845,70 @@ bark_vocab::id gpt_sample_top_k_top_p(
     return logits_id[idx].second;
 }
 
+bark_vocab::id gpt_sample(
+        const bark_vocab & vocab,
+        const std::vector<float>& logits,
+        double temp,
+        std::mt19937 & rng,
+        float * eos_p) {
+    int n_logits = logits.size();
+
+    std::vector<std::pair<double, bark_vocab::id>> logits_id;
+    logits_id.reserve(n_logits);
+
+    {
+        const double scale = 1.0/temp;
+        for (int i = 0; i < n_logits; ++i) {
+            logits_id.push_back(std::make_pair(logits[i]*scale, i));
+        }
+    }
+
+    double maxl = -INFINITY;
+    for (const auto & kv : logits_id) {
+        maxl = std::max(maxl, kv.first);
+    }
+
+    // compute probs for the top K tokens
+    std::vector<double> probs;
+    probs.reserve(logits_id.size());
+
+    double sum = 0.0;
+    for (const auto & kv : logits_id) {
+        double p = exp(kv.first - maxl);
+        probs.push_back(p);
+        sum += p;
+    }
+
+    // normalize the probs
+    for (auto & p : probs) {
+        p /= sum;
+    }
+
+    std::discrete_distribution<> dist(probs.begin(), probs.end());
+    int idx = dist(rng);
+
+    // likelihood of EOS token
+    *eos_p = probs.back();
+
+    return logits_id[idx].second;
+}
+
 bool bark_generate_audio(
-        bark_model model, 
-        const bark_vocab& vocab, 
+        bark_model model,
+        const bark_vocab& vocab,
         const char * text,
         const int n_predict,
         const int n_threads) {
     std::vector<bark_vocab::id> tokens;
 
     const int top_k = 10;
-    const int top_p = 0.2;
-    const int temp  = 0.7;
     const int seed  = 0;
 
+    const float top_p = 0.2;
+    const float temp  = 0.7;
+
     const int early_stop = true;
-    const int min_eos_p = 0.2;
+    const float min_eos_p = 0.2;
 
     std::mt19937 rng(seed);
 
@@ -884,10 +933,10 @@ bool bark_generate_audio(
 
         tokens.resize(max_ctx_size);
 
-        // TODO: add semantic history
+        // semantic history
         for (int i = 0; i < 256; i++)
             tokens.push_back(SEMANTIC_PAD_TOKEN);
-        
+
         tokens.push_back(SEMANTIC_INFER_TOKEN);
 
         assert(tokens.size() == 256 + 256 + 1);
@@ -898,14 +947,15 @@ bool bark_generate_audio(
     for (int i = 0; i < std::min(8, (int) tokens.size()); i++) {
         printf("%d ", tokens[i]);
     }
+
     printf("\n\n");
+    fprintf(stdout, "%s: out seq = ", __func__);
 
     // encode text (text model)
     std::vector<bark_vocab::id> out_seq;
     {
         int n_past = 0;
-
-        float eos_p;
+        float eos_p = 0;
 
         std::vector<bark_vocab::id> embd;
         std::vector<float> logits;
@@ -925,13 +975,19 @@ bool bark_generate_audio(
             n_past += embd.size();
             embd.clear();
 
+            float logits_pad_token = logits[SEMANTIC_PAD_TOKEN];
             logits.resize(SEMANTIC_VOCAB_SIZE);
+
+            if (early_stop)
+                logits.push_back(logits[logits_pad_token]);
 
             if (i >= tokens.size()) {
                 // sample next token and add it to context
-                bark_vocab::id id = gpt_sample_top_k_top_p(vocab, logits.data(), top_k, top_p, temp, rng, &eos_p);
+                // bark_vocab::id id = gpt_sample_top_k_top_p(vocab, logits.data(), top_k, top_p, temp, rng, &eos_p);
+                bark_vocab::id id = gpt_sample(vocab, logits, temp, rng, &eos_p);
                 embd.push_back(id);
                 out_seq.push_back(id);
+                printf("%d ", id);
             } else {
                 // if here, it means we are still processing the input prompt
                 for (int k = i; k < tokens.size(); k++) {
@@ -939,6 +995,9 @@ bool bark_generate_audio(
                 }
                 i += embd.size() - 1;
             }
+
+            if (out_seq.size() > 0)
+                printf("%d ", out_seq.back());
 
             if (early_stop && ((embd.back() == SEMANTIC_VOCAB_SIZE) || (eos_p > min_eos_p)))
                 break;
@@ -972,6 +1031,8 @@ int main(int argc, char **argv) {
 
         t_load_us = ggml_time_us() - t_start_us;
     }
+
+    printf("\n");
 
     // forward pass
     const std::string prompt = "This is an audio";
