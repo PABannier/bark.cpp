@@ -1,0 +1,6 @@
+- [ ] CMakeLists
+- [ ] GitHub reference to GGML
+- [ ] Generate one binary large file for the weights
+- [ ] Quantization
+- [ ] FP16
+- [ ] Swift package
