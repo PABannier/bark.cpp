@@ -854,7 +854,10 @@ bool bark_generate_audio(
     const float temp  = 0.7;
 
     const int early_stop = true;
-    const float min_eos_p = 0.15;
+
+    // in the original implementation, min_eos_p=0.2, yet for bark.cpp this seems too
+    // high and this generates overly long sequence.
+    const float min_eos_p = 0.15; 
 
     std::mt19937 rng(seed);
 
