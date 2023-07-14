@@ -13,6 +13,8 @@
 
 #define SEMANTIC_VOCAB_SIZE 10000
 
+#define SEMANTIC_RATE_HZ 49.9
+
 struct gpt_hparams {
     int32_t n_in_vocab;
     int32_t n_out_vocab;

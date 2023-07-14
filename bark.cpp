@@ -465,7 +465,7 @@ bool gpt_eval(
         const std::vector<bark_vocab::id> & embd_inp,
               std::vector<float>          & embd_w,
               size_t                      & mem_per_token) {
-    const int N = embd_inp.size();
+    int N = embd_inp.size();
 
     const auto & hparams = model.hparams;
 
@@ -479,7 +479,7 @@ bool gpt_eval(
     static void * buf = malloc(buf_size);
 
     if (mem_per_token > 0 && mem_per_token*N > buf_size) {
-        const size_t buf_size_new = 1.2*(mem_per_token*N); // add 10% to account for ggml object overhead
+        const size_t buf_size_new = 1.2*(mem_per_token*N); // add 20% to account for ggml object overhead
 
         // reallocate
         buf_size = buf_size_new;
@@ -500,8 +500,34 @@ bool gpt_eval(
     struct ggml_cgraph gf = {};
     gf.n_threads = n_threads;
 
-    struct ggml_tensor * embd = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
-    memcpy(embd->data, embd_inp.data(), N*ggml_element_size(embd));
+    struct ggml_tensor * input = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
+    memcpy(input->data, embd_inp.data(), N*ggml_element_size(input));
+
+    struct ggml_tensor * embd;
+
+    if (N < 513) {
+        // usually only one token is in the sequence (since the context is saved in
+        // memory_k and memory_v)
+        embd = ggml_get_rows(ctx0, model.wtes[0], input);
+    } else {
+        // first step
+
+        // tok_emb = torch.cat([
+        //                 self.transformer.wte(idx[:,:256]) + self.transformer.wte(idx[:,256:256+256]),
+        //                 self.transformer.wte(idx[:,256+256:])
+        //             ], dim=1)
+        struct ggml_tensor * seq_embd = ggml_get_rows(ctx0, model.wtes[0], ggml_view_1d(ctx0, input, 256, 0));
+        struct ggml_tensor * ctx_embd = ggml_get_rows(ctx0, model.wtes[0], ggml_view_1d(ctx0, input, 256, 256*ggml_element_size(input)));
+        struct ggml_tensor * rem_embd = ggml_get_rows(ctx0, model.wtes[0], ggml_view_1d(ctx0, input,   1, 512*ggml_element_size(input)));
+
+        struct ggml_tensor * merged_embd = ggml_add(ctx0, seq_embd, ctx_embd);
+
+        embd = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, merged_embd->ne[0], merged_embd->ne[1]+rem_embd->ne[1]);
+        embd = ggml_set_1d(ctx0, embd, merged_embd, 0);
+        embd = ggml_set_1d(ctx0, embd, rem_embd, merged_embd->ne[0]*merged_embd->ne[1]*ggml_element_size(merged_embd));
+
+        N -= 256;  // merge context, input size is reduced
+    }
 
     struct ggml_tensor * position = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
     for (int i = 0; i < N; ++i) {
@@ -509,10 +535,8 @@ bool gpt_eval(
     }
 
     // wte + wpe
-    struct ggml_tensor * inpL =
-        ggml_add(ctx0,
-                ggml_get_rows(ctx0, model.wtes[0], embd),
-                ggml_get_rows(ctx0, model.wpe, position));
+    struct ggml_tensor * inpL = ggml_add(ctx0,
+        embd, ggml_get_rows(ctx0, model.wpe, position));
 
     for (int il = 0; il < n_layer; ++il) {
         struct ggml_tensor * cur;
@@ -865,28 +889,20 @@ bool bark_generate_audio(
     printf("\n\n");
 
     // encode text (text model)
-    std::vector<bark_vocab::id> out_seq;
+    std::vector<bark_vocab::id> output;
     {
         int n_past = 0;
         float eos_p = 0;
 
-        std::vector<bark_vocab::id> embd;
+        std::vector<bark_vocab::id> input = tokens;
         std::vector<float> logits;
 
         // dry run to estimate mem_per_token
         size_t mem_per_token = 0;
         gpt_eval(model.text_model, n_threads, 0, { 0, 1, 2, 3 }, logits, mem_per_token);
 
-        for (int i = embd.size(); i < tokens.size() + n_predict; i++) {
-            if (embd.size() > 0) {
-                if (!gpt_eval(model.text_model, n_threads, n_past, embd, logits, mem_per_token)) {
-                    printf("Failed to predict\n");
-                    return false;
-                }
-            }
-
-            n_past += embd.size();
-            embd.clear();
+        for (int i = 0; i < 768; i++) {
+            gpt_eval(model.text_model, n_threads, n_past, input, logits, mem_per_token);
 
             float logits_pad_token = logits[SEMANTIC_PAD_TOKEN];
             logits.resize(SEMANTIC_VOCAB_SIZE);
@@ -894,27 +910,24 @@ bool bark_generate_audio(
             if (early_stop)
                 logits.push_back(logits[logits_pad_token]);
 
-            if (i >= tokens.size()) {
-                // sample next token and add it to context
-                // bark_vocab::id id = gpt_sample_top_k_top_p(vocab, logits.data(), top_k, top_p, temp, rng, &eos_p);
-                bark_vocab::id id = gpt_sample(vocab, logits, temp, rng, &eos_p);
-                embd.push_back(id);
-                out_seq.push_back(id);
-            } else {
-                // if here, it means we are still processing the input prompt
-                for (int k = i; k < tokens.size(); k++) {
-                    embd.push_back(tokens[k]);
-                }
-                i += embd.size() - 1;
-            }
+            if (i == 0)
+                n_past += input.size() - 256;  // first step, context are merged
+            else
+                n_past += input.size();
 
-            if (early_stop && ((embd.back() == SEMANTIC_VOCAB_SIZE) || (eos_p > min_eos_p)))
+            input.clear();
+
+            bark_vocab::id sampled_id = gpt_sample(vocab, logits, temp, rng, &eos_p);
+            input.push_back(sampled_id);
+            output.push_back(sampled_id);
+
+            if (early_stop && ((sampled_id == SEMANTIC_VOCAB_SIZE) || (eos_p > min_eos_p)))
                 break;
         }
 
-        for(int i = 0; i < out_seq.size(); i++) {
-            assert((out_seq[i] > 0) && (out_seq[i] < SEMANTIC_VOCAB_SIZE));
-            printf("%d ", out_seq[i]);
+        for(int i = 0; i < output.size(); i++) {
+            assert((output[i] > 0) && (output[i] < SEMANTIC_VOCAB_SIZE));
+            printf("%d ", output[i]);
         }
     }
 
