@@ -981,7 +981,7 @@ bool bark_generate_audio(
         for(int i = 0; i < n_window_steps; i++) {
             int semantic_ix = roundf(n_steps / semantic_to_coarse_ratio);
 
-            std::vector<bark_vocab::id> input_in(input.end() - std::max(semantic_ix-max_semantic_history, 0), input.end());
+            std::vector<bark_vocab::id> input_in(input.begin() + std::max(semantic_ix-max_semantic_history, 0), input.end());
             size_t original_size = input_in.size();
             input_in.resize(256);
 
@@ -1016,15 +1016,16 @@ bool bark_generate_audio(
                 input_in.push_back(sampled_id);
                 input_coarse.push_back(sampled_id);
 
-                printf("%d ", sampled_id);
+                printf("%d ", sampled_id - SEMANTIC_VOCAB_SIZE);
                 fflush(stdout);
 
                 step_ix += 1;
             }
         }
 
-        // TODO: reshape??
-        // gen_coarse_audio_arr = gen_coarse_arr.reshape(-1, N_COARSE_CODEBOOKS).T - SEMANTIC_VOCAB_SIZE
+        for(int ix = 0; ix < input_coarse.size(); ix++)
+            input_coarse[ix] -= SEMANTIC_VOCAB_SIZE;
+
         // for n in range(1, N_COARSE_CODEBOOKS):
         //     gen_coarse_audio_arr[n, :] -= n * CODEBOOK_SIZE
     }
