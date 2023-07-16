@@ -1,7 +1,7 @@
 /*
 Port of Suno's Bark to C/C++.
 
-Author: Pierre-Antoine Bannier<pierreantoine.bannier@gmail.com>
+Author: Pierre-Antoine Bannier <pierreantoine.bannier@gmail.com>
 
 Note on tokenization
 --------------------
@@ -462,6 +462,7 @@ bool gpt_eval(
         const gpt_model & model,
         const int n_threads,
         const int n_past,
+        const bool merge_ctx,
         const std::vector<bark_vocab::id> & embd_inp,
               std::vector<float>          & embd_w,
               size_t                      & mem_per_token) {
@@ -505,7 +506,7 @@ bool gpt_eval(
 
     struct ggml_tensor * embd;
 
-    if (N < 513) {
+    if (!merge_ctx) {
         // usually only one token is in the sequence (since the context is saved in
         // memory_k and memory_v)
         embd = ggml_get_rows(ctx0, model.wtes[0], input);
@@ -764,18 +765,6 @@ bool gpt_eval(
     ggml_build_forward_expand(&gf, inpL);
     ggml_graph_compute       (ctx0, &gf);
 
-    // if (toy) {
-    //     for (int i = 0; i < toy->ne[1]; i++) {
-    //         for (int j = 0; j < toy->ne[0]; j++) {
-    //             float v = *(float *) ((char *)toy->data + i*toy->nb[1] + j*toy->nb[0]);
-    //             printf("%.4f ", v);
-    //         }
-    //         printf("\n\n");
-    //     }
-
-    //     printf("dim: [%d, %d]\n", toy->ne[0], toy->ne[1]);
-    // }
-
     // return result just for the last token
     embd_w.resize(n_vocab);
     memcpy(embd_w.data(), (float *) ggml_get_data(inpL) + (n_vocab*(N-1)), sizeof(float)*n_vocab);
@@ -833,7 +822,8 @@ bark_vocab::id gpt_sample(
     int idx = dist(rng);
 
     // likelihood of EOS token
-    *eos_p = probs.back();
+    if (eos_p)
+        *eos_p = probs.back();
 
     return logits_id[idx].second;
 }
@@ -855,9 +845,12 @@ bool bark_generate_audio(
 
     const int early_stop = true;
 
+    const int sliding_window_size = 60;
+    const int max_coarse_history = 630;
+
     // in the original implementation, min_eos_p=0.2, yet for bark.cpp this seems too
     // high and this generates overly long sequence.
-    const float min_eos_p = 0.15; 
+    const float min_eos_p = 0.15;
 
     std::mt19937 rng(seed);
 
@@ -899,7 +892,7 @@ bool bark_generate_audio(
     printf("\n\n");
 
     // encode text (text model)
-    std::vector<bark_vocab::id> output;
+    std::vector<bark_vocab::id> inp_semantic;
     {
         int n_past = 0;
         float eos_p = 0;
@@ -909,10 +902,11 @@ bool bark_generate_audio(
 
         // dry run to estimate mem_per_token
         size_t mem_per_token = 0;
-        gpt_eval(model.text_model, n_threads, 0, { 0, 1, 2, 3 }, logits, mem_per_token);
+        gpt_eval(model.text_model, n_threads, 0, false, { 0, 1, 2, 3 }, logits, mem_per_token);
 
         for (int i = 0; i < 768; i++) {
-            gpt_eval(model.text_model, n_threads, n_past, input, logits, mem_per_token);
+            const bool merge_ctx = i == 0;
+            gpt_eval(model.text_model, n_threads, n_past, merge_ctx, input, logits, mem_per_token);
 
             float logits_pad_token = logits[SEMANTIC_PAD_TOKEN];
             logits.resize(SEMANTIC_VOCAB_SIZE);
@@ -929,7 +923,7 @@ bool bark_generate_audio(
 
             bark_vocab::id sampled_id = gpt_sample(vocab, logits, temp, rng, &eos_p);
             input.push_back(sampled_id);
-            output.push_back(sampled_id);
+            inp_semantic.push_back(sampled_id);
 
             printf("%d ", sampled_id);
             fflush(stdout);
@@ -938,11 +932,91 @@ bool bark_generate_audio(
                 break;
         }
 
-        printf("\n\ntext semantic sequence length: %d\n", output.size());
-
+        printf("\n\nsemantic sequence length: %d\n\n", inp_semantic.size());
     }
 
-    // generate audio (encodec)
+    // coarse encoding (coarse model)
+    std::vector<bark_vocab::id> input_coarse;
+    {
+        float semantic_to_coarse_ratio = COARSE_RATE_HZ / SEMANTIC_RATE_HZ * N_COARSE_CODEBOOKS;
+        int max_semantic_history = floorf(max_coarse_history / semantic_to_coarse_ratio);
+
+        int n_steps = floorf(inp_semantic.size() * semantic_to_coarse_ratio / N_COARSE_CODEBOOKS) * N_COARSE_CODEBOOKS;
+        int step_ix = 0;
+
+        BARK_ASSERT(n_steps > 0);
+        BARK_ASSERT(n_steps % N_COARSE_CODEBOOKS == 0);
+
+        int n_window_steps = ceilf(static_cast<float>(n_steps) / sliding_window_size);
+
+        std::vector<bark_vocab::id> input = inp_semantic;
+        std::vector<float> logits;
+
+        // dry run to estimate mem_per_token
+        size_t mem_per_token = 0;
+        gpt_eval(model.coarse_model, n_threads, 0, false, { 0, 1, 2, 3}, logits, mem_per_token);
+
+        for(int i = 0; i < n_window_steps; i++) {
+            int semantic_ix = roundf(n_steps / semantic_to_coarse_ratio);
+
+            std::vector<bark_vocab::id> input_in(input.begin() + std::max(semantic_ix-max_semantic_history, 0), input.end());
+            size_t original_size = input_in.size();
+            input_in.resize(256);
+
+            // padding from the right side
+            for (int ix = original_size; ix < 256; ix++)
+                input_in[ix] = COARSE_SEMANTIC_PAD_TOKEN;
+
+            input_in.push_back(COARSE_INFER_TOKEN);
+
+            // concatenate input_in and input_coarse
+            input_in.insert(
+                input_in.end(),
+                std::make_move_iterator(input_coarse.end() - std::min(max_coarse_history, (int) input_coarse.size())),
+                std::make_move_iterator(input_coarse.end())
+            );
+
+            int n_past = 0;
+            mem_per_token *= 1.1;  // context length is growing, mem_per_token must grow as well
+
+            for(int j = 0; j < sliding_window_size; j++) {
+                if (step_ix >= n_steps)
+                    continue;
+
+                gpt_eval(model.coarse_model, n_threads, n_past, false, input_in, logits, mem_per_token);
+
+                n_past += input_in.size();
+                input_in.clear();
+
+                bool is_major = step_ix % N_COARSE_CODEBOOKS == 0;
+                int start_ix  = SEMANTIC_VOCAB_SIZE + (1 - is_major) * CODEBOOK_SIZE;
+                int end_ix    = SEMANTIC_VOCAB_SIZE + (2 - is_major) * CODEBOOK_SIZE;
+                std::vector<float> relevant_logits(logits.begin() + start_ix, logits.begin() + end_ix);
+
+                bark_vocab::id sampled_id = gpt_sample(vocab, relevant_logits, temp, rng, NULL);
+                sampled_id += start_ix;
+
+                input_in.push_back(sampled_id);
+                input_coarse.push_back(sampled_id);
+
+                printf("%d ", sampled_id);
+                fflush(stdout);
+
+                step_ix += 1;
+            }
+        }
+
+        BARK_ASSERT(input_coarse.size() == n_steps);
+
+        for(int ix = 0; ix < input_coarse.size(); ix++)
+            input_coarse[ix] -= SEMANTIC_VOCAB_SIZE;
+
+        // for n in range(1, N_COARSE_CODEBOOKS):
+        //     gen_coarse_audio_arr[n, :] -= n * CODEBOOK_SIZE
+
+        printf("\n\ncoarse sequence length: %d\n\n", input_coarse.size());
+    }
+
 }
 
 int main(int argc, char **argv) {

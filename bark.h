@@ -8,12 +8,18 @@
 
 #define TEXT_ENCODING_OFFSET 10048
 #define TEXT_PAD_TOKEN 129595
+
+#define CODEBOOK_SIZE 1024
+#define N_COARSE_CODEBOOKS 2
+
 #define SEMANTIC_PAD_TOKEN 10000
 #define SEMANTIC_INFER_TOKEN 129599
-
 #define SEMANTIC_VOCAB_SIZE 10000
-
 #define SEMANTIC_RATE_HZ 49.9
+
+#define COARSE_RATE_HZ 75
+#define COARSE_SEMANTIC_PAD_TOKEN 12048
+#define COARSE_INFER_TOKEN 12050
 
 struct gpt_hparams {
     int32_t n_in_vocab;
@@ -35,9 +41,6 @@ struct bark_vocab {
 
     std::map<token, id> subword_token_to_id;
     std::map<id, token> id_to_subword_token;
-
-    // std::vector<std::string> special_tokens;
-    // void add_special_token(const std::string & token);
 };
 
 struct gpt_layer {
