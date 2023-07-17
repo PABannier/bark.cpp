@@ -1017,6 +1017,12 @@ bool bark_generate_audio(
         printf("\n\ncoarse sequence length: %d\n\n", input_coarse.size());
     }
 
+    // fine encoding (fine model)
+    std::vector<bark_vocab::id> input_fine;
+    {
+
+    }
+
 }
 
 int main(int argc, char **argv) {
