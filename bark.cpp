@@ -458,6 +458,301 @@ void bert_tokenize(
     *n_tokens = t;
 }
 
+
+bool fine_gpt_eval(
+        const gpt_model & model,
+        const int n_threads,
+        const int codebook_ix,
+        const std::vector<std::vector<bark_vocab::id>> & embd_inp,
+              std::vector<std::vector<float>>          & logits,
+              size_t                                   & mem_per_token) {
+    // embd_inp: (seq_length, n_channels)
+    const int N = embd_inp.size();
+    const int n_codes = embd_inp[0].size();
+
+    BARK_ASSERT(n_codes == model.wtes.size());
+
+    const auto & hparams = model.hparams;
+
+    const int n_embd  = hparams.n_embd;
+    const int n_layer = hparams.n_layer;
+    const int n_ctx   = hparams.block_size;
+    const int n_head  = hparams.n_head;
+    const int n_vocab = hparams.n_out_vocab;
+
+    const int n_codes_given = hparams.n_codes_given;
+
+    static size_t buf_size = 256u*1024*1024;
+    static void * buf = malloc(buf_size);
+
+    if (mem_per_token > 0 && mem_per_token*N*n_codes > buf_size) {
+        const size_t buf_size_new = 1.2*(mem_per_token*N*n_codes); // add 20% to account for ggml object overhead
+
+        // reallocate
+        buf_size = buf_size_new;
+        buf = realloc(buf, buf_size);
+        if (buf == nullptr) {
+            fprintf(stderr, "%s: failed to allocate %zu bytes\n", __func__, buf_size);
+            return false;
+        }
+    }
+
+    struct ggml_init_params params = {
+        /*.mem_size   =*/ buf_size,
+        /*.mem_buffer =*/ buf,
+        /*.no_alloc   =*/ false,
+    };
+
+    struct ggml_context * ctx0 = ggml_init(params);
+    struct ggml_cgraph gf = {};
+    gf.n_threads = n_threads;
+
+    struct ggml_tensor * input = ggml_new_tensor_2d(ctx0, GGML_TYPE_I32, N, n_codes);
+    for (int n = 0; n < N; n++) {
+        int offset = ggml_element_size(input)*n*n_codes;
+        memcpy(input->data+offset, embd_inp[n].data(), n_codes*ggml_element_size(input));
+    }
+
+    struct ggml_tensor * embd = ggml_new_tensor_3d(ctx0, GGML_TYPE_I32, N, n_embd, codebook_ix + 1);
+    for (int wte_ix = 0; wte_ix < codebook_ix + 1; wte_ix++) {
+        struct ggml_tensor * curr_embd = ggml_get_rows(ctx0, model.wtes[wte_ix], ggml_view_1d(ctx0, input, N, N*wte_ix*ggml_element_size(input)));
+        embd = ggml_set_2d(ctx0, embd, curr_embd, N*ggml_element_size(curr_embd), wte_ix*N*n_embd*ggml_element_size(curr_embd));
+    }
+
+    // [N, n_embd, codebook_ix+1] -> [codebook_ix+1, N, n_embd]
+    embd = ggml_permute(ctx0, embd, 2, 0, 1, 3);
+    // [1, N, n_embd]
+    embd = ggml_sum_rows(ctx0, embd);
+    // [N, n_embd]
+    embd = ggml_permute(ctx0, embd, 1, 2, 0, 3);
+
+    struct ggml_tensor * position = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
+    for (int i = 0; i < N; ++i) {
+        ((int32_t *) position->data)[i] = i;
+    }
+
+    // wte + wpe
+    struct ggml_tensor * inpL = ggml_add(ctx0,
+        embd, ggml_get_rows(ctx0, model.wpe, position));
+
+    for (int il = 0; il < n_layer; ++il) {
+        struct ggml_tensor * cur;
+
+        // norm
+        {
+            // [ 768, N]
+            cur = ggml_norm(ctx0, inpL);
+
+            // cur = ln_1_g*cur + ln_1_b
+            // [ 768, N]
+            cur = ggml_add(ctx0,
+                    ggml_mul(ctx0,
+                        ggml_repeat(ctx0, model.layers[il].ln_1_g, cur),
+                        cur),
+                    ggml_repeat(ctx0, model.layers[il].ln_1_b, cur));
+        }
+
+        // attn
+        // [2304, 768] - model.layers[il].c_attn_attn_w
+        // [2304,   1] - model.layers[il].c_attn_attn_b
+        // [ 768,   N] - cur (in)
+        // [2304,   N] - cur (out)
+        //
+        // cur = attn_w*cur + attn_b
+        // [2304, N]
+        {
+            cur = ggml_mul_mat(ctx0,
+                    model.layers[il].c_attn_attn_w,
+                    cur);
+
+            cur = ggml_add(ctx0,
+                    ggml_repeat(ctx0, model.layers[il].c_attn_attn_b, cur),
+                    cur);
+        }
+
+        // self-attention
+        {
+            struct ggml_tensor * Qcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 0*sizeof(float)*n_embd);
+            struct ggml_tensor * Kcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 1*sizeof(float)*n_embd);
+            struct ggml_tensor * Vcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 2*sizeof(float)*n_embd);
+
+            // Q = Qcur.contiguous().view(n_embd/n_head, n_head, N).permute(0, 2, 1, 3)
+            // [64, N, 12]
+            struct ggml_tensor * Q =
+                ggml_permute(ctx0,
+                        ggml_cpy(ctx0,
+                            Qcur,
+                            ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
+                        0, 2, 1, 3);
+
+            // K = Kmem.view(n_embd/n_head, n_head, N).permute(0, 2, 1, 3)
+            // [64, n_past + N, 12]
+            struct ggml_tensor * K =
+                ggml_permute(ctx0,
+                        ggml_reshape_3d(ctx0,
+                            ggml_view_1d(ctx0, model.memory_k, N*n_embd, il*n_ctx*ggml_element_size(model.memory_k)*n_embd),
+                            n_embd/n_head, n_head, N),
+                        0, 2, 1, 3);
+
+            // K * Q
+            // [n_past + N, N, 12]
+            struct ggml_tensor * KQ = ggml_mul_mat(ctx0, K, Q);
+
+            // KQ_scaled = KQ / sqrt(n_embd/n_head)
+            // [n_past + N, N, 12]
+            struct ggml_tensor * KQ_scaled =
+                ggml_scale_inplace(ctx0,
+                        KQ,
+                        ggml_new_f32(ctx0, 1.0f/sqrt(float(n_embd)/n_head))
+                        );
+
+            // KQ = soft_max(KQ_masked)
+            // [n_past + N, N, 12]
+            struct ggml_tensor * KQ_soft_max = ggml_soft_max_inplace(ctx0, KQ_scaled);
+
+            // V_trans = Vmem.view(n_embd/n_head, n_head, n_past + N).permute(1, 2, 0, 3).contiguous()
+            // [n_past + N, 64, 12]
+            struct ggml_tensor * V_trans =
+                ggml_cpy(ctx0,
+                        ggml_permute(ctx0,
+                            ggml_reshape_3d(ctx0,
+                                ggml_view_1d(ctx0, model.memory_v, N*n_embd, il*n_ctx*ggml_element_size(model.memory_v)*n_embd),
+                                n_embd/n_head, n_head, N),
+                            1, 2, 0, 3),
+                        ggml_new_tensor_3d(ctx0, model.memory_v->type, N, n_embd/n_head, n_head));
+
+            // KQV = transpose(V) * KQ_soft_max
+            // [64, N, 12]
+            struct ggml_tensor * KQV = ggml_mul_mat(ctx0, V_trans, KQ_soft_max);
+
+            // KQV_merged = KQV.permute(0, 2, 1, 3)
+            // [64, 12, N]
+            struct ggml_tensor * KQV_merged = ggml_permute(ctx0, KQV, 0, 2, 1, 3);
+
+            // cur = KQV_merged.contiguous().view(n_embd, N)
+            // [768, N]
+            cur = ggml_cpy(ctx0,
+                    KQV_merged,
+                    ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N));
+        }
+
+        // projection
+        // [ 768, 768] - model.layers[il].c_attn_proj_w
+        // [ 768,   1] - model.layers[il].c_attn_proj_b
+        // [ 768,   N] - cur (in)
+        // [ 768,   N] - cur (out)
+        //
+        // cur = proj_w*cur + proj_b
+        // [768, N]
+        {
+            cur = ggml_mul_mat(ctx0,
+                    model.layers[il].c_attn_proj_w,
+                    cur);
+
+            cur = ggml_add(ctx0,
+                    ggml_repeat(ctx0, model.layers[il].c_attn_proj_b, cur),
+                    cur);
+        }
+
+        // add the input
+        cur = ggml_add(ctx0, cur, inpL);
+
+        struct ggml_tensor * inpFF = cur;
+
+        // feed-forward network
+        {
+            // norm
+            {
+                cur = ggml_norm(ctx0, inpFF);
+
+                // cur = ln_2_g*cur + ln_2_b
+                // [ 768, N]
+                cur = ggml_add(ctx0,
+                        ggml_mul(ctx0,
+                            ggml_repeat(ctx0, model.layers[il].ln_2_g, cur),
+                            cur),
+                        ggml_repeat(ctx0, model.layers[il].ln_2_b, cur));
+            }
+
+            // fully connected
+            // [3072, 768] - model.layers[il].c_mlp_fc_w
+            // [3072,   1] - model.layers[il].c_mlp_fc_b
+            // [ 768,   N] - cur (in)
+            // [3072,   N] - cur (out)
+            //
+            // cur = fc_w*cur + fc_b
+            // [3072, N]
+            cur = ggml_mul_mat(ctx0,
+                    model.layers[il].c_mlp_fc_w,
+                    cur);
+
+            cur = ggml_add(ctx0,
+                    ggml_repeat(ctx0, model.layers[il].c_mlp_fc_b, cur),
+                    cur);
+
+            // GELU activation
+            // [3072, N]
+            cur = ggml_gelu(ctx0, cur);
+
+            // projection
+            // [ 768, 3072] - model.layers[il].c_mlp_proj_w
+            // [ 768,    1] - model.layers[il].c_mlp_proj_b
+            // [3072,    N] - cur (in)
+            // [ 768,    N] - cur (out)
+            //
+            // cur = proj_w*cur + proj_b
+            // [768, N]
+            cur = ggml_mul_mat(ctx0,
+                    model.layers[il].c_mlp_proj_w,
+                    cur);
+
+            cur = ggml_add(ctx0,
+                    ggml_repeat(ctx0, model.layers[il].c_mlp_proj_b, cur),
+                    cur);
+        }
+
+        // input for next layer
+        inpL = ggml_add(ctx0, cur, inpFF);
+    }
+
+    // norm
+    {
+        // [ 768, N]
+        inpL = ggml_norm(ctx0, inpL);
+
+        // inpL = ln_f_g*inpL + ln_f_b
+        // [ 768, N]
+        inpL = ggml_add(ctx0,
+                ggml_mul(ctx0,
+                    ggml_repeat(ctx0, model.ln_f_g, inpL),
+                    inpL),
+                ggml_repeat(ctx0, model.ln_f_b, inpL));
+    }
+
+    // inpL = WTE * inpL
+    // [ 768, 50257] - model.lm_head
+    // [ 768, N]     - inpL
+    inpL = ggml_mul_mat(ctx0, model.lm_heads[codebook_ix - n_codes_given], inpL);
+
+    // run the computation
+    ggml_build_forward_expand(&gf, inpL);
+    ggml_graph_compute       (ctx0, &gf);
+
+    // return result just for the last token
+    logits.resize(n_vocab);
+    memcpy(logits.data(), (float *) ggml_get_data(inpL) + (n_vocab*(N-1)), sizeof(float)*n_vocab);
+
+    if (mem_per_token == 0) {
+        mem_per_token = ggml_used_mem(ctx0)/N;
+    }
+    //printf("used_mem = %zu\n", ggml_used_mem(ctx0));
+
+    ggml_free(ctx0);
+
+    return true;
+}
+
+
 bool gpt_eval(
         const gpt_model & model,
         const int n_threads,
@@ -892,7 +1187,7 @@ bool bark_generate_audio(
     printf("\n\n");
 
     // encode text (text model)
-    std::vector<bark_vocab::id> inp_semantic;
+    std::vector<bark_vocab::id> out_semantic;
     {
         int n_past = 0;
         float eos_p = 0;
@@ -914,16 +1209,15 @@ bool bark_generate_audio(
             if (early_stop)
                 logits.push_back(logits[logits_pad_token]);
 
+            n_past += input.size();
             if (i == 0)
-                n_past += input.size() - 256;  // first step, context are merged
-            else
-                n_past += input.size();
+                n_past -= 256;  // first step, context are merged
 
             input.clear();
 
             bark_vocab::id sampled_id = gpt_sample(vocab, logits, temp, rng, &eos_p);
             input.push_back(sampled_id);
-            inp_semantic.push_back(sampled_id);
+            out_semantic.push_back(sampled_id);
 
             printf("%d ", sampled_id);
             fflush(stdout);
@@ -932,16 +1226,17 @@ bool bark_generate_audio(
                 break;
         }
 
-        printf("\n\nsemantic sequence length: %d\n\n", inp_semantic.size());
+        printf("\n\nsemantic sequence length: %d\n\n", out_semantic.size());
     }
 
     // coarse encoding (coarse model)
-    std::vector<bark_vocab::id> input_coarse;
+    std::vector<std::vector<bark_vocab::id>> out_coarse(N_COARSE_CODEBOOKS);
     {
+        std::vector<bark_vocab::id> out;
         float semantic_to_coarse_ratio = COARSE_RATE_HZ / SEMANTIC_RATE_HZ * N_COARSE_CODEBOOKS;
         int max_semantic_history = floorf(max_coarse_history / semantic_to_coarse_ratio);
 
-        int n_steps = floorf(inp_semantic.size() * semantic_to_coarse_ratio / N_COARSE_CODEBOOKS) * N_COARSE_CODEBOOKS;
+        int n_steps = floorf(out_semantic.size() * semantic_to_coarse_ratio / N_COARSE_CODEBOOKS) * N_COARSE_CODEBOOKS;
         int step_ix = 0;
 
         BARK_ASSERT(n_steps > 0);
@@ -949,12 +1244,12 @@ bool bark_generate_audio(
 
         int n_window_steps = ceilf(static_cast<float>(n_steps) / sliding_window_size);
 
-        std::vector<bark_vocab::id> input = inp_semantic;
+        std::vector<bark_vocab::id> input = out_semantic;
         std::vector<float> logits;
 
         // dry run to estimate mem_per_token
         size_t mem_per_token = 0;
-        gpt_eval(model.coarse_model, n_threads, 0, false, { 0, 1, 2, 3}, logits, mem_per_token);
+        gpt_eval(model.coarse_model, n_threads, 0, false, { 0, 1, 2, 3 }, logits, mem_per_token);
 
         for(int i = 0; i < n_window_steps; i++) {
             int semantic_ix = roundf(n_steps / semantic_to_coarse_ratio);
@@ -972,14 +1267,14 @@ bool bark_generate_audio(
             // concatenate input_in and input_coarse
             input_in.insert(
                 input_in.end(),
-                std::make_move_iterator(input_coarse.end() - std::min(max_coarse_history, (int) input_coarse.size())),
-                std::make_move_iterator(input_coarse.end())
+                std::make_move_iterator(out.end() - std::min(max_coarse_history, (int) out.size())),
+                std::make_move_iterator(out.end())
             );
 
             int n_past = 0;
             mem_per_token *= 1.1;  // context length is growing, mem_per_token must grow as well
 
-            for(int j = 0; j < sliding_window_size; j++) {
+            for (int j = 0; j < sliding_window_size; j++) {
                 if (step_ix >= n_steps)
                     continue;
 
@@ -997,7 +1292,7 @@ bool bark_generate_audio(
                 sampled_id += start_ix;
 
                 input_in.push_back(sampled_id);
-                input_coarse.push_back(sampled_id);
+                out.push_back(sampled_id);
 
                 printf("%d ", sampled_id);
                 fflush(stdout);
@@ -1006,21 +1301,71 @@ bool bark_generate_audio(
             }
         }
 
-        BARK_ASSERT(input_coarse.size() == n_steps);
+        BARK_ASSERT(out.size() == n_steps);
+        BARK_ASSERT(out.size() % N_COARSE_CODEBOOKS == 0);
 
-        for(int ix = 0; ix < input_coarse.size(); ix++)
-            input_coarse[ix] -= SEMANTIC_VOCAB_SIZE;
+        // gen_coarse_audio_arr = gen_coarse_arr.reshape(-1, N_COARSE_CODEBOOKS).T - SEMANTIC_VOCAB_SIZE
+        size_t mid = out.size() / 2;
+        for(int ix = 0; ix < out.size(); ix++) {
+            if(ix < mid)
+                out_coarse[0].push_back(out[ix] - SEMANTIC_VOCAB_SIZE);
+            else
+                // !! this only works when CODEBOOK_SIZE = 2
+                out_coarse[1].push_back(out[ix] - SEMANTIC_VOCAB_SIZE - CODEBOOK_SIZE);
+        }
 
-        // for n in range(1, N_COARSE_CODEBOOKS):
-        //     gen_coarse_audio_arr[n, :] -= n * CODEBOOK_SIZE
-
-        printf("\n\ncoarse sequence length: %d\n\n", input_coarse.size());
+        printf("\n\ncoarse sequence length: %d\n\n", out.size());
     }
 
     // fine encoding (fine model)
-    std::vector<bark_vocab::id> input_fine;
+    std::vector<bark_vocab::id> out_fine;
     {
+        std::vector<std::vector<bark_vocab::id>> input = out_coarse;
+        std::vector<std::vector<float>> logits;
 
+        size_t mem_per_token = 0;
+
+        int n_coarse = input.size();
+        int original_seq_len = input[0].size();
+
+        // channel padding
+        for(int i = N_COARSE_CODEBOOKS; i < N_FINE_CODEBOOKS; i++) {
+            std::vector<bark_vocab::id> tmp(original_seq_len, CODEBOOK_SIZE);
+            input.push_back(tmp);
+        }
+
+        // spatial padding if sequence is too short
+        if(original_seq_len < 1024) {
+            for (int i = 0; i < input.size(); i++) {
+                for (int j = original_seq_len; j < 1024; j++) {
+                    input[i].push_back(CODEBOOK_SIZE);
+                }
+            }
+        }
+
+        fine_gpt_eval(model.fine_model, n_threads, 0, { {0, 1}, {2, 3} }, logits, mem_per_token);
+
+        int n_loops = std::max(0, (int) ceilf((input.size() - 1024)/512.f)) + 1;
+
+        std::vector<std::vector<bark_vocab::id>> in_arr = input;
+
+        for (int n = 0; n < n_loops; n++) {
+            int start_ix = std::min(n * 512, (int) in_arr[0].size() - 1024);
+            int start_fill_ix = std::min(n * 512, (int) in_arr[0].size() - 512);
+            int rel_start_fill_ix = start_fill_ix - start_ix;
+
+            // in_buffer = in_arr[start_ix : start_ix + 1024, :]
+            std::vector<std::vector<bark_vocab::id>> in_buffer(in_arr.size());
+            for (int ix = 0; ix < in_buffer.size(); ix++) {
+                std::vector<bark_vocab::id> buf(in_arr[ix].begin() + start_ix, in_arr[ix].begin() + start_ix + 1024);
+                in_buffer[ix] = buf;
+            }
+
+            for (int nn = n_coarse; nn < N_FINE_CODEBOOKS; nn++) {
+                fine_gpt_eval(model.fine_model, n_threads, nn, in_buffer, logits, mem_per_token);
+
+            }
+        }
     }
 
 }
