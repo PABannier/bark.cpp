@@ -1451,7 +1451,7 @@ bool bark_generate_audio(
 
         fine_gpt_eval(model.fine_model, n_threads, n_coarse, { {0, 1}, {1, 2}, {2, 3}, {3, 4}, {4, 5}, {5, 6}, {6, 7}, {7, 8} }, logits, mem_per_token);
 
-        int n_loops = std::max(0, (int) ceilf((input.size() - 1024)/512.f)) + 1;
+        int n_loops = std::max(0, (int) ceilf((input[0].size() - 1024)/512.f)) + 1;
 
         std::vector<std::vector<bark_vocab::id>> in_arr = input;
 
@@ -1480,7 +1480,13 @@ bool bark_generate_audio(
                     bark_vocab::id sampled_id = gpt_sample(model.vocab, relevant_logits, temp, rng, NULL);
                     // in_buffer[0, rel_start_fill_idx:, nn] = codebook_preds
                     in_buffer[nn][rel_start_fill_ix+i] = sampled_id;
+
+                    printf("%d ", sampled_id);
+                    fflush(stdout);
                 }
+
+                printf("\n");
+                fflush(stdout);
             }
 
             // transfer over info into model_in
