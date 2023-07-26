@@ -799,9 +799,15 @@ bool fine_gpt_eval(
         printf("dim3: %d\n", toy->ne[2]);
     }
 
-    // return result just for the last token
-    logits.resize(n_vocab);
-    // memcpy(logits.data(), (float *) ggml_get_data(inpL) + (n_vocab*(N-1)), sizeof(float)*n_vocab);
+    // [1056 - 1024]
+    logits.resize(N);
+    assert (n_vocab == 1056);
+
+    for (int i = 0; i < N; i++) {
+        std::vector<float> tmp(n_vocab);
+        memcpy(tmp.data(), (float *) ggml_get_data(inpL) + (i*n_vocab), sizeof(float)*n_vocab);
+        logits[i] = tmp;
+    }
 
     if (mem_per_token == 0) {
         mem_per_token = ggml_used_mem(ctx0)/N;
@@ -1448,8 +1454,8 @@ bool bark_generate_audio(
         std::vector<std::vector<bark_vocab::id>> in_arr = input;
 
         for (int n = 0; n < n_loops; n++) {
-            int start_ix = std::min(n * 512, (int) in_arr[0].size() - 1024);
-            int start_fill_ix = std::min(n * 512, (int) in_arr[0].size() - 512);
+            int start_ix          = std::min(n * 512, (int) in_arr[0].size() - 1024);
+            int start_fill_ix     = std::min(n * 512, (int) in_arr[0].size() - 512);
             int rel_start_fill_ix = start_fill_ix - start_ix;
 
             // in_buffer = in_arr[start_ix : start_ix + 1024, :]
@@ -1462,7 +1468,20 @@ bool bark_generate_audio(
             for (int nn = n_coarse; nn < N_FINE_CODEBOOKS; nn++) {
                 fine_gpt_eval(model.fine_model, n_threads, nn, in_buffer, logits, mem_per_token);
 
+                // TODO: sampling with soft + multinomial (for loop on seq_length)
+                std::vector<bark_vocab::id> predictions(CODEBOOK_SIZE-rel_start_fill_ix);
+
+                for (int i = 0; i < logits.size(); i++) {
+                    std::vector<float> relevant_logits = logits[i];
+                    relevant_logits.resize(CODEBOOK_SIZE);
+
+                    bark_vocab::id sampled_id = gpt_sample(model.vocab, relevant_logits, temp, rng, NULL);
+                    // in_buffer[0, rel_start_fill_idx:, nn] = codebook_preds
+                    in_buffer[nn][rel_start_fill_ix+i] = sampled_id;
+                }
             }
+
+            // transfer over info into model_in
         }
     }
 
