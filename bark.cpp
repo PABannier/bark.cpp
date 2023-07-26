@@ -1422,15 +1422,16 @@ bool bark_generate_audio(
     };
 
     // fine encoding (fine model)
-    std::vector<bark_vocab::id> out_fine;
+    std::vector<std::vector<bark_vocab::id>> out_fine;
     {
         std::vector<std::vector<bark_vocab::id>> input = out_coarse;
         std::vector<std::vector<float>> logits;
 
         size_t mem_per_token = 0;
 
-        int n_coarse = input.size();
-        int original_seq_len = input[0].size();
+        int n_coarse          = input.size();
+        int original_seq_len  = input[0].size();
+        int n_remove_from_end = 0;
 
         // channel padding
         for(int i = N_COARSE_CODEBOOKS; i < N_FINE_CODEBOOKS; i++) {
@@ -1440,6 +1441,7 @@ bool bark_generate_audio(
 
         // spatial padding if sequence is too short
         if(original_seq_len < 1024) {
+            n_remove_from_end = 1024 - original_seq_len;
             for (int i = 0; i < input.size(); i++) {
                 for (int j = original_seq_len; j < 1024; j++) {
                     input[i].push_back(CODEBOOK_SIZE);
@@ -1482,9 +1484,23 @@ bool bark_generate_audio(
             }
 
             // transfer over info into model_in
+            for (int nn = n_coarse; nn < N_FINE_CODEBOOKS; nn++) {
+                for (int j = 0; j < CODEBOOK_SIZE - rel_start_fill_ix; j++) {
+                    in_arr[nn][start_fill_ix+j] = in_buffer[nn][rel_start_fill_ix+j];
+                }
+            }
         }
-    }
 
+        if (n_remove_from_end > 0) {
+            for (int i = 0; i < in_arr.size(); i++) {
+                in_arr[i].resize(in_arr[i].size() - n_remove_from_end);
+            }
+        }
+
+        BARK_ASSERT(out_coarse[0].size() == in_arr[0].size());
+
+        out_fine = in_arr;
+    }
 }
 
 int main(int argc, char **argv) {
