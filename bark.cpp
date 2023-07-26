@@ -516,15 +516,6 @@ bool fine_gpt_eval(
         memcpy((void *) ((char *) input->data + offset), embd_inp[c].data(), N*ggml_element_size(input));
     }
 
-    // struct ggml_tensor * embd = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd, N, n_codes);
-    // for (int wte_ix = 0; wte_ix < n_codes; wte_ix++) {
-    //     struct ggml_tensor * curr_embd = ggml_get_rows(ctx0, model.wtes[wte_ix],
-    //                                             ggml_view_1d(ctx0, input, N, N*wte_ix*ggml_element_size(input)));
-    //     embd = ggml_set_2d(ctx0, embd, curr_embd,
-    //                 ggml_element_size(curr_embd)*n_embd,
-    //                 ggml_element_size(curr_embd)*wte_ix*N*n_embd);
-    // }
-
     struct ggml_tensor * embd = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd, N, codebook_ix+1);
     for (int wte_ix = 0; wte_ix < codebook_ix+1; wte_ix++) {
         struct ggml_tensor * curr_embd = ggml_get_rows(ctx0, model.wtes[wte_ix],
@@ -550,7 +541,7 @@ bool fine_gpt_eval(
     // wte + wpe
     struct ggml_tensor * inpL = ggml_add(ctx0, embd, pos_embd);
 
-    for (int il = 0; il < 1; ++il) {
+    for (int il = 0; il < n_layer; ++il) {
         struct ggml_tensor * cur;
 
         // norm
@@ -1202,8 +1193,9 @@ bool bark_generate_audio(
     const int top_k = 10;
     const int seed  = 0;
 
-    const float top_p = 0.2;
-    const float temp  = 0.7;
+    const float top_p     = 0.2;
+    const float temp      = 0.7;
+    const float fine_temp = 0.5;
 
     const int early_stop = true;
 
@@ -1477,16 +1469,16 @@ bool bark_generate_audio(
                     std::vector<float> relevant_logits = logits[i];
                     relevant_logits.resize(CODEBOOK_SIZE);
 
-                    bark_vocab::id sampled_id = gpt_sample(model.vocab, relevant_logits, temp, rng, NULL);
+                    bark_vocab::id sampled_id = gpt_sample(model.vocab, relevant_logits, fine_temp, rng, NULL);
                     // in_buffer[0, rel_start_fill_idx:, nn] = codebook_preds
                     in_buffer[nn][rel_start_fill_ix+i] = sampled_id;
 
-                    printf("%d ", sampled_id);
-                    fflush(stdout);
+                    // printf("%d ", sampled_id);
+                    // fflush(stdout);
                 }
 
-                printf("\n");
-                fflush(stdout);
+                // printf("\n");
+                // fflush(stdout);
             }
 
             // transfer over info into model_in
@@ -1506,6 +1498,13 @@ bool bark_generate_audio(
         BARK_ASSERT(out_coarse[0].size() == in_arr[0].size());
 
         out_fine = in_arr;
+    }
+
+    for (int i = 0; i < out_fine.size(); i++) {
+        for (int j = 0; j < out_fine[0].size(); j++) {
+            printf("%d ", out_fine[i][j]);
+        }
+        printf("\n");
     }
 }
 
