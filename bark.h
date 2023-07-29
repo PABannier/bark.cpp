@@ -11,6 +11,7 @@
 
 #define CODEBOOK_SIZE 1024
 #define N_COARSE_CODEBOOKS 2
+#define N_FINE_CODEBOOKS 8
 
 #define SEMANTIC_PAD_TOKEN 10000
 #define SEMANTIC_INFER_TOKEN 129599
@@ -30,6 +31,8 @@ struct gpt_hparams {
     int32_t block_size;
     int32_t n_lm_heads;
     int32_t n_wtes;
+
+    int32_t n_codes_given = 1;
 };
 
 struct bark_vocab {
