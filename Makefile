@@ -149,9 +149,6 @@ all: main
 %: %.o
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 
-encodec: encodec.o encoder.o ggml.o
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
-
 bark: bark.cpp ggml.o encodec.o
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 

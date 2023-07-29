@@ -393,6 +393,37 @@ bool bark_model_load(std::string & dirname, bark_model & model) {
     return true;
 }
 
+
+std::string strip_accents(const std::string &in_str) {
+    std::string out_str;
+    std::map<std::string, char> accent_map = {{"À", 'A'},{"Á", 'A'},
+        {"Â", 'A'},{"Ã", 'A'},{"Ä", 'A'},{"Å", 'A'},{"à", 'a'},{"á", 'a'},
+        {"â", 'a'},{"ã", 'a'},{"ä", 'a'},{"å", 'a'},{"È", 'E'},{"É", 'E'},
+        {"Ê", 'E'},{"Ë", 'E'},{"è", 'e'},{"é", 'e'},{"ê", 'e'},{"ë", 'e'},
+        {"Ì", 'I'},{"Í", 'I'},{"Î", 'I'},{"Ï", 'I'},{"ì", 'i'},{"í", 'i'},
+        {"î", 'i'},{"ï", 'i'},{"Ò", 'O'},{"Ó", 'O'},{"Ô", 'O'},{"Õ", 'O'},
+        {"Ö", 'O'},{"ò", 'o'},{"ó", 'o'},{"ô", 'o'},{"õ", 'o'},{"ö", 'o'},
+        {"Ù", 'U'},{"Ú", 'U'},{"Û", 'U'},{"Ü", 'U'},{"ù", 'u'},{"ú", 'u'},
+        {"û", 'u'},{"ü", 'u'},{"Ý", 'Y'},{"ý", 'y'},{"Ç", 'C'},{"ç", 'c'},
+        {"Ñ", 'N'},{"ñ", 'n'},
+    };
+
+    for (size_t i = 0; i < in_str.length();) {
+        int len = utf8_len(in_str[i]);
+        std::string cur = in_str.substr(i, len);
+        auto iter = accent_map.find(cur);
+        if (iter != accent_map.end())
+            out_str += iter->second;
+        else
+            out_str += cur;
+
+        i += len;
+    }
+
+    return out_str;
+}
+
+
 void bert_tokenize(
     const bark_vocab& vocab,
     const char * text,
@@ -469,8 +500,6 @@ bool fine_gpt_eval(
     const int n_past = 0;
     const int n_codes = embd_inp.size();
     const int N = embd_inp[0].size();
-
-    BARK_ASSERT(n_codes == model.wtes.size());
 
     const auto & hparams = model.hparams;
 
@@ -1110,7 +1139,6 @@ bool gpt_eval(
 }
 
 bark_vocab::id gpt_sample(
-        const bark_vocab & vocab,
         const std::vector<float>& logits,
         double temp,
         std::mt19937 & rng,
@@ -1162,15 +1190,14 @@ bool bark_generate_audio(
         bark_model model,
         const bark_vocab& vocab,
         const char * text,
-        const int n_predict,
         const int n_threads) {
     std::vector<bark_vocab::id> tokens;
 
     // TODO move into params
-    const int top_k = 10;
+    // const int top_k = 10;
     const int seed  = 0;
 
-    const float top_p     = 0.2;
+    // const float top_p     = 0.2;
     const float temp      = 0.7;
     const float fine_temp = 0.5;
 
@@ -1193,7 +1220,7 @@ bool bark_generate_audio(
         tokens.resize(max_ctx_size);
 
         bert_tokenize(vocab, text, tokens.data(), &n_tokens, max_ctx_size);
-        for (int i = 0; i < tokens.size(); i++)
+        for (int i = 0; i < (int) tokens.size(); i++)
             tokens[i] += TEXT_ENCODING_OFFSET;
 
         if (n_tokens < max_ctx_size) {
@@ -1251,7 +1278,7 @@ bool bark_generate_audio(
 
             input.clear();
 
-            bark_vocab::id sampled_id = gpt_sample(vocab, logits, temp, rng, &eos_p);
+            bark_vocab::id sampled_id = gpt_sample(logits, temp, rng, &eos_p);
             input.push_back(sampled_id);
             out_semantic.push_back(sampled_id);
 
@@ -1262,7 +1289,7 @@ bool bark_generate_audio(
                 break;
         }
 
-        printf("\n\nsemantic sequence length: %d\n\n", out_semantic.size());
+        printf("\n\nsemantic sequence length: %zu\n\n", out_semantic.size());
     }
 
     // coarse encoding (coarse model)
@@ -1324,7 +1351,7 @@ bool bark_generate_audio(
                 int end_ix    = SEMANTIC_VOCAB_SIZE + (2 - is_major) * CODEBOOK_SIZE;
                 std::vector<float> relevant_logits(logits.begin() + start_ix, logits.begin() + end_ix);
 
-                bark_vocab::id sampled_id = gpt_sample(vocab, relevant_logits, temp, rng, NULL);
+                bark_vocab::id sampled_id = gpt_sample(relevant_logits, temp, rng, NULL);
                 sampled_id += start_ix;
 
                 input_in.push_back(sampled_id);
@@ -1337,12 +1364,12 @@ bool bark_generate_audio(
             }
         }
 
-        BARK_ASSERT(out.size() == n_steps);
+        BARK_ASSERT((int) out.size() == n_steps);
         BARK_ASSERT(out.size() % N_COARSE_CODEBOOKS == 0);
 
         // gen_coarse_audio_arr = gen_coarse_arr.reshape(-1, N_COARSE_CODEBOOKS).T - SEMANTIC_VOCAB_SIZE
-        size_t mid = out.size() / 2;
-        for(int ix = 0; ix < out.size(); ix++) {
+        int mid = out.size() / 2;
+        for(int ix = 0; ix < (int) out.size(); ix++) {
             if(ix < mid)
                 out_coarse[0].push_back(out[ix] - SEMANTIC_VOCAB_SIZE);
             else
@@ -1350,7 +1377,7 @@ bool bark_generate_audio(
                 out_coarse[1].push_back(out[ix] - SEMANTIC_VOCAB_SIZE - CODEBOOK_SIZE);
         }
 
-        printf("\n\ncoarse sequence length: %d\n\n", out.size());
+        printf("\n\ncoarse sequence length: %zu\n\n", out.size());
     }
 
     // fine encoding (fine model)
@@ -1374,7 +1401,7 @@ bool bark_generate_audio(
         // spatial padding if sequence is too short
         if(original_seq_len < 1024) {
             n_remove_from_end = 1024 - original_seq_len;
-            for (int i = 0; i < input.size(); i++) {
+            for (int i = 0; i < (int) input.size(); i++) {
                 for (int j = original_seq_len; j < 1024; j++) {
                     input[i].push_back(CODEBOOK_SIZE);
                 }
@@ -1393,7 +1420,7 @@ bool bark_generate_audio(
             int rel_start_fill_ix = start_fill_ix - start_ix;
 
             std::vector<std::vector<bark_vocab::id>> in_buffer(in_arr.size());
-            for (int ix = 0; ix < in_buffer.size(); ix++) {
+            for (int ix = 0; ix < (int) in_buffer.size(); ix++) {
                 std::vector<bark_vocab::id> buf(in_arr[ix].begin() + start_ix, in_arr[ix].begin() + start_ix + 1024);
                 in_buffer[ix] = buf;
             }
@@ -1403,11 +1430,11 @@ bool bark_generate_audio(
 
                 std::vector<bark_vocab::id> predictions(CODEBOOK_SIZE - rel_start_fill_ix);
 
-                for (int i = 0; i < logits.size(); i++) {
+                for (int i = 0; i < (int) logits.size(); i++) {
                     std::vector<float> relevant_logits = logits[i];
                     relevant_logits.resize(CODEBOOK_SIZE);
 
-                    bark_vocab::id sampled_id = gpt_sample(model.vocab, relevant_logits, fine_temp, rng, NULL);
+                    bark_vocab::id sampled_id = gpt_sample(relevant_logits, fine_temp, rng, NULL);
                     in_buffer[nn][rel_start_fill_ix+i] = sampled_id;
                 }
             }
@@ -1421,7 +1448,7 @@ bool bark_generate_audio(
         }
 
         if (n_remove_from_end > 0) {
-            for (int i = 0; i < in_arr.size(); i++) {
+            for (int i = 0; i < (int) in_arr.size(); i++) {
                 in_arr[i].resize(in_arr[i].size() - n_remove_from_end);
             }
         }
@@ -1430,9 +1457,11 @@ bool bark_generate_audio(
 
         out_fine = in_arr;
     }
+
+    return true;
 }
 
-int main(int argc, char **argv) {
+int main() {
     const int64_t t_main_start_us = ggml_time_us();
 
     int64_t t_load_us = 0;
@@ -1461,7 +1490,7 @@ int main(int argc, char **argv) {
         const int64_t t_eval_us_start = ggml_time_us();
 
         // call to generate audio
-        bark_generate_audio(model, model.vocab, prompt.data(), 768, 4);
+        bark_generate_audio(model, model.vocab, prompt.data(), 4);
 
         t_eval_us = ggml_time_us() - t_eval_us_start;
     }
@@ -1472,6 +1501,7 @@ int main(int argc, char **argv) {
 
         printf("\n\n");
         printf("%s:     load time = %8.2f ms\n", __func__, t_load_us/1000.0f);
+        printf("%s:     eval time = %8.2f ms\n", __func__, t_eval_us/1000.0f);
         printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us)/1000.0f);
     }
 
