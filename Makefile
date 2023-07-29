@@ -307,3 +307,15 @@ bark: bark.cpp                                encodec.o ggml.o $(OBJS)
 	@echo
 	@echo '====  Run ./bark -h for help.  ===='
 	@echo
+
+# %.o: %.cpp
+# 	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# %: %.o
+# 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+
+# bark: bark.cpp ggml.o encodec.o
+# 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+
+# clean:
+# 	rm -vf *.o encodec bark
