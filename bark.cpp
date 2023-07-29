@@ -18,7 +18,7 @@ https://github.com/skeskinen/bert.cpp/
 */
 #include "bark.h"
 #include "ggml.h"
-#include "util.h"
+#include "bark-util.h"
 
 #include <cassert>
 #include <cmath>

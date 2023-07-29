@@ -1,6 +1,6 @@
 #include "encodec.h"
 #include "ggml.h"
-#include "util.h"
+#include "bark-util.h"
 
 #include <cmath>
 #include <stdexcept>
