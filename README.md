@@ -4,7 +4,7 @@ Inference of SunoAI's bark model in pure C/C++ using [ggml](https://github.com/g
 
 ## Description
 
-The main goal of `bark.cpp` is to synthesize audio from a textual input with the [Bark](https://github.com/suno-ai/bark) model using 4-bit quantization on a MacBook.
+The main goal of `bark.cpp` is to synthesize audio from a textual input with the [Bark](https://github.com/suno-ai/bark) model.
 
 Bark has essentially 4 components:
 - [x] Semantic model to encode the text input
