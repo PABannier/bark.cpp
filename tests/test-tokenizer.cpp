@@ -26,22 +26,18 @@ int main(int argc, char **argv) {
 
     fprintf(stderr, "%s : reading vocab from: '%s'\n", __func__, fname.c_str());
 
-    bark_model model;
+    bark_vocab vocab;
     int max_ctx_size = 256;
 
-    // load text model and vocab
-    {
-        if(!gpt_model_load(fname, model.text_model, model.vocab, true)) {
-            fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
-            return 1;
-        }
-        model.memsize += model.text_model.memsize;
+    if(!bark_vocab_load(fname, vocab, 119547)) {
+        fprintf(stderr, "%s: invalid vocab file '%s'\n", __func__, fname.c_str());
+        return 1;
     }
 
     for (const auto & test_kv : k_tests()) {
         std::vector<bark_vocab::id> res(test_kv.first.size());
         int n_tokens;
-        bert_tokenize(model.vocab, test_kv.first.c_str(), res.data(), &n_tokens, max_ctx_size);
+        bert_tokenize(vocab, test_kv.first.c_str(), res.data(), &n_tokens, max_ctx_size);
         res.resize(n_tokens);
 
         bool correct = res.size() == test_kv.second.size();
@@ -69,10 +65,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    ggml_free(model.coarse_model.ctx);
-    ggml_free(model.fine_model.ctx);
-    ggml_free(model.text_model.ctx);
-    ggml_free(model.codec_model.ctx);
+    fprintf(stderr, "%s : tests passed successfully.\n", __func__);
 
     return 0;
 }

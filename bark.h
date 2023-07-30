@@ -112,9 +112,11 @@ struct bark_model {
     int32_t memsize = 0;
 };
 
-bool gpt_model_load(const std::string& fname, gpt_model& model, bark_vocab& vocab, bool has_vocab);
+bool gpt_model_load(const std::string& fname, gpt_model& model);
 
 bool bark_model_load(const std::string & dirname, bark_model & model);
+
+bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expected_size);
 
 void bert_tokenize(
     const bark_vocab& vocab, 
