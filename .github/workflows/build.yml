@@ -9,7 +9,7 @@ on:
         type: boolean
   push:
     branches:
-      - master
+      - main
     paths: ['.github/workflows/**', '**/CMakeLists.txt', '**/Makefile', '**/*.h', '**/*.hpp', '**/*.c', '**/*.cpp', '**/*.cu']
   pull_request:
     types: [opened, synchronize, reopened]
