@@ -114,9 +114,17 @@ struct bark_model {
 
 bool gpt_model_load(const std::string& fname, gpt_model& model, bark_vocab& vocab, bool has_vocab);
 
+bool bark_model_load(const std::string & dirname, bark_model & model);
+
 void bert_tokenize(
     const bark_vocab& vocab, 
     const char * text, 
     int32_t * tokens, 
     int32_t * n_tokens, 
     int32_t n_max_tokens);
+
+bool bark_generate_audio(
+        bark_model model,
+        const bark_vocab& vocab,
+        const char * text,
+        const int n_threads);

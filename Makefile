@@ -2,8 +2,7 @@
 BUILD_TARGETS = bark
 
 # Binaries only useful for tests
-# TEST_TARGETS = tests/test-double-float tests/test-grad0 tests/test-opt tests/test-quantize-fns tests/test-quantize-perf tests/test-sampling tests/test-tokenizer-0
-TEST_TARGETS =
+TEST_TARGETS = tests/test-tokenizer
 
 default: $(BUILD_TARGETS)
 
@@ -302,5 +301,17 @@ bark.o: bark.cpp bark.h
 clean:
 	rm -vf *.o *.so *.dll encodec bark
 
-bark: bark.cpp                                encodec.o ggml.o $(OBJS)
+bark: bark.cpp         encodec.o ggml.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+
+main: examples/main.cpp  ggml.o bark.o encodec.o $(OBJS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+
+#
+# Test
+#
+
+tests: $(TEST_TARGETS)
+
+tests/test-tokenizer: tests/test-tokenizer.cpp ggml.o bark.o encodec.o $(OBJS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)

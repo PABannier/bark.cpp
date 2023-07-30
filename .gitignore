@@ -4,6 +4,8 @@ build/
 
 bark
 encodec
+main
+tests/test-tokenizer
 
 *.o
 *.plist

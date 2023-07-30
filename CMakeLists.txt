@@ -75,7 +75,7 @@ option(BARK_CUDA_DMMV_F16                   "bark: use 16 bit floats for dmmv CU
 option(BARK_CLBLAST                         "bark: use CLBlast"                               OFF)
 option(BARK_METAL                           "bark: use Metal"                                 OFF)
 
-# option(BARK_BUILD_TESTS                "bark: build tests"    ${BARK_STANDALONE})
+option(BARK_BUILD_TESTS                "bark: build tests"    ${BARK_STANDALONE})
 
 #
 # Build info header
@@ -518,7 +518,7 @@ install(
 # programs, examples and tests
 #
 
-# if (BARK_BUILD_TESTS AND NOT CMAKE_JS_VERSION)
-#     include(CTest)
-#     add_subdirectory(tests)
-# endif ()
+if (BARK_BUILD_TESTS AND NOT CMAKE_JS_VERSION)
+    include(CTest)
+    add_subdirectory(tests)
+endif ()
