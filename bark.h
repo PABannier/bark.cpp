@@ -1,6 +1,7 @@
 #include "encodec.h"
 
 #include <map>
+#include <random>
 #include <vector>
 
 #define CLS_TOKEN_ID 101
@@ -113,6 +114,21 @@ struct bark_model {
 };
 
 bool gpt_model_load(const std::string& fname, gpt_model& model);
+
+bool gpt_eval(
+        const gpt_model & model,
+        const int n_threads,
+        const int n_past,
+        const bool merge_ctx,
+        const std::vector<bark_vocab::id> & embd_inp,
+              std::vector<float>          & embd_w,
+              size_t                      & mem_per_token);
+
+bark_vocab::id gpt_sample(
+        const std::vector<float>& logits,
+              double temp,
+              std::mt19937 & rng,
+              float * eos_p);
 
 bool bark_model_load(const std::string & dirname, bark_model & model);
 

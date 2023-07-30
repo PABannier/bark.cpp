@@ -6,6 +6,7 @@ bark
 encodec
 main
 tests/test-tokenizer
+tests/test-text-encoder
 
 *.o
 *.plist
