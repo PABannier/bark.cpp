@@ -9,3 +9,5 @@ tests/test-tokenizer
 
 *.o
 *.plist
+
+.DS_Store
