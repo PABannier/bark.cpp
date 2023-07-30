@@ -341,7 +341,7 @@ bool gpt_model_load(const std::string& fname, gpt_model& model, bark_vocab& voca
     return true;
 }
 
-bool bark_model_load(std::string & dirname, bark_model & model) {
+bool bark_model_load(const std::string & dirname, bark_model & model) {
     printf("%s: loading model from '%s'\n", __func__, dirname.c_str());
 
     // text
