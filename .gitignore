@@ -1,4 +1,4 @@
-ggml_weights/
+ggml_weights/*
 *.dSYM/
 build/
 
@@ -11,3 +11,5 @@ tests/test-tokenizer
 *.plist
 
 .DS_Store
+
+!ggml_weights/ggml_vocab.bin

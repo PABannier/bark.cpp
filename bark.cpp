@@ -14,7 +14,6 @@ WordPiece) implementation of WordPiece.
 
 Source:
 https://github.com/skeskinen/bert.cpp/
-
 */
 #include "bark.h"
 #include "ggml.h"
@@ -30,7 +29,57 @@ https://github.com/skeskinen/bert.cpp/
 #include <regex>
 #include <string>
 
-bool gpt_model_load(const std::string& fname, gpt_model& model, bark_vocab& vocab, bool has_vocab) {
+bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expected_size) {
+    auto fin = std::ifstream(fname, std::ios::binary);
+    if (!fin) {
+        fprintf(stderr, "%s: faield to open '%s'\n", __func__, fname.c_str());
+        return false;
+    }
+
+    // verify magic
+    {
+        uint32_t magic;
+        fin.read((char *) &magic, sizeof(magic));
+        if (magic != GGML_FILE_MAGIC) {
+            fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname.c_str());
+            return false;
+        }
+    }
+
+    int32_t n_vocab;
+    read_safe(fin, n_vocab);
+
+    // 5 special tokens: [UNK, SEP, MASK, PAD, CLS]
+    if (n_vocab != expected_size) {
+        fprintf(stderr, "%s: wrong voculary size (%d != %d)\n", __func__, n_vocab, expected_size);
+        return false;
+    }
+
+    std::string word;
+    std::vector<char> tmp;
+
+    tmp.reserve(128);
+
+    for (int i = 0; i < n_vocab; i++) {
+        uint32_t len;
+        read_safe(fin, len);
+
+        if (len > 0) {
+            tmp.resize(len);
+            fin.read(&tmp[0], tmp.size()); // read to buffer
+            word.assign(&tmp[0], tmp.size());
+        } else {
+            word = "";
+        }
+
+        vocab.token_to_id[word] = i;
+        vocab.id_to_token[i] = word;
+    }
+
+    return true;
+}
+
+bool gpt_model_load(const std::string& fname, gpt_model& model) {
     auto fin = std::ifstream(fname, std::ios::binary);
     if (!fin) {
         fprintf(stderr, "%s: failed to open '%s'\n", __func__, fname.c_str());
@@ -68,38 +117,6 @@ bool gpt_model_load(const std::string& fname, gpt_model& model, bark_vocab& voca
         printf("%s: n_layer     = %d\n", __func__, hparams.n_layer);
         printf("%s: n_lm_heads  = %d\n", __func__, hparams.n_lm_heads);
         printf("%s: n_wtes      = %d\n", __func__, hparams.n_wtes);
-    }
-
-    if (has_vocab) {
-        int32_t n_vocab;
-        read_safe(fin, n_vocab);
-
-        // 5 special tokens: [UNK, SEP, MASK, PAD, CLS]
-        if (n_vocab != model.hparams.n_in_vocab - model.hparams.n_out_vocab - 5) {
-            fprintf(stderr, "%s: wrong voculary size (%d != %d)\n", __func__, n_vocab, model.hparams.n_in_vocab);
-            return false;
-        }
-
-        std::string word;
-        std::vector<char> tmp;
-
-        tmp.reserve(128);
-
-        for (int i = 0; i < n_vocab; i++) {
-            uint32_t len;
-            read_safe(fin, len);
-
-            if (len > 0) {
-                tmp.resize(len);
-                fin.read(&tmp[0], tmp.size()); // read to buffer
-                word.assign(&tmp[0], tmp.size());
-            } else {
-                word = "";
-            }
-
-            vocab.token_to_id[word] = i;
-            vocab.id_to_token[i] = word;
-        }
     }
 
     // for the big tensors, we have the option to store the data in 16-bit floats or quantized
@@ -348,18 +365,30 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
     {
         printf("%s: reading bark text model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_text.bin";
-        if(!gpt_model_load(fname, model.text_model, model.vocab, true)) {
+        if(!gpt_model_load(fname, model.text_model)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
             return false;
         }
         model.memsize += model.text_model.memsize;
     }
 
+    // vocab
+    {
+        printf("%s: reading bark vocab\n", __func__);
+        const std::string fname     = dirname + "/ggml_vocab.bin";
+        const gpt_hparams hparams   = model.text_model.hparams;
+        const int32_t expected_size = hparams.n_in_vocab - hparams.n_out_vocab - 5;
+        if(!bark_vocab_load(fname, model.vocab, expected_size)) {
+            fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
+            return false;
+        }
+    }
+
     // coarse
     {
         printf("\n%s: reading bark coarse model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_coarse.bin";
-        if(!gpt_model_load(fname, model.coarse_model, model.vocab, false)) {
+        if(!gpt_model_load(fname, model.coarse_model)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad coarse)\n", __func__, fname.c_str());
             return false;
         }
@@ -370,7 +399,7 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
     {
         printf("\n%s: reading bark fine model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_fine.bin";
-        if(!gpt_model_load(fname, model.fine_model, model.vocab, false)) {
+        if(!gpt_model_load(fname, model.fine_model)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad fine)\n", __func__, fname.c_str());
             return false;
         }

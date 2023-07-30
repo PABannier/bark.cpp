@@ -23,7 +23,7 @@ does not store the decomposition into weight_v and weight_g.
 Example
 -------
 ```bash
-    python convert_pt_to_ggml.py \
+    python convert.py \
         --dir-model ~/.cache/suno/bark_v0 \
         --codec-path ~/Documents/encodec.cpp/ggml_weights \
         --vocab-path ./ggml_weights/ \
@@ -103,20 +103,6 @@ def parse_codec_model(checkpoint, out_dir):
         var_data.tofile(outfile)
 
     outfile.close()
-
-def parse_vocab(dir_model, outfile):
-    """Parse vocabulary."""
-    # Even if bark relies on GPT to encode text, it relies on BertTokenizer (WordPiece)
-    with open(dir_model / "vocab.txt", "r", encoding="utf-8") as f:
-        vocab = f.readlines()
-
-    outfile.write(struct.pack("i", len(vocab)))
-    print("Vocab size:", len(vocab))
-
-    for token in vocab:
-        data = bytearray(token[:-1], "utf-8")  # strip newline at the end
-        outfile.write(struct.pack("i", len(data)))
-        outfile.write(data)
 
 def parse_hparams(hparams, outfile):
     """Parse GPT hyperparameters."""
@@ -229,17 +215,29 @@ def parse_text_models(checkpoint, outfile):
 
         var_data.tofile(outfile)
 
-def generate_file(in_file, out_dir, vocab_path=None):
-    outfile = open(out_dir, "wb")
-    outfile.write(struct.pack("i", 0x67676d6c))  # ggml magic
-    checkpoint = torch.load(in_file, map_location="cpu")
+def generate_file(in_file, out_dir):
+    with open(out_dir, "wb") as fout:
+        fout.write(struct.pack("i", 0x67676d6c))  # ggml magic
 
-    parse_hparams(checkpoint["model_args"], outfile)
-    if vocab_path:
-        parse_vocab(vocab_path, outfile)
-    parse_text_models(checkpoint["model"], outfile)
+        checkpoint = torch.load(in_file, map_location="cpu")
+        parse_hparams(checkpoint["model_args"], fout)
+        parse_text_models(checkpoint["model"], fout)
 
-    outfile.close()
+def generate_vocab_file(dir_model, out_dir):
+    """Parse vocabulary."""
+    # Even if bark relies on GPT to encode text, it uses BertTokenizer (WordPiece)
+    with open(dir_model / "vocab.txt", "r", encoding="utf-8") as fin:
+        vocab = fin.readlines()
+
+    with open(out_dir, "wb") as fout:
+        fout.write(struct.pack("i", 0x67676d6c))  # ggml magic
+        fout.write(struct.pack("i", len(vocab)))
+        print("Vocab size:", len(vocab))
+
+        for token in vocab:
+            data = bytearray(token[:-1], "utf-8")  # strip newline at the end
+            fout.write(struct.pack("i", len(data)))
+            fout.write(data)
 
 
 if __name__ == "__main__":
@@ -252,7 +250,10 @@ if __name__ == "__main__":
     out_dir = Path(args.out_dir)
     out_dir.mkdir(exist_ok=True, parents=True)
 
-    generate_file(dir_model / "text_2.pt", out_dir / "ggml_weights_text.bin", vocab_path)
+    generate_vocab_file(vocab_path, out_dir / "ggml_vocab.bin")
+    print(" Vocab loaded.")
+
+    generate_file(dir_model / "text_2.pt", out_dir / "ggml_weights_text.bin")
     print(" Text model loaded.")
 
     generate_file(dir_model / "coarse_2.pt", out_dir / "ggml_weights_coarse.bin")
