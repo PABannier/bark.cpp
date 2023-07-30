@@ -483,6 +483,8 @@ add_library(bark
             bark.cpp
             bark.h
             bark-util.h
+            encodec.cpp
+            encodec.h
             )
 
 target_include_directories(bark PUBLIC .)
