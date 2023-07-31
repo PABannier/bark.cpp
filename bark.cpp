@@ -1253,14 +1253,14 @@ std::vector<bark_vocab::id> bark_forward_text_encoder(
 
         bark_vocab::id sampled_id = gpt_sample(logits, temp, rng, &eos_p);
 
+        if (early_stop && ((sampled_id == SEMANTIC_VOCAB_SIZE) || (eos_p > min_eos_p)))
+            break;
+
         input.push_back(sampled_id);
         out.push_back(sampled_id);
 
         printf("%d ", sampled_id);
         fflush(stdout);
-
-        if (early_stop && ((sampled_id == SEMANTIC_VOCAB_SIZE) || (eos_p > min_eos_p)))
-            break;
     }
 
     printf("\n\nsemantic sequence length: %zu\n\n", out.size());
