@@ -8,3 +8,4 @@ endfunction()
 
 bark_add_test(test-tokenizer.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../ggml_weights/ggml_vocab.bin)
 bark_add_test(test-text-encoder.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../ggml_weights/ggml_weights_text.bin)
+bark_add_test(test-coarse-encoder.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../ggml_weights/ggml_weights_coarse.bin)
