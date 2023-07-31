@@ -1,6 +1,7 @@
 #include "encodec.h"
 
 #include <map>
+#include <random>
 #include <vector>
 
 #define CLS_TOKEN_ID 101
@@ -114,6 +115,21 @@ struct bark_model {
 
 bool gpt_model_load(const std::string& fname, gpt_model& model);
 
+bool gpt_eval(
+        const gpt_model & model,
+        const int n_threads,
+        const int n_past,
+        const bool merge_ctx,
+        const std::vector<bark_vocab::id> & embd_inp,
+              std::vector<float>          & embd_w,
+              size_t                      & mem_per_token);
+
+bark_vocab::id gpt_sample(
+        const std::vector<float>& logits,
+              double temp,
+              std::mt19937 & rng,
+              float * eos_p);
+
 bool bark_model_load(const std::string & dirname, bark_model & model);
 
 bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expected_size);
@@ -130,3 +146,11 @@ bool bark_generate_audio(
         const bark_vocab& vocab,
         const char * text,
         const int n_threads);
+
+std::vector<bark_vocab::id> bark_forward_text_encoder(
+    const std::vector<bark_vocab::id> & tokens,
+    const gpt_model model,
+    const int n_threads,
+    const float temp,
+    const bool early_stop,
+    const float min_eos_p);

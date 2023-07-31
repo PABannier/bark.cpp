@@ -1,8 +1,8 @@
 # Define the default target now so that it is always the first target
-BUILD_TARGETS = main 
+BUILD_TARGETS = main
 
 # Binaries only useful for tests
-TEST_TARGETS = tests/test-tokenizer
+TEST_TARGETS = tests/test-tokenizer tests/test-text-encoder
 
 default: $(BUILD_TARGETS)
 
@@ -314,4 +314,7 @@ main: examples/main.cpp  ggml.o bark.o encodec.o $(OBJS)
 tests: $(TEST_TARGETS)
 
 tests/test-tokenizer: tests/test-tokenizer.cpp ggml.o bark.o encodec.o $(OBJS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
+
+tests/test-text-encoder: tests/test-text-encoder.cpp ggml.o bark.o encodec.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
