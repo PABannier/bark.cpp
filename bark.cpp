@@ -1160,7 +1160,6 @@ bool gpt_eval(
     if (mem_per_token == 0) {
         mem_per_token = ggml_used_mem(ctx0)/N;
     }
-    //printf("used_mem = %zu\n", ggml_used_mem(ctx0));
 
     ggml_free(ctx0);
 
@@ -1215,6 +1214,60 @@ bark_vocab::id gpt_sample(
     return logits_id[idx].second;
 }
 
+std::vector<bark_vocab::id> bark_forward_text_encoder(
+    const std::vector<bark_vocab::id> & tokens,
+    const gpt_model model,
+    const int n_threads,
+    const float temp,
+    const bool early_stop,
+    const float min_eos_p) {
+
+    std::vector<bark_vocab::id> out;
+    int n_past = 0;
+    float eos_p = 0;
+
+    std::vector<bark_vocab::id> input = tokens;
+    std::vector<float> logits;
+
+    std::mt19937 rng(0);
+
+    // dry run to estimate mem_per_token
+    size_t mem_per_token = 0;
+    gpt_eval(model, n_threads, 0, false, { 0, 1, 2, 3 }, logits, mem_per_token);
+
+    for (int i = 0; i < 768; i++) {
+        const bool merge_ctx = i == 0;
+        gpt_eval(model, n_threads, n_past, merge_ctx, input, logits, mem_per_token);
+
+        float logits_pad_token = logits[SEMANTIC_PAD_TOKEN];
+        logits.resize(SEMANTIC_VOCAB_SIZE);
+
+        if (early_stop)
+            logits.push_back(logits[logits_pad_token]);
+
+        n_past += input.size();
+        if (i == 0)
+            n_past -= 256;  // first step, context are merged
+
+        input.clear();
+
+        bark_vocab::id sampled_id = gpt_sample(logits, temp, rng, &eos_p);
+
+        input.push_back(sampled_id);
+        out.push_back(sampled_id);
+
+        printf("%d ", sampled_id);
+        fflush(stdout);
+
+        if (early_stop && ((sampled_id == SEMANTIC_VOCAB_SIZE) || (eos_p > min_eos_p)))
+            break;
+    }
+
+    printf("\n\nsemantic sequence length: %zu\n\n", out.size());
+
+    return out;
+}
+
 bool bark_generate_audio(
         bark_model model,
         const bark_vocab& vocab,
@@ -1227,17 +1280,15 @@ bool bark_generate_audio(
     const int seed  = 0;
 
     // const float top_p     = 0.2;
-    const float temp      = 0.7;
+    const float temp      = 1.0;
     const float fine_temp = 0.5;
 
-    const int early_stop = true;
+    const bool early_stop = true;
 
     const int sliding_window_size = 60;
     const int max_coarse_history = 630;
 
-    // in the original implementation, min_eos_p=0.2, yet for bark.cpp this seems too
-    // high and this generates overly long sequence.
-    const float min_eos_p = 0.15;
+    const float min_eos_p = 0.2;
 
     std::mt19937 rng(seed);
 
@@ -1279,47 +1330,8 @@ bool bark_generate_audio(
     printf("\n\n");
 
     // encode text (text model)
-    std::vector<bark_vocab::id> out_semantic;
-    {
-        int n_past = 0;
-        float eos_p = 0;
-
-        std::vector<bark_vocab::id> input = tokens;
-        std::vector<float> logits;
-
-        // dry run to estimate mem_per_token
-        size_t mem_per_token = 0;
-        gpt_eval(model.text_model, n_threads, 0, false, { 0, 1, 2, 3 }, logits, mem_per_token);
-
-        for (int i = 0; i < 768; i++) {
-            const bool merge_ctx = i == 0;
-            gpt_eval(model.text_model, n_threads, n_past, merge_ctx, input, logits, mem_per_token);
-
-            float logits_pad_token = logits[SEMANTIC_PAD_TOKEN];
-            logits.resize(SEMANTIC_VOCAB_SIZE);
-
-            if (early_stop)
-                logits.push_back(logits[logits_pad_token]);
-
-            n_past += input.size();
-            if (i == 0)
-                n_past -= 256;  // first step, context are merged
-
-            input.clear();
-
-            bark_vocab::id sampled_id = gpt_sample(logits, temp, rng, &eos_p);
-            input.push_back(sampled_id);
-            out_semantic.push_back(sampled_id);
-
-            printf("%d ", sampled_id);
-            fflush(stdout);
-
-            if (early_stop && ((sampled_id == SEMANTIC_VOCAB_SIZE) || (eos_p > min_eos_p)))
-                break;
-        }
-
-        printf("\n\nsemantic sequence length: %zu\n\n", out_semantic.size());
-    }
+    std::vector<bark_vocab::id> out_semantic = bark_forward_text_encoder(
+        tokens, model.text_model, n_threads, temp, early_stop, min_eos_p);
 
     // coarse encoding (coarse model)
     std::vector<std::vector<bark_vocab::id>> out_coarse(N_COARSE_CODEBOOKS);

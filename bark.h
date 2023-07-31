@@ -146,3 +146,11 @@ bool bark_generate_audio(
         const bark_vocab& vocab,
         const char * text,
         const int n_threads);
+
+std::vector<bark_vocab::id> bark_forward_text_encoder(
+    const std::vector<bark_vocab::id> & tokens,
+    const gpt_model model,
+    const int n_threads,
+    const float temp,
+    const bool early_stop,
+    const float min_eos_p);
