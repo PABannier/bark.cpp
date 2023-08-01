@@ -6,17 +6,17 @@
 #include <random>
 #include <vector>
 
-static const std::map<std::vector<std::vector<bark_vocab::id>>, std::vector<std::vector<bark_vocab::id>>> & k_tests()
+static const std::map<bark_codes, bark_codes> & k_tests()
 {
-    static const std::vector<std::vector<bark_vocab::id>> seq1 = {};
-    static const std::vector<std::vector<bark_vocab::id>> seq2 = {};
-    static const std::vector<std::vector<bark_vocab::id>> seq3 = {};
+    static const bark_codes seq1 = {};
+    static const bark_codes seq2 = {};
+    static const bark_codes seq3 = {};
 
-    static const std::vector<std::vector<bark_vocab::id>> ans1 = { {}, {} };
-    static const std::vector<std::vector<bark_vocab::id>> ans2 = { {}, {} };
-    static const std::vector<std::vector<bark_vocab::id>> ans3 = { {}, {} };
+    static const bark_codes ans1 = { {}, {} };
+    static const bark_codes ans2 = { {}, {} };
+    static const bark_codes ans3 = { {}, {} };
 
-    static std::map<std::vector<std::vector<bark_vocab::id>>, std::vector<std::vector<bark_vocab::id>>> _k_tests = {
+    static std::map<bark_codes, bark_codes> _k_tests = {
         // { seq1, ans1 },  // hello world
         // { seq2, ans2 },  // this is an audio
         { seq3, ans3 },  // You cannot, sir, take from me anything
@@ -45,7 +45,7 @@ int main(int argc, char** argv) {
     }
 
     for (const auto & test_kv : k_tests()) {
-        std::vector<std::vector<bark_vocab::id>> res = bark_forward_fine_encoder(
+        bark_codes res = bark_forward_fine_encoder(
             test_kv.first, model, rng, n_threads, temp);
 
         bool correct = res.size() == test_kv.second.size();

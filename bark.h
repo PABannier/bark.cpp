@@ -47,6 +47,9 @@ struct bark_vocab {
     std::map<id, token> id_to_subword_token;
 };
 
+typedef std::vector<bark_vocab::id>              bark_sequence;
+typedef std::vector<std::vector<bark_vocab::id>> bark_codes;
+
 struct gpt_layer {
     // normalization
     struct ggml_tensor * ln_1_g;
@@ -120,7 +123,7 @@ bool gpt_eval(
         const int n_threads,
         const int n_past,
         const bool merge_ctx,
-        const std::vector<bark_vocab::id> & embd_inp,
+        const bark_sequence & embd_inp,
               std::vector<float>          & embd_w,
               size_t                      & mem_per_token);
 
@@ -147,8 +150,8 @@ bool bark_generate_audio(
         const char * text,
         const int n_threads);
 
-std::vector<bark_vocab::id> bark_forward_text_encoder(
-    const std::vector<bark_vocab::id> & tokens,
+bark_sequence bark_forward_text_encoder(
+    const bark_sequence & tokens,
     const gpt_model model,
     std::mt19937 & rng,
     const int n_threads,
@@ -156,7 +159,7 @@ std::vector<bark_vocab::id> bark_forward_text_encoder(
     const bool early_stop,
     const float min_eos_p);
 
-std::vector<std::vector<bark_vocab::id>> bark_forward_coarse_encoder(
+bark_codes bark_forward_coarse_encoder(
     const std::vector<bark_vocab::id> & tokens,
     const gpt_model model,
     std::mt19937 & rng,
@@ -165,8 +168,8 @@ std::vector<std::vector<bark_vocab::id>> bark_forward_coarse_encoder(
     const int max_coarse_history,
     const int sliding_window_size);
 
-std::vector<std::vector<bark_vocab::id>> bark_forward_fine_encoder(
-    const std::vector<std::vector<bark_vocab::id>> & tokens,
+bark_codes bark_forward_fine_encoder(
+    const bark_codes & tokens,
     const gpt_model model,
     std::mt19937 & rng,
     const int n_threads,

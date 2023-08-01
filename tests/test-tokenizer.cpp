@@ -5,9 +5,9 @@
 #include <map>
 #include <vector>
 
-static const std::map<std::string, std::vector<bark_vocab::id>> & k_tests()
+static const std::map<std::string, bark_sequence> & k_tests()
 {
-    static std::map<std::string, std::vector<bark_vocab::id>> _k_tests = {
+    static std::map<std::string, bark_sequence> _k_tests = {
         { "Hello world!",                              { 31178, 11356,   106,                                                                       }, },
         { "Hello world",                               { 31178, 11356,                                                                              }, },
         { " Hello world!",                             { 31178, 11356,   106,                                                                       }, },
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
     }
 
     for (const auto & test_kv : k_tests()) {
-        std::vector<bark_vocab::id> res(test_kv.first.size());
+        bark_sequence res(test_kv.first.size());
         int n_tokens;
         bert_tokenize(vocab, test_kv.first.c_str(), res.data(), &n_tokens, max_ctx_size);
         res.resize(n_tokens);
