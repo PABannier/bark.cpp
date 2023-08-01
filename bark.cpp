@@ -1433,7 +1433,7 @@ std::vector<std::vector<bark_vocab::id>> bark_forward_fine_encoder(
 
             for (int i = 0; i < (int) logits.size(); i++) {
                 logits[i].resize(CODEBOOK_SIZE);
-                bark_vocab::id next = gpt_sample(logits[i], temp, rng, NULL);
+                bark_vocab::id next = gpt_sample(logits[i], rng, temp, NULL);
                 in_buffer[nn][rel_start_fill_ix+i] = next;
             }
         }
