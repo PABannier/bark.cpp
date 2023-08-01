@@ -47,8 +47,11 @@ int main(int argc, char** argv) {
     const std::string fname = argv[1];
 
     gpt_model model;
+    std::mt19937 rng(0);
+
     const int   n_threads = 4;
-    const float min_eos_p = 0.2;
+    const float min_eos_p = 0.2f;
+    const float temp      = 0.0f;  // deterministic sampling
 
     printf("%s: reading bark text model\n", __func__);
     if(!gpt_model_load(fname, model)) {
@@ -59,7 +62,7 @@ int main(int argc, char** argv) {
     for (const auto & test_kv : k_tests()) {
         std::vector<bark_vocab::id> pad = pad_input(test_kv.first);
         std::vector<bark_vocab::id> res = bark_forward_text_encoder(
-            pad, model, n_threads, 1.0f, true, min_eos_p);
+            pad, model, rng, n_threads, temp, true, min_eos_p);
 
         bool correct = res.size() == test_kv.second.size();
 

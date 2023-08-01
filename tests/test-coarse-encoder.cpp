@@ -33,10 +33,10 @@ int main(int argc, char** argv) {
     const std::string fname = argv[1];
 
     gpt_model model;
+    std::mt19937 rng(0);
 
     const int   n_threads = 4;
-    const float min_eos_p = 0.2;
-    const float temp      = 0.7;
+    const float temp      = 0.0f;  // deterministic sampling
 
     const int max_coarse_history  = 630;
     const int sliding_window_size = 60;
@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
 
     for (const auto & test_kv : k_tests()) {
         std::vector<std::vector<bark_vocab::id>> res = bark_forward_coarse_encoder(
-            test_kv.first, model, n_threads, temp, true, min_eos_p, max_coarse_history, sliding_window_size);
+            test_kv.first, model, rng, n_threads, temp, max_coarse_history, sliding_window_size);
 
         bool correct = res.size() == test_kv.second.size();
 

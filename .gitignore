@@ -8,6 +8,7 @@ main
 tests/test-tokenizer
 tests/test-text-encoder
 tests/test-coarse-encoder
+tests/test-fine-encoder
 
 *.o
 *.plist
