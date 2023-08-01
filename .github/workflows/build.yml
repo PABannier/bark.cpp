@@ -63,6 +63,13 @@ jobs:
           cmake ..
           cmake --build . --config Release
 
+      - name: Download large files from the release
+        id: download_artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: v0.0.1-alpha
+          path: ~/ggml_weights/
+
       - name: Test
         id: cmake_test
         run: |
