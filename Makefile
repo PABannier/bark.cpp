@@ -2,7 +2,7 @@
 BUILD_TARGETS = main
 
 # Binaries only useful for tests
-TEST_TARGETS = tests/test-tokenizer tests/test-text-encoder
+TEST_TARGETS = tests/test-tokenizer tests/test-text-encoder tests/test-coarse-encoder
 
 default: $(BUILD_TARGETS)
 
@@ -317,4 +317,7 @@ tests/test-tokenizer: tests/test-tokenizer.cpp ggml.o bark.o encodec.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
 
 tests/test-text-encoder: tests/test-text-encoder.cpp ggml.o bark.o encodec.o $(OBJS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
+
+tests/test-coarse-encoder: tests/test-coarse-encoder.cpp ggml.o bark.o encodec.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)

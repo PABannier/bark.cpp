@@ -1251,15 +1251,15 @@ std::vector<bark_vocab::id> bark_forward_text_encoder(
 
         input.clear();
 
-        bark_vocab::id sampled_id = gpt_sample(logits, temp, rng, &eos_p);
+        bark_vocab::id next = gpt_sample(logits, temp, rng, &eos_p);
 
-        if (early_stop && ((sampled_id == SEMANTIC_VOCAB_SIZE) || (eos_p > min_eos_p)))
+        if (early_stop && ((next == SEMANTIC_VOCAB_SIZE) || (eos_p > min_eos_p)))
             break;
 
-        input.push_back(sampled_id);
-        out.push_back(sampled_id);
+        input.push_back(next);
+        out.push_back(next);
 
-        printf("%d ", sampled_id);
+        printf("%d ", next);
         fflush(stdout);
     }
 
@@ -1267,6 +1267,107 @@ std::vector<bark_vocab::id> bark_forward_text_encoder(
 
     return out;
 }
+
+std::vector<std::vector<bark_vocab::id>> bark_forward_coarse_encoder(
+    const std::vector<bark_vocab::id> & tokens,
+    const gpt_model model,
+    const int n_threads,
+    const float temp,
+    const bool early_stop,
+    const float min_eos_p,
+    const int max_coarse_history,
+    const int sliding_window_size) {
+    std::vector<std::vector<bark_vocab::id>> out_coarse(N_COARSE_CODEBOOKS);
+    std::vector<bark_vocab::id> out;
+
+    std::mt19937 rng(0);
+
+    float semantic_to_coarse_ratio = COARSE_RATE_HZ / SEMANTIC_RATE_HZ * N_COARSE_CODEBOOKS;
+    int max_semantic_history = floorf(max_coarse_history / semantic_to_coarse_ratio);
+
+    int n_steps = floorf(tokens.size() * semantic_to_coarse_ratio / N_COARSE_CODEBOOKS) * N_COARSE_CODEBOOKS;
+    int step_ix = 0;
+
+    BARK_ASSERT(n_steps > 0);
+    BARK_ASSERT(n_steps % N_COARSE_CODEBOOKS == 0);
+
+    int n_window_steps = ceilf(static_cast<float>(n_steps) / sliding_window_size);
+
+    std::vector<bark_vocab::id> input = tokens;
+    std::vector<float> logits;
+
+    // dry run to estimate mem_per_token
+    size_t mem_per_token = 0;
+    gpt_eval(model, n_threads, 0, false, { 0, 1, 2, 3 }, logits, mem_per_token);
+
+    for(int i = 0; i < n_window_steps; i++) {
+        int semantic_ix = roundf(n_steps / semantic_to_coarse_ratio);
+
+        std::vector<bark_vocab::id> input_in(
+            input.begin() + std::max(semantic_ix-max_semantic_history, 0),
+            input.end()
+        );
+        size_t original_size = input_in.size();
+        input_in.resize(256);
+
+        // padding from the right side
+        for (int ix = original_size; ix < 256; ix++)
+            input_in[ix] = COARSE_SEMANTIC_PAD_TOKEN;
+
+        input_in.push_back(COARSE_INFER_TOKEN);
+
+        // concatenate input_in and input_coarse
+        input_in.insert(
+            input_in.end(),
+            std::make_move_iterator(out.end() - std::min(max_coarse_history, (int) out.size())),
+            std::make_move_iterator(out.end())
+        );
+
+        int n_past = 0;
+        mem_per_token *= 1.1;  // context length is growing, mem_per_token must grow as well
+
+        for (int j = 0; j < sliding_window_size; j++) {
+            if (step_ix >= n_steps)
+                continue;
+
+            gpt_eval(model, n_threads, n_past, false, input_in, logits, mem_per_token);
+
+            n_past += input_in.size();
+            input_in.clear();
+
+            bool is_major = step_ix % N_COARSE_CODEBOOKS == 0;
+            int start_ix  = SEMANTIC_VOCAB_SIZE + (1 - is_major) * CODEBOOK_SIZE;
+            int end_ix    = SEMANTIC_VOCAB_SIZE + (2 - is_major) * CODEBOOK_SIZE;
+            std::vector<float> relevant_logits(logits.begin() + start_ix, logits.begin() + end_ix);
+
+            bark_vocab::id next = gpt_sample(relevant_logits, temp, rng, NULL);
+            next += start_ix;
+
+            input_in.push_back(next);
+            out.push_back(next);
+
+            printf("%d ", next);
+            fflush(stdout);
+
+            step_ix += 1;
+        }
+    }
+
+    BARK_ASSERT((int) out.size() == n_steps);
+    BARK_ASSERT(out.size() % N_COARSE_CODEBOOKS == 0);
+
+    for (int i = 0; i < (int) out.size(); i++) {
+        if (i % 2 == 0)
+            out_coarse[0].push_back(out[i] - SEMANTIC_VOCAB_SIZE);
+        else
+            out_coarse[1].push_back(out[i] - SEMANTIC_VOCAB_SIZE - CODEBOOK_SIZE);
+    }
+
+    printf("\n\ncoarse sequence length: %zu\n\n", out.size());
+
+    return out_coarse;
+}
+
 
 bool bark_generate_audio(
         bark_model model,
@@ -1334,92 +1435,8 @@ bool bark_generate_audio(
         tokens, model.text_model, n_threads, temp, early_stop, min_eos_p);
 
     // coarse encoding (coarse model)
-    std::vector<std::vector<bark_vocab::id>> out_coarse(N_COARSE_CODEBOOKS);
-    {
-        std::vector<bark_vocab::id> out;
-        float semantic_to_coarse_ratio = COARSE_RATE_HZ / SEMANTIC_RATE_HZ * N_COARSE_CODEBOOKS;
-        int max_semantic_history = floorf(max_coarse_history / semantic_to_coarse_ratio);
-
-        int n_steps = floorf(out_semantic.size() * semantic_to_coarse_ratio / N_COARSE_CODEBOOKS) * N_COARSE_CODEBOOKS;
-        int step_ix = 0;
-
-        BARK_ASSERT(n_steps > 0);
-        BARK_ASSERT(n_steps % N_COARSE_CODEBOOKS == 0);
-
-        int n_window_steps = ceilf(static_cast<float>(n_steps) / sliding_window_size);
-
-        std::vector<bark_vocab::id> input = out_semantic;
-        std::vector<float> logits;
-
-        // dry run to estimate mem_per_token
-        size_t mem_per_token = 0;
-        gpt_eval(model.coarse_model, n_threads, 0, false, { 0, 1, 2, 3 }, logits, mem_per_token);
-
-        for(int i = 0; i < n_window_steps; i++) {
-            int semantic_ix = roundf(n_steps / semantic_to_coarse_ratio);
-
-            std::vector<bark_vocab::id> input_in(input.begin() + std::max(semantic_ix-max_semantic_history, 0), input.end());
-            size_t original_size = input_in.size();
-            input_in.resize(256);
-
-            // padding from the right side
-            for (int ix = original_size; ix < 256; ix++)
-                input_in[ix] = COARSE_SEMANTIC_PAD_TOKEN;
-
-            input_in.push_back(COARSE_INFER_TOKEN);
-
-            // concatenate input_in and input_coarse
-            input_in.insert(
-                input_in.end(),
-                std::make_move_iterator(out.end() - std::min(max_coarse_history, (int) out.size())),
-                std::make_move_iterator(out.end())
-            );
-
-            int n_past = 0;
-            mem_per_token *= 1.1;  // context length is growing, mem_per_token must grow as well
-
-            for (int j = 0; j < sliding_window_size; j++) {
-                if (step_ix >= n_steps)
-                    continue;
-
-                gpt_eval(model.coarse_model, n_threads, n_past, false, input_in, logits, mem_per_token);
-
-                n_past += input_in.size();
-                input_in.clear();
-
-                bool is_major = step_ix % N_COARSE_CODEBOOKS == 0;
-                int start_ix  = SEMANTIC_VOCAB_SIZE + (1 - is_major) * CODEBOOK_SIZE;
-                int end_ix    = SEMANTIC_VOCAB_SIZE + (2 - is_major) * CODEBOOK_SIZE;
-                std::vector<float> relevant_logits(logits.begin() + start_ix, logits.begin() + end_ix);
-
-                bark_vocab::id sampled_id = gpt_sample(relevant_logits, temp, rng, NULL);
-                sampled_id += start_ix;
-
-                input_in.push_back(sampled_id);
-                out.push_back(sampled_id);
-
-                printf("%d ", sampled_id);
-                fflush(stdout);
-
-                step_ix += 1;
-            }
-        }
-
-        BARK_ASSERT((int) out.size() == n_steps);
-        BARK_ASSERT(out.size() % N_COARSE_CODEBOOKS == 0);
-
-        // gen_coarse_audio_arr = gen_coarse_arr.reshape(-1, N_COARSE_CODEBOOKS).T - SEMANTIC_VOCAB_SIZE
-        int mid = out.size() / 2;
-        for(int ix = 0; ix < (int) out.size(); ix++) {
-            if(ix < mid)
-                out_coarse[0].push_back(out[ix] - SEMANTIC_VOCAB_SIZE);
-            else
-                // !! this only works when CODEBOOK_SIZE = 2
-                out_coarse[1].push_back(out[ix] - SEMANTIC_VOCAB_SIZE - CODEBOOK_SIZE);
-        }
-
-        printf("\n\ncoarse sequence length: %zu\n\n", out.size());
-    }
+    std::vector<std::vector<bark_vocab::id>> out_coarse = bark_forward_coarse_encoder(
+        out_semantic, model.coarse_model, n_threads, temp, early_stop, min_eos_p, max_coarse_history, sliding_window_size);
 
     // fine encoding (fine model)
     std::vector<std::vector<bark_vocab::id>> out_fine;

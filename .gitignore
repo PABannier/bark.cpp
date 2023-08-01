@@ -7,6 +7,7 @@ encodec
 main
 tests/test-tokenizer
 tests/test-text-encoder
+tests/test-coarse-encoder
 
 *.o
 *.plist

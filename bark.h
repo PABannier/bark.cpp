@@ -154,3 +154,13 @@ std::vector<bark_vocab::id> bark_forward_text_encoder(
     const float temp,
     const bool early_stop,
     const float min_eos_p);
+
+std::vector<std::vector<bark_vocab::id>> bark_forward_coarse_encoder(
+    const std::vector<bark_vocab::id> & tokens,
+    const gpt_model model,
+    const int n_threads,
+    const float temp,
+    const bool early_stop,
+    const float min_eos_p,
+    const int max_coarse_history,
+    const int sliding_window_size);
