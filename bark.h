@@ -125,20 +125,20 @@ bool gpt_eval(
               size_t                      & mem_per_token);
 
 bark_vocab::id gpt_sample(
-        const std::vector<float>& logits,
-              double temp,
-              std::mt19937 & rng,
+              std::vector<float>          & logits,
+              std::mt19937                & rng,
+              float temp,
               float * eos_p);
 
 bool bark_model_load(const std::string & dirname, bark_model & model);
 
-bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expected_size);
+bool bark_vocab_load(const std::string & fname, bark_vocab& vocab, int32_t expected_size);
 
 void bert_tokenize(
-    const bark_vocab& vocab, 
-    const char * text, 
-    int32_t * tokens, 
-    int32_t * n_tokens, 
+    const bark_vocab& vocab,
+    const char * text,
+    int32_t * tokens,
+    int32_t * n_tokens,
     int32_t n_max_tokens);
 
 bool bark_generate_audio(
@@ -150,6 +150,7 @@ bool bark_generate_audio(
 std::vector<bark_vocab::id> bark_forward_text_encoder(
     const std::vector<bark_vocab::id> & tokens,
     const gpt_model model,
+    std::mt19937 & rng,
     const int n_threads,
     const float temp,
     const bool early_stop,
@@ -158,6 +159,7 @@ std::vector<bark_vocab::id> bark_forward_text_encoder(
 std::vector<std::vector<bark_vocab::id>> bark_forward_coarse_encoder(
     const std::vector<bark_vocab::id> & tokens,
     const gpt_model model,
+    std::mt19937 & rng,
     const int n_threads,
     const float temp,
     const bool early_stop,
