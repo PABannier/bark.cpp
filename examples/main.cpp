@@ -25,7 +25,7 @@ int main() {
     printf("\n");
 
     // forward pass
-    const std::string prompt = "hello world";
+    const std::string prompt = "this is an audio";
     {
         const int64_t t_eval_us_start = ggml_time_us();
 
