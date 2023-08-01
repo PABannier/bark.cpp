@@ -1492,8 +1492,6 @@ bool bark_generate_audio(
         const bark_vocab& vocab,
         const char * text,
         const int n_threads) {
-    bark_sequence tokens;
-
     // TODO move into params
     // const int top_k = 10;
     const int seed  = 0;
