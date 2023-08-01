@@ -1227,13 +1227,11 @@ bark_vocab::id gpt_sample(
     return gpt_multinomial_sample(logits, rng, temp, eos_p);
 }
 
-bark_sequence bark_tokenize_input(
-        const char * text,
-        const bark_vocab & vocab,
-        const int32_t block_size) {
+bark_sequence bark_tokenize_input(const char * text, const bark_vocab & vocab, int32_t block_size) {
+    // max bark length: 256
     int32_t max_ctx_size = std::min(block_size, 256);
-
     int32_t n_tokens;
+
     bark_sequence tokens(max_ctx_size);
 
     bert_tokenize(vocab, text, tokens.data(), &n_tokens, max_ctx_size);
@@ -1494,8 +1492,6 @@ bool bark_generate_audio(
         const bark_vocab& vocab,
         const char * text,
         const int n_threads) {
-    bark_sequence tokens;
-
     // TODO move into params
     // const int top_k = 10;
     const int seed  = 0;
@@ -1513,8 +1509,8 @@ bool bark_generate_audio(
 
     std::mt19937 rng(seed);
 
-    // bert tokenizer
-    const int32_t block_size = model.text_model.hparams.block_size;
+    // tokenize input (bert tokenizer)
+    int32_t block_size = model.text_model.hparams.block_size;
     bark_sequence tokens = bark_tokenize_input(text, vocab, block_size);
 
     printf("%s: prompt: '%s'\n", __func__, text);
