@@ -1166,6 +1166,23 @@ bool gpt_eval(
     return true;
 }
 
+void softmax(std::vector<float> & logits) {
+    // for numerical stability
+    float maxl = -INFINITY;
+    for (const auto & l : logits)
+        maxl = std::max(maxl, l);
+
+    // softmax
+    float sum = 0.0;
+    for (auto & l : logits) {
+        l = exp(l - maxl);
+        sum += l;
+    }
+
+    for (auto & l : logits)
+        l /= sum;
+}
+
 bark_vocab::id gpt_multinomial_sample(
         std::vector<float> & logits,
         std::mt19937 & rng,
