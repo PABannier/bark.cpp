@@ -1176,20 +1176,7 @@ bark_vocab::id gpt_multinomial_sample(
     for (int i = 0; i < n_logits; ++i)
         logits[i] /= temp;
 
-    // for numerical stability
-    float maxl = -INFINITY;
-    for (const auto & l : logits)
-        maxl = std::max(maxl, l);
-
-    // softmax
-    float sum = 0.0;
-    for (auto & l : logits) {
-        l = exp(l - maxl);
-        sum += l;
-    }
-
-    for (auto & l : logits)
-        l /= sum;
+    softmax(logits);
 
     std::discrete_distribution<> dist(logits.begin(), logits.end());
     int next = dist(rng);
@@ -1201,7 +1188,7 @@ bark_vocab::id gpt_multinomial_sample(
     return next;
 }
 
-bark_vocab::id gpt_argmax_sample(std::vector<float> & logits) {
+bark_vocab::id gpt_argmax_sample(std::vector<float> & logits, float * eos_p) {
     int n_logits = logits.size();
 
     int next = 0;
@@ -1214,6 +1201,12 @@ bark_vocab::id gpt_argmax_sample(std::vector<float> & logits) {
         }
     }
 
+    // likelihood of EOS token
+    softmax(logits);
+
+    if (eos_p)
+        *eos_p = logits.back();
+
     return next;
 }
 
@@ -1223,7 +1216,7 @@ bark_vocab::id gpt_sample(
         float temp,
         float * eos_p) {
     if (temp == 0.0f)
-        return gpt_argmax_sample(logits);
+        return gpt_argmax_sample(logits, eos_p);
     return gpt_multinomial_sample(logits, rng, temp, eos_p);
 }
 
