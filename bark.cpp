@@ -1303,7 +1303,10 @@ std::vector<std::vector<bark_vocab::id>> bark_forward_coarse_encoder(
     for(int i = 0; i < n_window_steps; i++) {
         int semantic_ix = roundf(n_steps / semantic_to_coarse_ratio);
 
-        std::vector<bark_vocab::id> input_in(input.begin() + std::max(semantic_ix-max_semantic_history, 0), input.end());
+        std::vector<bark_vocab::id> input_in(
+            input.begin() + std::max(semantic_ix-max_semantic_history, 0),
+            input.end()
+        );
         size_t original_size = input_in.size();
         input_in.resize(256);
 
@@ -1353,14 +1356,11 @@ std::vector<std::vector<bark_vocab::id>> bark_forward_coarse_encoder(
     BARK_ASSERT((int) out.size() == n_steps);
     BARK_ASSERT(out.size() % N_COARSE_CODEBOOKS == 0);
 
-    // gen_coarse_audio_arr = gen_coarse_arr.reshape(-1, N_COARSE_CODEBOOKS).T - SEMANTIC_VOCAB_SIZE
-    int mid = out.size() / 2;
-    for(int ix = 0; ix < (int) out.size(); ix++) {
-        if(ix < mid)
-            out_coarse[0].push_back(out[ix] - SEMANTIC_VOCAB_SIZE);
+    for (int i = 0; i < (int) out.size(); i++) {
+        if (i % 2 == 0)
+            out_coarse[0].push_back(out[i] - SEMANTIC_VOCAB_SIZE);
         else
-            // !! this only works when CODEBOOK_SIZE = 2
-            out_coarse[1].push_back(out[ix] - SEMANTIC_VOCAB_SIZE - CODEBOOK_SIZE);
+            out_coarse[1].push_back(out[i] - SEMANTIC_VOCAB_SIZE - CODEBOOK_SIZE);
     }
 
     printf("\n\ncoarse sequence length: %zu\n\n", out.size());
