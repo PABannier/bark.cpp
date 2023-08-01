@@ -17,8 +17,8 @@ static const std::map<std::vector<bark_vocab::id>, std::vector<std::vector<bark_
     static const std::vector<std::vector<bark_vocab::id>> ans3 = { {}, {} };
 
     static std::map<std::vector<bark_vocab::id>, std::vector<std::vector<bark_vocab::id>>> _k_tests = {
-        // { seq1, ans1 },  // hello world
-        // { seq2, ans2 },  // this is an audio
+        { seq1, ans1 },  // hello world
+        { seq2, ans2 },  // this is an audio
         { seq3, ans3 },  // You cannot, sir, take from me anything
     };
     return _k_tests;
