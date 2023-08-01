@@ -1166,52 +1166,65 @@ bool gpt_eval(
     return true;
 }
 
-bark_vocab::id gpt_sample(
-        const std::vector<float>& logits,
-        double temp,
+bark_vocab::id gpt_multinomial_sample(
+        std::vector<float> & logits,
         std::mt19937 & rng,
+        float temp,
         float * eos_p) {
     int n_logits = logits.size();
 
-    std::vector<std::pair<double, bark_vocab::id>> logits_id;
-    logits_id.reserve(n_logits);
+    for (int i = 0; i < n_logits; ++i)
+        logits[i] /= temp;
 
-    {
-        const double scale = 1.0/temp;
-        for (int i = 0; i < n_logits; ++i) {
-            logits_id.push_back(std::make_pair(logits[i]*scale, i));
-        }
+    // for numerical stability
+    float maxl = -INFINITY;
+    for (const auto & l : logits)
+        maxl = std::max(maxl, l);
+
+    // softmax
+    float sum = 0.0;
+    for (auto & l : logits) {
+        l = exp(l - maxl);
+        sum += l;
     }
 
-    double maxl = -INFINITY;
-    for (const auto & kv : logits_id) {
-        maxl = std::max(maxl, kv.first);
-    }
+    for (auto & l : logits)
+        l /= sum;
 
-    // compute probs for the top K tokens
-    std::vector<double> probs;
-    probs.reserve(logits_id.size());
-
-    double sum = 0.0;
-    for (const auto & kv : logits_id) {
-        double p = exp(kv.first - maxl);
-        probs.push_back(p);
-        sum += p;
-    }
-
-    // normalize the probs
-    for (auto & p : probs) {
-        p /= sum;
-    }
-
-    std::discrete_distribution<> dist(probs.begin(), probs.end());
-    int idx = dist(rng);
+    std::discrete_distribution<> dist(logits.begin(), logits.end());
+    int next = dist(rng);
 
     // likelihood of EOS token
     if (eos_p)
-        *eos_p = probs.back();
+        *eos_p = logits.back();
 
-    return logits_id[idx].second;
+    return next;
+}
+
+bark_vocab::id gpt_argmax_sample(std::vector<float> & logits) {
+    int n_logits = logits.size();
+
+    int next = 0;
+    float maxl = -INFINITY;
+
+    for (int i = 0; i < n_logits; i++) {
+        if (logits[i] > maxl) {
+            maxl = logits[i];
+            next = i;
+        }
+    }
+
+    return next;
+}
+
+bark_vocab::id gpt_sample(
+        std::vector<float> & logits,
+        std::mt19937 & rng,
+        float temp,
+        float * eos_p) {
+    if (temp == 0.0f)
+        return gpt_argmax_sample(logits);
+    return gpt_multinomial_sample(logits, rng, temp, eos_p);
 }
 
 std::vector<bark_vocab::id> bark_forward_text_encoder(
@@ -1250,7 +1263,7 @@ std::vector<bark_vocab::id> bark_forward_text_encoder(
 
         input.clear();
 
-        bark_vocab::id next = gpt_sample(logits, temp, rng, &eos_p);
+        bark_vocab::id next = gpt_sample(logits, rng, temp, &eos_p);
 
         if (early_stop && ((next == SEMANTIC_VOCAB_SIZE) || (eos_p > min_eos_p)))
             break;
@@ -1336,7 +1349,7 @@ std::vector<std::vector<bark_vocab::id>> bark_forward_coarse_encoder(
             int end_ix    = SEMANTIC_VOCAB_SIZE + (2 - is_major) * CODEBOOK_SIZE;
             std::vector<float> relevant_logits(logits.begin() + start_ix, logits.begin() + end_ix);
 
-            bark_vocab::id next = gpt_sample(relevant_logits, temp, rng, NULL);
+            bark_vocab::id next = gpt_sample(relevant_logits, rng, temp, NULL);
             next += start_ix;
 
             input_in.push_back(next);

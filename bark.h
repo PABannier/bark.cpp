@@ -125,14 +125,14 @@ bool gpt_eval(
               size_t                      & mem_per_token);
 
 bark_vocab::id gpt_sample(
-        const std::vector<float>& logits,
-              double temp,
-              std::mt19937 & rng,
+              std::vector<float>          & logits,
+              std::mt19937                & rng,
+              float temp,
               float * eos_p);
 
 bool bark_model_load(const std::string & dirname, bark_model & model);
 
-bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expected_size);
+bool bark_vocab_load(const std::string & fname, bark_vocab& vocab, int32_t expected_size);
 
 void bert_tokenize(
     const bark_vocab& vocab,
