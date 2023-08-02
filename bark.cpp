@@ -16,7 +16,7 @@ Source:
 https://github.com/skeskinen/bert.cpp/
 */
 #include "bark.h"
-#include "ggml.h"
+#include "ggml/ggml.h"
 #include "bark-util.h"
 
 #include <cassert>
@@ -563,7 +563,6 @@ bool fine_gpt_eval(
 
     struct ggml_context * ctx0 = ggml_init(params);
     struct ggml_cgraph gf = {};
-    gf.n_threads = n_threads;
 
     struct ggml_tensor * input = ggml_new_tensor_2d(ctx0, GGML_TYPE_I32, N, n_codes);
     for (int c = 0; c < n_codes; c++) {
@@ -827,7 +826,7 @@ bool fine_gpt_eval(
     // run the computation
     // ggml_build_forward_expand(&gf, toy);
     ggml_build_forward_expand(&gf, inpL);
-    ggml_graph_compute       (ctx0, &gf);
+    ggml_graph_compute_with_ctx(ctx0, &gf, n_threads);
 
     // [1056, 1024]
     logits.resize(N);
@@ -890,7 +889,6 @@ bool gpt_eval(
 
     struct ggml_context * ctx0 = ggml_init(params);
     struct ggml_cgraph gf = {};
-    gf.n_threads = n_threads;
 
     struct ggml_tensor * input = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
     memcpy(input->data, embd_inp.data(), N*ggml_element_size(input));
@@ -1151,7 +1149,7 @@ bool gpt_eval(
 
     // run the computation
     ggml_build_forward_expand(&gf, inpL);
-    ggml_graph_compute       (ctx0, &gf);
+    ggml_graph_compute_with_ctx(ctx0, &gf, n_threads);
 
     // return result just for the last token
     embd_w.resize(n_vocab);
