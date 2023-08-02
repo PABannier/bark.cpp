@@ -16,7 +16,7 @@ Source:
 https://github.com/skeskinen/bert.cpp/
 */
 #include "bark.h"
-#include "ggml/ggml.h"
+#include "ggml.h"
 #include "bark-util.h"
 
 #include <cassert>

@@ -3,7 +3,7 @@ Since bark only uses the decoder, only the decoding forward pass is present in t
 */
 #pragma once
 
-#include "ggml.h"
+#include "ggml/include/ggml/ggml.h"
 
 #include <cmath>
 #include <fstream>
