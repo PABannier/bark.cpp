@@ -1276,6 +1276,15 @@ bark_sequence bark_forward_text_encoder(
     const float min_eos_p) {
 
     bark_sequence out;
+
+    bark_progress progress;
+    progress.func = __func__;
+
+    int64_t t_sample_us  = 0;
+    int64_t t_predict_us = 0;
+
+    const int64_t t_main_start_us = ggml_time_us();
+
     int n_past = 0;
     float eos_p = 0;
 
@@ -1290,7 +1299,10 @@ bark_sequence bark_forward_text_encoder(
 
     for (int i = 0; i < 768; i++) {
         merge_ctx = i == 0;
+
+        int64_t t_predict_start_us = ggml_time_us();
         gpt_eval(model, n_threads, n_past, merge_ctx, input, logits, mem_per_token);
+        t_predict_us += (ggml_time_us() - t_predict_start_us);
 
         float logits_pad_token = logits[SEMANTIC_PAD_TOKEN];
         logits.resize(SEMANTIC_VOCAB_SIZE);
@@ -1304,7 +1316,9 @@ bark_sequence bark_forward_text_encoder(
 
         input.clear();
 
+        int64_t t_sample_start_us = ggml_time_us();
         bark_vocab::id next = gpt_sample(logits, rng, temp, &eos_p);
+        t_sample_us += (ggml_time_us() - t_sample_start_us);
 
         if (early_stop && ((next == SEMANTIC_VOCAB_SIZE) || (eos_p > min_eos_p)))
             break;
@@ -1312,14 +1326,22 @@ bark_sequence bark_forward_text_encoder(
         input.push_back(next);
         out.push_back(next);
 
-        float sum_logits = std::accumulate(logits.begin(), logits.end(), 0.0f);
-        printf("%d :: %.6f :: %.3f (n=%zu)\n", next, eos_p, sum_logits, logits.size());
+        progress.callback((float) i/768);
+
+        // float sum_logits = std::accumulate(logits.begin(), logits.end(), 0.0f);
+        // printf("%d :: %.6f :: %.3f (n=%zu)\n", next, eos_p, sum_logits, logits.size());
 
         // printf("%d ", next);
         // fflush(stdout);
     }
 
-    printf("\n\nsemantic sequence length: %zu\n\n", out.size());
+    const int64_t t_main_end_us = ggml_time_us();
+
+    printf("\n\n");
+    printf("%s: mem per token = %8.2f MB\n", __func__, mem_per_token/1000.0f/1000.0f);
+    printf("%s:   sample time = %8.2f ms\n", __func__, t_sample_us/1000.0f);
+    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, t_predict_us/1000.0f, t_predict_us/1000.0f/n_past);
+    printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us)/1000.0f);
 
     return out;
 }
@@ -1334,6 +1356,14 @@ bark_codes bark_forward_coarse_encoder(
     const int sliding_window_size) {
     bark_codes out_coarse(N_COARSE_CODEBOOKS);
     bark_sequence out;
+
+    bark_progress progress;
+    progress.func = __func__;
+
+    int64_t t_sample_us  = 0;
+    int64_t t_predict_us = 0;
+
+    const int64_t t_main_start_us = ggml_time_us();
 
     float semantic_to_coarse_ratio = COARSE_RATE_HZ / SEMANTIC_RATE_HZ * N_COARSE_CODEBOOKS;
     int max_semantic_history = floorf(max_coarse_history / semantic_to_coarse_ratio);
@@ -1383,7 +1413,9 @@ bark_codes bark_forward_coarse_encoder(
             if (step_ix >= n_steps)
                 continue;
 
+            int64_t t_predict_start_us = ggml_time_us();
             gpt_eval(model, n_threads, n_past, false, input_in, logits, mem_per_token);
+            t_predict_us += (ggml_time_us() - t_predict_start_us);
 
             n_past += input_in.size();
             input_in.clear();
@@ -1393,16 +1425,21 @@ bark_codes bark_forward_coarse_encoder(
             int end_ix    = SEMANTIC_VOCAB_SIZE + (2 - is_major) * CODEBOOK_SIZE;
             std::vector<float> relevant_logits(logits.begin() + start_ix, logits.begin() + end_ix);
 
+            int64_t t_sample_start_us = ggml_time_us();
             bark_vocab::id next = gpt_sample(relevant_logits, rng, temp, NULL);
+            t_sample_us += (ggml_time_us() - t_sample_start_us);
+
             next += start_ix;
 
             input_in.push_back(next);
             out.push_back(next);
 
-            printf("%d ", next);
-            fflush(stdout);
+            // printf("%d ", next);
+            // fflush(stdout);
 
             step_ix += 1;
+
+            progress.callback((float) (i*sliding_window_size+j)/n_steps);
         }
     }
 
@@ -1416,7 +1453,13 @@ bark_codes bark_forward_coarse_encoder(
             out_coarse[1].push_back(out[i] - SEMANTIC_VOCAB_SIZE - CODEBOOK_SIZE);
     }
 
-    printf("\n\ncoarse sequence length: %zu\n\n", out.size());
+    const int64_t t_main_end_us = ggml_time_us();
+
+    printf("\n\n");
+    printf("%s: mem per token = %8.2f MB\n", __func__, mem_per_token/1000.0f/1000.0f);
+    printf("%s:   sample time = %8.2f ms\n", __func__, t_sample_us/1000.0f);
+    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, t_predict_us/1000.0f, t_predict_us/1000.0f/step_ix);
+    printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us)/1000.0f);
 
     return out_coarse;
 }
@@ -1427,10 +1470,19 @@ bark_codes bark_forward_fine_encoder(
     std::mt19937 & rng,
     const int n_threads,
     const float temp) {
+
     bark_codes input = tokens;
     std::vector<std::vector<float>> logits;
 
+    bark_progress progress;
+    progress.func = __func__;
+
+    int64_t t_sample_us  = 0;
+    int64_t t_predict_us = 0;
+
     size_t mem_per_token = 0;
+
+    const int64_t t_main_start_us = ggml_time_us();
 
     int n_coarse          = input.size();
     int original_seq_len  = input[0].size();
@@ -1471,15 +1523,23 @@ bark_codes bark_forward_fine_encoder(
         }
 
         for (int nn = n_coarse; nn < N_FINE_CODEBOOKS; nn++) {
+            int64_t t_predict_start_us = ggml_time_us();
             fine_gpt_eval(model, n_threads, nn, in_buffer, logits, mem_per_token);
+            t_predict_us += (ggml_time_us() - t_predict_start_us);
 
             bark_sequence predictions(CODEBOOK_SIZE - rel_start_fill_ix);
 
             for (int i = 0; i < (int) logits.size(); i++) {
                 logits[i].resize(CODEBOOK_SIZE);
+
+                int64_t t_sample_start_us = ggml_time_us();
                 bark_vocab::id next = gpt_sample(logits[i], rng, temp, NULL);
+                t_sample_us += (ggml_time_us() - t_sample_start_us);
+
                 in_buffer[nn][rel_start_fill_ix+i] = next;
             }
+
+            progress.callback((float) (n*(N_FINE_CODEBOOKS-n_coarse)+(nn-n_coarse))/(n_loops*(N_FINE_CODEBOOKS-n_coarse)));
         }
 
         // transfer over info into model_in
@@ -1497,6 +1557,14 @@ bark_codes bark_forward_fine_encoder(
     }
 
     BARK_ASSERT(tokens[0].size() == in_arr[0].size());
+
+    const int64_t t_main_end_us = ggml_time_us();
+
+    printf("\n\n");
+    printf("%s: mem per token = %8.2f MB\n", __func__, mem_per_token/1000.0f/1000.0f);
+    printf("%s:   sample time = %8.2f ms\n", __func__, t_sample_us/1000.0f);
+    printf("%s:  predict time = %8.2f ms\n", __func__, t_predict_us/1000.0f);
+    printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us)/1000.0f);
 
     return in_arr;
 }
@@ -1533,19 +1601,22 @@ bool bark_generate_audio(
         printf("%d ", tokens[i]);
     }
 
-    printf("\n\n");
+    printf("\n");
 
-    // encode text (text model)
+    // semantic encoding
     bark_sequence out_semantic = bark_forward_text_encoder(
-        tokens, model.text_model, rng, n_threads, temp, early_stop, min_eos_p);
+            tokens, model.text_model, rng, n_threads, temp, early_stop, min_eos_p);
+    printf("\n");
 
     // coarse encoding (coarse model)
     bark_codes out_coarse = bark_forward_coarse_encoder(
-        out_semantic, model.coarse_model, rng, n_threads, temp, max_coarse_history, sliding_window_size);
+            out_semantic, model.coarse_model, rng, n_threads, temp, max_coarse_history, sliding_window_size);
+    printf("\n");
 
     // fine encoding (fine model)
     bark_codes out_fine = bark_forward_fine_encoder(
-        out_coarse, model.fine_model, rng, n_threads, fine_temp);
+            out_coarse, model.fine_model, rng, n_threads, fine_temp);
+    printf("\n");
 
     return true;
 }
