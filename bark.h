@@ -160,7 +160,7 @@ bark_sequence bark_forward_text_encoder(
     const float min_eos_p);
 
 bark_codes bark_forward_coarse_encoder(
-    const std::vector<bark_vocab::id> & tokens,
+    const bark_sequence & tokens,
     const gpt_model model,
     std::mt19937 & rng,
     const int n_threads,
@@ -174,3 +174,25 @@ bark_codes bark_forward_fine_encoder(
     std::mt19937 & rng,
     const int n_threads,
     const float temp);
+
+struct bark_progress {
+    float current = 0.0f;
+    const char * func = NULL;
+
+    bark_progress() {}
+
+    void callback(float progress) {
+        float percentage = progress * 100;
+        if (percentage == 0.0f && func != NULL) {
+            fprintf(stderr, "%s: ", func);
+        }
+        while (percentage > current) {
+            current = percentage;
+            fprintf(stderr, ".");
+            fflush(stderr);
+            if (percentage >= 100) {
+                fprintf(stderr, "\n");
+            }
+        }
+    }
+};
