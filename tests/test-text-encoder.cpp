@@ -3,9 +3,6 @@ function. The purpose of these tests is to isolate the `gpt_eval` function to te
 whether it outputs the correct logits from a pre-defined input: the (padded) sequence
 of tokens.
 
-Note that the input tokens (seq1, seq2 and seq3) have already been offset by
-`TEXT_ENCODING_OFFSET`.
-
 Only the first 50 logits and last 50 logits are tested due to the size of the original
 logit vector (10,048).
 
@@ -16,7 +13,7 @@ This file tests two configurations: merge_ctx is True and merge_ctx is False.
 #include <vector>
 
 #include "bark.h"
-#include "common.cpp"
+#include "common.h"
 
 static const std::vector<test_data_t> & k_tests()
 {
@@ -211,7 +208,6 @@ int main(int argc, char** argv) {
         if (!run_test(std::get<2>(test_data), logits, false)) {
             return 3;
         }
-
     }
 
     fprintf(stderr, "%s : tests passed successfully.\n", __func__);

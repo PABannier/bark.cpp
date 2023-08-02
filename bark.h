@@ -1,3 +1,4 @@
+#pragma once
 #include "encodec.h"
 
 #include <map>
