@@ -291,7 +291,7 @@ if (BARK_METAL)
     #add_compile_definitions(GGML_METAL_DIR_KERNELS="${CMAKE_CURRENT_SOURCE_DIR}/")
 
     # copy ggml-metal.metal to bin directory
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/ggml-metal.metal bin/ggml-metal.metal COPYONLY)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/ggml/src/ggml-metal.metal bin/ggml-metal.metal COPYONLY)
 
     set(BARK_EXTRA_LIBS ${BARK_EXTRA_LIBS}
         ${FOUNDATION_LIBRARY}
@@ -467,26 +467,7 @@ endif()
 # Build libraries
 #
 
-add_library(ggml OBJECT
-            ${CMAKE_CURRENT_SOURCE_DIR}/ggml/src/ggml.c
-            ${CMAKE_CURRENT_SOURCE_DIR}/ggml/include/ggml/ggml.h
-            ${GGML_SOURCES_CUDA}
-            ${GGML_SOURCES_OPENCL}
-            ${GGML_SOURCES_METAL}
-            ${GGML_SOURCES_EXTRA}
-            )
-
-target_include_directories(ggml PUBLIC . ${BARK_EXTRA_INCLUDES})
-target_compile_features(ggml PUBLIC c_std_11) # don't bump
-target_link_libraries(ggml PUBLIC Threads::Threads ${BARK_EXTRA_LIBS})
-
-add_library(ggml_static STATIC $<TARGET_OBJECTS:ggml>)
-if (BUILD_SHARED_LIBS)
-    set_target_properties(ggml PROPERTIES POSITION_INDEPENDENT_CODE ON)
-    add_library(ggml_shared SHARED $<TARGET_OBJECTS:ggml>)
-    target_link_libraries(ggml_shared PUBLIC Threads::Threads ${BARK_EXTRA_LIBS})
-    install(TARGETS ggml_shared LIBRARY)
-endif()
+add_subdirectory(ggml)
 
 add_library(bark
             bark.cpp
