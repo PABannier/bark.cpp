@@ -299,7 +299,7 @@ bark.o: bark.cpp bark.h
 	$(CXX)  $(CXXFLAGS)   -c $< -o $@
 
 clean:
-	rm -vf *.o *.so *.dll encodec bark tests/test-tokenizer
+	rm -vf *.o *.so *.dll encodec bark tests/test-tokenizer main
 
 bark: bark.cpp         encodec.o ggml.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
