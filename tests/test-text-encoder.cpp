@@ -39,12 +39,13 @@ bark_sequence pad_input(const bark_sequence & input) {
 }
 
 int main(int argc, char** argv) {
-    if (argc < 2) {
-        fprintf(stderr, "Usage: %s <model-file>\n", argv[0]);
-        return 1;
-    }
+    // if (argc < 2) {
+    //     fprintf(stderr, "Usage: %s <model-file>\n", argv[0]);
+    //     return 1;
+    // }
 
-    const std::string fname = argv[1];
+    // const std::string fname = argv[1];
+    const std::string fname = "/Users/pbannier/Documents/bark.cpp/ggml_weights/ggml_weights_text.bin";
 
     gpt_model model;
     std::mt19937 rng(0);
