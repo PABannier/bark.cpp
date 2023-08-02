@@ -1166,16 +1166,7 @@ bool gpt_eval(
     return true;
 }
 
-bark_vocab::id gpt_multinomial_sample(
-        std::vector<float> & logits,
-        std::mt19937 & rng,
-        float temp,
-        float * eos_p) {
-    int n_logits = logits.size();
-
-    for (int i = 0; i < n_logits; ++i)
-        logits[i] /= temp;
-
+void softmax(std::vector<float> & logits) {
     // for numerical stability
     float maxl = -INFINITY;
     for (const auto & l : logits)
@@ -1190,6 +1181,19 @@ bark_vocab::id gpt_multinomial_sample(
 
     for (auto & l : logits)
         l /= sum;
+}
+
+bark_vocab::id gpt_multinomial_sample(
+        std::vector<float> & logits,
+        std::mt19937 & rng,
+        float temp,
+        float * eos_p) {
+    int n_logits = logits.size();
+
+    for (int i = 0; i < n_logits; ++i)
+        logits[i] /= temp;
+
+    softmax(logits);
 
     std::discrete_distribution<> dist(logits.begin(), logits.end());
     int next = dist(rng);
@@ -1201,8 +1205,17 @@ bark_vocab::id gpt_multinomial_sample(
     return next;
 }
 
-bark_vocab::id gpt_argmax_sample(std::vector<float> & logits) {
+bark_vocab::id gpt_argmax_sample(std::vector<float> & logits, float * eos_p) {
     int n_logits = logits.size();
+
+    // testing purposes
+    for (auto & l : logits) { l /= 0.7f; }
+
+    // likelihood of EOS token
+    softmax(logits);
+
+    if (eos_p)
+        *eos_p = logits.back();
 
     int next = 0;
     float maxl = -INFINITY;
@@ -1217,13 +1230,9 @@ bark_vocab::id gpt_argmax_sample(std::vector<float> & logits) {
     return next;
 }
 
-bark_vocab::id gpt_sample(
-        std::vector<float> & logits,
-        std::mt19937 & rng,
-        float temp,
-        float * eos_p) {
+bark_vocab::id gpt_sample(std::vector<float> & logits, std::mt19937 & rng, float temp, float * eos_p) {
     if (temp == 0.0f)
-        return gpt_argmax_sample(logits);
+        return gpt_argmax_sample(logits, eos_p);
     return gpt_multinomial_sample(logits, rng, temp, eos_p);
 }
 
@@ -1270,6 +1279,8 @@ bark_sequence bark_forward_text_encoder(
     int n_past = 0;
     float eos_p = 0;
 
+    bool merge_ctx = false;
+
     bark_sequence input = tokens;
     std::vector<float> logits;
 
@@ -1278,7 +1289,7 @@ bark_sequence bark_forward_text_encoder(
     gpt_eval(model, n_threads, 0, false, { 0, 1, 2, 3 }, logits, mem_per_token);
 
     for (int i = 0; i < 768; i++) {
-        const bool merge_ctx = i == 0;
+        merge_ctx = i == 0;
         gpt_eval(model, n_threads, n_past, merge_ctx, input, logits, mem_per_token);
 
         float logits_pad_token = logits[SEMANTIC_PAD_TOKEN];
@@ -1288,8 +1299,8 @@ bark_sequence bark_forward_text_encoder(
             logits.push_back(logits[logits_pad_token]);
 
         n_past += input.size();
-        if (i == 0)
-            n_past -= 256;  // first step, context are merged
+        if (merge_ctx)
+            n_past -= 256;
 
         input.clear();
 
@@ -1301,8 +1312,11 @@ bark_sequence bark_forward_text_encoder(
         input.push_back(next);
         out.push_back(next);
 
-        printf("%d ", next);
-        fflush(stdout);
+        float sum_logits = std::accumulate(logits.begin(), logits.end(), 0.0f);
+        printf("%d :: %.6f :: %.3f (n=%zu)\n", next, eos_p, sum_logits, logits.size());
+
+        // printf("%d ", next);
+        // fflush(stdout);
     }
 
     printf("\n\nsemantic sequence length: %zu\n\n", out.size());
