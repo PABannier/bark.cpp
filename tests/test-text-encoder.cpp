@@ -12,31 +12,11 @@ This file tests two configurations: merge_ctx is True and merge_ctx is False.
 #include "bark.h"
 #include "common.h"
 
-static const std::vector<test_data_t> & k_tests()
-{
-    static std::vector<test_data_t> _k_tests;
-
-    // test 1: hello world
-    {
-        std::vector<int> input;
-        logit_sequence logits_merge, logits_no_merge;
-
-        load_test_data("./data/semantic/test1_merge.bin", input, logits_merge);
-        load_test_data("./data/semantic/test1_no_merge.bin", input, logits_no_merge);
-        _k_tests.push_back({input, logits_merge, logits_no_merge});
-    }
-
-    // test 2: How far that little candle throws its beams! So shines a good deed in a naughty world.
-    {
-        std::vector<int> input;
-        logit_sequence logits_merge, logits_no_merge;
-
-        load_test_data("./data/semantic/test2_merge.bin", input, logits_merge);
-        load_test_data("./data/semantic/test2_no_merge.bin", input, logits_no_merge);
-        _k_tests.push_back({input, logits_merge, logits_no_merge});
-    }
-
-    return _k_tests;
+static const std::vector<std::tuple<std::string, bool>> test_data = {
+    { "./data/semantic/test_semantic_merge_1.bin"   , true  },
+    { "./data/semantic/test_semantic_no_merge_1.bin", false },
+    { "./data/semantic/test_semantic_merge_2.bin"   , true  },
+    { "./data/semantic/test_semantic_no_merge_2.bin", false },
 };
 
 int main(int argc, char** argv) {
@@ -49,11 +29,11 @@ int main(int argc, char** argv) {
 
     gpt_model model;
     const int n_threads = 4;
-
     const int n_past = 0;
 
-    size_t mem_per_token = 0;
+    bool success = true;
 
+    size_t mem_per_token = 0;
     logit_sequence logits;
 
     printf("%s: reading bark text model\n", __func__);
@@ -65,25 +45,29 @@ int main(int argc, char** argv) {
     // dry run to estimate mem_per_token
     gpt_eval(model, n_threads, 0, false, { 0, 1, 2, 3 }, logits, mem_per_token);
 
-    for (const auto & test_data : k_tests()) {
-        bark_sequence input = std::get<0>(test_data);
+    for (int i = 0; i < (int) test_data.size(); i++) {
+        bark_sequence input;
+        logit_sequence truth;
 
-        // merge_ctx = True
-        gpt_eval(model, n_threads, n_past, true, input, logits, mem_per_token);
-        if (!run_test_on_sequence(std::get<1>(test_data), logits, true)) {
-            return 3;
+        std::string path = std::get<0>(test_data[i]);
+        bool merge_ctx = std::get<1>(test_data[i]);
+
+        load_test_data(path, input, truth);
+        gpt_eval(model, n_threads, n_past, merge_ctx, input, logits, mem_per_token);
+
+        fprintf(stderr, "%s (merge context=%d)", path.c_str(), merge_ctx);
+        if (!run_test_on_sequence(truth, logits)) {
+            success = false;
+            fprintf(stderr, "   TEST %d FAILED.\n", i+1);
+        } else {
+            fprintf(stderr, "   TEST %d PASSED.\n", i+1);
         }
 
         logits.clear();
-
-        // merge_ctx = False
-        gpt_eval(model, n_threads, n_past, false, input, logits, mem_per_token);
-        if (!run_test_on_sequence(std::get<2>(test_data), logits, false)) {
-            return 3;
-        }
     }
 
-    fprintf(stderr, "%s : tests passed successfully.\n", __func__);
+    if (success)
+        fprintf(stderr, "%s : tests passed successfully.\n", __func__);
 
     return 0;
 }

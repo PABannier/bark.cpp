@@ -5,38 +5,28 @@
 #include "bark-util.h"
 #include "common.h"
 
-inline bool all_close(logit_sequence s1, logit_sequence s2, float tol) {
+inline bool all_close(
+    logit_sequence s1, logit_sequence s2, float * max_violation, int * n_violations) {
     if (s1.size() != s2.size()) { return false; }
     for (int i = 0; i < (int) s1.size(); i++) {
-        if (fabs(s1[i] - s2[i]) > tol) {
-            return false;
-        }
+        float violation = fabs(s1[i] - s2[i]);
+        *max_violation = std::max(*max_violation, violation);
+        if (*max_violation > ABS_TOL + REL_TOL * fabs(s2[i]))
+            *n_violations += 1;
     }
-    return true;
+    return *n_violations == 0;
 }
 
-bool run_test_on_sequence(logit_sequence truth, logit_sequence logits, bool merge_ctx) {
-    logit_sequence result;
-    result.insert(result.end(), logits.begin(), logits.begin() + 50);
-    result.insert(result.end(), logits.end() - 50, logits.end());
-
-    if (!all_close(result, truth, TOL)) {
+bool run_test_on_sequence(logit_sequence truth, logit_sequence result) {
+    float max_violation = 0.0f;
+    int n_violations = 0;
+    if (!all_close(result, truth, &max_violation, &n_violations)) {
         fprintf(stderr, "\n");
-        fprintf(stderr, "%s : failed test (merge_ctx=%d) \n", __func__, merge_ctx);
-        fprintf(stderr, "%s : expected tokens (n=%zu): ", __func__, truth.size());
-        for (const auto & l : truth) {
-            fprintf(stderr, "%.4f ", l);
-        }
+        fprintf(stderr, "%s : failed test\n", __func__);
+        fprintf(stderr, "       abs_tol=%.4f, rel_tol=%.4f, abs max viol=%.4f, viol=%.1f%%", ABS_TOL, REL_TOL, max_violation, (float)n_violations/truth.size()*100);
         fprintf(stderr, "\n");
-        fprintf(stderr, "%s : got tokens (n=%zu):      ", __func__, result.size());
-        for (const auto & l : result) {
-            fprintf(stderr, "%.4f ", l);
-        }
-        fprintf(stderr, "\n");
-
         return false;
     }
-
     return true;
 }
 
@@ -59,7 +49,7 @@ void load_test_data(std::string fname, std::vector<int>& input, std::vector<floa
             nelements *= ne[i];
         }
 
-        input.reserve(nelements);
+        input.resize(nelements);
         fin.read(reinterpret_cast<char *>(input.data()), nelements*sizeof(int32_t));
     }
 
@@ -75,7 +65,7 @@ void load_test_data(std::string fname, std::vector<int>& input, std::vector<floa
             nelements *= ne[i];
         }
 
-        logits.reserve(nelements);
+        logits.resize(nelements);
         fin.read(reinterpret_cast<char *>(logits.data()), nelements*sizeof(float));
     }
 
