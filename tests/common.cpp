@@ -1,5 +1,8 @@
+#include <fstream>
 #include <vector>
 #include <tuple>
+
+#include "bark-util.h"
 #include "common.h"
 
 inline bool all_close(logit_sequence s1, logit_sequence s2, float tol) {
@@ -12,7 +15,7 @@ inline bool all_close(logit_sequence s1, logit_sequence s2, float tol) {
     return true;
 }
 
-bool run_test(logit_sequence truth, logit_sequence logits, bool merge_ctx) {
+bool run_test_on_sequence(logit_sequence truth, logit_sequence logits, bool merge_ctx) {
     logit_sequence result;
     result.insert(result.end(), logits.begin(), logits.begin() + 50);
     result.insert(result.end(), logits.end() - 50, logits.end());
@@ -35,4 +38,46 @@ bool run_test(logit_sequence truth, logit_sequence logits, bool merge_ctx) {
     }
 
     return true;
+}
+
+void load_test_data(char * fname, std::vector<int>& input, std::vector<float>& logits) {
+    auto fin = std::ifstream(fname, std::ios::binary);
+    if (!fin) {
+        fprintf(stderr, "%s: failed to open '%s'\n", __func__, fname);
+        throw;
+    }
+
+    // input
+    {
+        int32_t n_dims;
+        read_safe(fin, n_dims);
+
+        int32_t nelements = 1;
+        int32_t ne[3] = { 1, 1, 1 };
+        for (int i = 0; i < n_dims; i++) {
+            read_safe(fin, ne[i]);
+            nelements *= ne[i];
+        }
+
+        input.reserve(nelements);
+        fin.read(reinterpret_cast<char *>(input.data()), nelements*sizeof(int));
+    }
+
+    // logits
+    {
+        int32_t n_dims;
+        read_safe(fin, n_dims);
+
+        int32_t nelements = 1;
+        int32_t ne[3] = { 1, 1, 1 };
+        for (int i = 0; i < n_dims; i++) {
+            read_safe(fin, ne[i]);
+            nelements *= ne[i];
+        }
+
+        logits.reserve(nelements);
+        fin.read(reinterpret_cast<char *>(logits.data()), nelements*sizeof(float));
+    }
+
+    assert(fin.eof());
 }
