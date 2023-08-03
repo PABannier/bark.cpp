@@ -40,10 +40,10 @@ bool run_test_on_sequence(logit_sequence truth, logit_sequence logits, bool merg
     return true;
 }
 
-void load_test_data(char * fname, std::vector<int>& input, std::vector<float>& logits) {
+void load_test_data(std::string fname, std::vector<int>& input, std::vector<float>& logits) {
     auto fin = std::ifstream(fname, std::ios::binary);
     if (!fin) {
-        fprintf(stderr, "%s: failed to open '%s'\n", __func__, fname);
+        fprintf(stderr, "%s: failed to open '%s'\n", __func__, fname.c_str());
         throw;
     }
 
@@ -60,7 +60,7 @@ void load_test_data(char * fname, std::vector<int>& input, std::vector<float>& l
         }
 
         input.reserve(nelements);
-        fin.read(reinterpret_cast<char *>(input.data()), nelements*sizeof(int));
+        fin.read(reinterpret_cast<char *>(input.data()), nelements*sizeof(int32_t));
     }
 
     // logits
