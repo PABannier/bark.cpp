@@ -8,8 +8,18 @@
 #define REL_TOL 0.01f
 
 typedef std::vector<float> logit_sequence;
-typedef std::tuple<bark_sequence, logit_sequence, logit_sequence> test_data_t;
+typedef std::vector<std::vector<float>> logit_matrix;
 
 bool run_test_on_sequence(logit_sequence truth, logit_sequence logits);
 
-void load_test_data(std::string fname, std::vector<int>& input, std::vector<float>& logits);
+bool run_test_on_codes(logit_matrix truth, logit_matrix logits);
+
+void load_test_data(
+        std::string fname,
+        std::vector<int>& input,
+        logit_sequence& logits);
+
+void load_nested_test_data(
+        std::string fname,
+        std::vector<std::vector<int>>& input,
+        logit_matrix& logits);

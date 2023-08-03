@@ -325,5 +325,5 @@ tests/test-text-encoder: tests/test-text-encoder.cpp ggml.o bark.o encodec.o com
 tests/test-coarse-encoder: tests/test-coarse-encoder.cpp ggml.o bark.o encodec.o common.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
 
-tests/test-fine-encoder: tests/test-fine-encoder.cpp ggml.o bark.o encodec.o $(OBJS)
+tests/test-fine-encoder: tests/test-fine-encoder.cpp ggml.o bark.o encodec.o common.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
