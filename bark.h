@@ -122,7 +122,7 @@ bool gpt_model_load(const std::string& fname, gpt_model& model);
 bool gpt_eval(
         const gpt_model & model,
         const int n_threads,
-        const int n_past,
+        int * n_past,
         const bool merge_ctx,
         const bark_sequence & embd_inp,
               std::vector<float>          & embd_w,
@@ -165,7 +165,6 @@ bark_sequence bark_forward_text_encoder(
     std::mt19937 & rng,
     const int n_threads,
     const float temp,
-    const bool early_stop,
     const float min_eos_p);
 
 bark_codes bark_forward_coarse_encoder(
