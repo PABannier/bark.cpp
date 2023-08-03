@@ -1,3 +1,4 @@
+#pragma once
 #include "encodec.h"
 
 #include <map>
@@ -126,6 +127,14 @@ bool gpt_eval(
         const bark_sequence & embd_inp,
               std::vector<float>          & embd_w,
               size_t                      & mem_per_token);
+
+bool fine_gpt_eval(
+        const gpt_model & model,
+        const int n_threads,
+        const int codebook_ix,
+        const bark_codes & embd_inp,
+              std::vector<std::vector<float>> & logits,
+              size_t                          & mem_per_token);
 
 bark_vocab::id gpt_sample(
               std::vector<float>          & logits,

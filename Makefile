@@ -299,7 +299,7 @@ bark.o: bark.cpp bark.h
 	$(CXX)  $(CXXFLAGS)   -c $< -o $@
 
 clean:
-	rm -vf *.o *.so *.dll encodec bark tests/test-tokenizer
+	rm -vf *.o *.so *.dll encodec bark $(TEST_TARGETS)
 
 bark: bark.cpp         encodec.o ggml.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
@@ -313,14 +313,17 @@ main: examples/main.cpp  ggml.o bark.o encodec.o $(OBJS)
 
 tests: $(TEST_TARGETS)
 
+common.o: tests/common.cpp
+	$(CXX)  $(CXXFLAGS)   -c $< -o $@
+
 tests/test-tokenizer: tests/test-tokenizer.cpp ggml.o bark.o encodec.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
 
-tests/test-text-encoder: tests/test-text-encoder.cpp ggml.o bark.o encodec.o $(OBJS)
+tests/test-text-encoder: tests/test-text-encoder.cpp ggml.o bark.o encodec.o common.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
 
-tests/test-coarse-encoder: tests/test-coarse-encoder.cpp ggml.o bark.o encodec.o $(OBJS)
+tests/test-coarse-encoder: tests/test-coarse-encoder.cpp ggml.o bark.o encodec.o common.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
 
-tests/test-fine-encoder: tests/test-fine-encoder.cpp ggml.o bark.o encodec.o $(OBJS)
+tests/test-fine-encoder: tests/test-fine-encoder.cpp ggml.o bark.o encodec.o common.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
