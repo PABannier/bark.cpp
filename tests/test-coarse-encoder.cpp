@@ -12,30 +12,9 @@ of tokens.
 #include "bark.h"
 #include "common.h"
 
-static const std::vector<std::tuple<bark_sequence, logit_sequence>> & k_tests()
-{
-    static std::vector<std::tuple<bark_sequence, logit_sequence>> _k_tests;
-
-    // test 1: hello world
-    {
-        std::vector<int> input;
-        logit_sequence logits;
-
-        load_test_data("./data/coarse/test1.bin", input, logits);
-        _k_tests.push_back({input, logits});
-    }
-
-    // test 2: this is an audio
-    {
-        std::vector<int> input;
-        logit_sequence logits;
-
-        load_test_data("./data/coarse/test2.bin", input, logits);
-        _k_tests.push_back({input, logits});
-    }
-
-
-    return _k_tests;
+static const std::vector<std::string> test_data = {
+    "./data/coarse/test_coarse_1.bin",
+    "./data/coarse/test_coarse_2.bin",
 };
 
 int main(int argc, char** argv) {
@@ -59,20 +38,32 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    bool success = true;
+
     // dry run to estimate mem_per_token
     gpt_eval(model, n_threads, 0, false, { 0, 1, 2, 3 }, logits, mem_per_token);
 
-    for (const auto & test_data : k_tests()) {
-        bark_sequence input = std::get<0>(test_data);
+    for (int i = 0; i < (int) test_data.size(); i++) {
+        bark_sequence input;
+        logit_sequence truth;
+        std::string path = test_data[i];
 
+        load_test_data(path, input, truth);
         gpt_eval(model, n_threads, 0, false, input, logits, mem_per_token);
 
-        if (!run_test_on_sequence(std::get<1>(test_data), logits, false)) {
-            return 3;
+        fprintf(stderr, "%s", path.c_str());
+        if (!run_test_on_sequence(truth, logits)) {
+            success = false;
+            fprintf(stderr, "   TEST %d FAILED.\n", i+1);
+        } else {
+            fprintf(stderr, "   TEST %d PASSED.\n", i+1);
         }
+
+        logits.clear(); 
     }
 
-    fprintf(stderr, "%s : tests passed successfully.\n", __func__);
+    if (success)
+        fprintf(stderr, "%s : tests passed successfully.\n", __func__);
 
     return 0;
 }
