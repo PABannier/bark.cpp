@@ -23,3 +23,15 @@ void load_nested_test_data(
         std::string fname,
         std::vector<std::vector<int>>& input,
         logit_matrix& logits);
+
+template <typename T>
+std::vector<std::vector<T>> transpose(const std::vector<std::vector<T>> data) {
+    // this assumes that all inner vectors have the same size and
+    // allocates space for the complete result in advance
+    std::vector<std::vector<T>> result(data[0].size(), std::vector<T>(data.size()));
+    for (size_t i = 0; i < data[0].size(); i++)
+        for (size_t j = 0; j < data.size(); j++) {
+            result[i][j] = data[j][i];
+        }
+    return result;
+}

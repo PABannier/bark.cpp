@@ -51,9 +51,10 @@ int main(int argc, char** argv) {
 
         load_nested_test_data(path, input, truth);
         fine_gpt_eval(model, n_threads, 2, input, logits, mem_per_token);
+        logit_matrix transposed_logits = transpose(logits);
 
         fprintf(stderr, "%s", path.c_str());
-        if (!run_test_on_codes(truth, logits)) {
+        if (!run_test_on_codes(truth, transposed_logits)) {
             success = false;
             fprintf(stderr, "   TEST %d FAILED.\n", i+1);
         } else {

@@ -33,15 +33,16 @@ inline bool all_close_nested(
     return *n_violations == 0;
 }
 
-
 bool run_test_on_sequence(logit_sequence truth, logit_sequence result) {
     float max_violation = 0.0f;
     int n_violations = 0;
     if (!all_close(result, truth, &max_violation, &n_violations)) {
-        fprintf(stderr, "\n");
-        fprintf(stderr, "%s : failed test\n", __func__);
-        fprintf(stderr, "       abs_tol=%.4f, rel_tol=%.4f, abs max viol=%.4f, viol=%.1f%%", ABS_TOL, REL_TOL, max_violation, (float)n_violations/truth.size()*100);
-        fprintf(stderr, "\n");
+        if (n_violations == 0) {
+            fprintf(stderr, "%s : wrong shape (%zu != %zu).\n", __func__, truth.size(), result.size());
+        } else {
+            fprintf(stderr, "       abs_tol=%.4f, rel_tol=%.4f, abs max viol=%.4f, viol=%.1f%%", ABS_TOL, REL_TOL, max_violation, (float)n_violations/truth.size()*100);
+            fprintf(stderr, "\n");
+        }
         return false;
     }
     return true;
@@ -53,8 +54,12 @@ bool run_test_on_codes(logit_matrix truth, logit_matrix result) {
     if (!all_close_nested(result, truth, &max_violation, &n_violations)) {
         fprintf(stderr, "\n");
         fprintf(stderr, "%s : failed test\n", __func__);
-        fprintf(stderr, "       abs_tol=%.4f, rel_tol=%.4f, abs max viol=%.4f, viol=%.1f%%", ABS_TOL, REL_TOL, max_violation, (float)n_violations/truth.size()*100);
-        fprintf(stderr, "\n");
+        if (n_violations == 0) {
+            fprintf(stderr, "%s : wrong shape (%zu != %zu).\n", __func__, truth.size(), result.size());
+        } else {
+            fprintf(stderr, "       abs_tol=%.4f, rel_tol=%.4f, abs max viol=%.4f, viol=%.1f%%", ABS_TOL, REL_TOL, max_violation, (float)n_violations/(truth.size()*truth[0].size())*100);
+            fprintf(stderr, "\n");
+        }
         return false;
     }
     return true;
@@ -103,8 +108,8 @@ void load_test_data(std::string fname, std::vector<int>& input, logit_sequence& 
 }
 
 void load_nested_test_data(
-        std::string fname, 
-        std::vector<std::vector<int>>& input, 
+        std::string fname,
+        std::vector<std::vector<int>>& input,
         logit_matrix& logits) {
     auto fin = std::ifstream(fname, std::ios::binary);
     if (!fin) {
