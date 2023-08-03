@@ -858,6 +858,7 @@ bool gpt_eval(
               std::vector<float>          & embd_w,
               size_t                      & mem_per_token) {
     int N = embd_inp.size();
+    BARK_ASSERT(n_past != NULL);
 
     const auto & hparams = model.hparams;
 
