@@ -895,25 +895,32 @@ bool gpt_eval(
     struct ggml_tensor * input = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
     memcpy(input->data, embd_inp.data(), N*ggml_element_size(input));
 
-    struct ggml_tensor * embd;
+    struct ggml_tensor * tok_emb;
 
-    if (!merge_ctx) {
-        // usually only one token is in the sequence (since the context is saved in
-        // memory_k and memory_v)
-        embd = ggml_get_rows(ctx0, model.wtes[0], input);
+    if (n_past > 0) {
+        BARK_ASSERT(N == 1);
+        tok_emb = ggml_get_rows(ctx0, model.wtes[0], input);
     } else {
-        // first step (context merging)
-        struct ggml_tensor * seq_embd = ggml_get_rows(ctx0, model.wtes[0], ggml_view_1d(ctx0, input, 256, 0));
-        struct ggml_tensor * ctx_embd = ggml_get_rows(ctx0, model.wtes[0], ggml_view_1d(ctx0, input, 256, 256*ggml_element_size(input)));
-        struct ggml_tensor * rem_embd = ggml_get_rows(ctx0, model.wtes[0], ggml_view_1d(ctx0, input,   1, 512*ggml_element_size(input)));
+        if (merge_ctx) {
+            BARK_ASSERT(N == 256+256+1);
+            N -= 256;
+        } else {
+            BARK_ASSERT(N <= n_ctx);
+        }
 
-        struct ggml_tensor * merged_embd = ggml_add(ctx0, seq_embd, ctx_embd);
+        if (merge_ctx) {
+            struct ggml_tensor * seq_embd = ggml_get_rows(ctx0, model.wtes[0], ggml_view_1d(ctx0, input, 256, 0));
+            struct ggml_tensor * ctx_embd = ggml_get_rows(ctx0, model.wtes[0], ggml_view_1d(ctx0, input, 256, 256*ggml_element_size(input)));
+            struct ggml_tensor * rem_embd = ggml_get_rows(ctx0, model.wtes[0], ggml_view_1d(ctx0, input,   1, 512*ggml_element_size(input)));
 
-        embd = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, merged_embd->ne[0], merged_embd->ne[1]+rem_embd->ne[1]);
-        embd = ggml_set_1d(ctx0, embd, merged_embd, 0);
-        embd = ggml_set_1d(ctx0, embd, rem_embd, merged_embd->ne[0]*merged_embd->ne[1]*ggml_element_size(merged_embd));
+            struct ggml_tensor * cat_emb = ggml_add(ctx0, seq_embd, ctx_embd);
 
-        N -= 256;  // merge context, input size is reduced
+            tok_emb = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, cat_emb->ne[0], cat_emb->ne[1]+rem_embd->ne[1]);
+            tok_emb = ggml_set_1d(ctx0, tok_emb, cat_emb, 0);
+            tok_emb = ggml_set_1d(ctx0, tok_emb, rem_embd, cat_emb->ne[0]*cat_emb->ne[1]*ggml_element_size(cat_emb));
+        } else {
+            tok_emb = ggml_get_rows(ctx0, model.wtes[0], input);
+        }
     }
 
     struct ggml_tensor * position = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
@@ -922,8 +929,7 @@ bool gpt_eval(
     }
 
     // wte + wpe
-    struct ggml_tensor * inpL = ggml_add(ctx0,
-        embd, ggml_get_rows(ctx0, model.wpe, position));
+    struct ggml_tensor * inpL = ggml_add(ctx0, tok_emb, ggml_get_rows(ctx0, model.wpe, position));
 
     for (int il = 0; il < n_layer; ++il) {
         struct ggml_tensor * cur;
@@ -1200,7 +1206,7 @@ bark_vocab::id gpt_multinomial_sample(
 
     // likelihood of EOS token
     if (eos_p)
-        *eos_p = logits.back();
+        *eos_p = logits[logits.size() - 1];
 
     return next;
 }
@@ -1215,7 +1221,7 @@ bark_vocab::id gpt_argmax_sample(std::vector<float> & logits, float * eos_p) {
     softmax(logits);
 
     if (eos_p)
-        *eos_p = logits.back();
+        *eos_p = logits[logits.size() - 1];
 
     int next = 0;
     float maxl = -INFINITY;
@@ -1320,7 +1326,7 @@ bark_sequence bark_forward_text_encoder(
         bark_vocab::id next = gpt_sample(logits, rng, temp, &eos_p);
         t_sample_us += (ggml_time_us() - t_sample_start_us);
 
-        if (early_stop && ((next == SEMANTIC_VOCAB_SIZE) || (eos_p > min_eos_p)))
+        if (early_stop && ((next == SEMANTIC_VOCAB_SIZE) || (eos_p >= min_eos_p)))
             break;
 
         input.push_back(next);
