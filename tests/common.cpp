@@ -40,6 +40,7 @@ bool run_test_on_sequence(logit_sequence truth, logit_sequence result) {
         if (n_violations == 0) {
             fprintf(stderr, "%s : wrong shape (%zu != %zu).\n", __func__, truth.size(), result.size());
         } else {
+            fprintf(stderr, "\n");
             fprintf(stderr, "       abs_tol=%.4f, rel_tol=%.4f, abs max viol=%.4f, viol=%.1f%%", ABS_TOL, REL_TOL, max_violation, (float)n_violations/truth.size()*100);
             fprintf(stderr, "\n");
         }
