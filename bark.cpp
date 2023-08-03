@@ -1383,7 +1383,7 @@ bark_codes bark_forward_coarse_encoder(
         gpt_eval(model, n_threads, &n_past, false, { 0, 1, 2, 3 }, logits, mem_per_token);
     }
 
-    for(int i = 0; i < n_window_steps; i++) {
+    for (int i = 0; i < n_window_steps; i++) {
         int semantic_ix = roundf(n_steps / semantic_to_coarse_ratio);
 
         bark_sequence input_in(
