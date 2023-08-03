@@ -29,7 +29,6 @@ int main(int argc, char** argv) {
 
     gpt_model model;
     const int n_threads = 4;
-    const int n_past = 0;
 
     bool success = true;
 
@@ -43,7 +42,10 @@ int main(int argc, char** argv) {
     }
 
     // dry run to estimate mem_per_token
-    gpt_eval(model, n_threads, 0, false, { 0, 1, 2, 3 }, logits, mem_per_token);
+    {
+        int n_past = 0;
+        gpt_eval(model, n_threads, &n_past, false, { 0, 1, 2, 3 }, logits, mem_per_token);
+    }
 
     for (int i = 0; i < (int) test_data.size(); i++) {
         bark_sequence input;
@@ -52,8 +54,10 @@ int main(int argc, char** argv) {
         std::string path = std::get<0>(test_data[i]);
         bool merge_ctx = std::get<1>(test_data[i]);
 
+        int n_past = 0;
+
         load_test_data(path, input, truth);
-        gpt_eval(model, n_threads, n_past, merge_ctx, input, logits, mem_per_token);
+        gpt_eval(model, n_threads, &n_past, merge_ctx, input, logits, mem_per_token);
 
         fprintf(stderr, "%s (merge context=%d)", path.c_str(), merge_ctx);
         if (!run_test_on_sequence(truth, logits)) {
