@@ -41,15 +41,20 @@ int main(int argc, char** argv) {
     bool success = true;
 
     // dry run to estimate mem_per_token
-    gpt_eval(model, n_threads, 0, false, { 0, 1, 2, 3 }, logits, mem_per_token);
+    {
+        int n_past = 0;
+        gpt_eval(model, n_threads, &n_past, false, { 0, 1, 2, 3 }, logits, mem_per_token);
+    }
 
     for (int i = 0; i < (int) test_data.size(); i++) {
         bark_sequence input;
         logit_sequence truth;
         std::string path = test_data[i];
 
+        int n_past = 0;
+
         load_test_data(path, input, truth);
-        gpt_eval(model, n_threads, 0, false, input, logits, mem_per_token);
+        gpt_eval(model, n_threads, &n_past, false, input, logits, mem_per_token);
 
         fprintf(stderr, "%s", path.c_str());
         if (!run_test_on_sequence(truth, logits)) {
