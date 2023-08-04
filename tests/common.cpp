@@ -177,6 +177,50 @@ void load_test_data(std::string fname, std::vector<T>& input, std::vector<U>& ou
 template void load_test_data(std::string fname, std::vector<int>& input, std::vector<float>& output);
 template void load_test_data(std::string fname, std::vector<int32_t>& input, std::vector<int32_t>& output);
 
+template <typename T, typename U>
+void load_test_data(std::string fname, std::vector<T>& input, std::vector<std::vector<U>>& output) {
+    auto fin = std::ifstream(fname, std::ios::binary);
+    if (!fin) {
+        fprintf(stderr, "%s: failed to open '%s'\n", __func__, fname.c_str());
+        throw;
+    }
+
+    // input
+    {
+        int32_t n_dims;
+        read_safe(fin, n_dims);
+
+        int32_t nelements = 1;
+        int32_t ne[3] = { 1, 1, 1 };
+        for (int i = 0; i < n_dims; i++) {
+            read_safe(fin, ne[i]);
+            nelements *= ne[i];
+        }
+
+        input.resize(nelements);
+        fin.read(reinterpret_cast<char *>(input.data()), nelements*sizeof(T));
+    }
+
+    // output
+    {
+        int32_t n_dims;
+        read_safe(fin, n_dims);
+
+        int32_t ne[2] = { 1, 1 };
+        for (int i = 0; i < n_dims; i++) { read_safe(fin, ne[n_dims-1-i]); }
+
+        for (int i = 0; i < ne[0]; i++) {
+            std::vector<U> _tmp(ne[1]);
+            fin.read(reinterpret_cast<char *>(_tmp.data()), ne[1]*sizeof(U));
+            output.push_back(_tmp);
+        }
+    }
+
+    assert(fin.eof());
+}
+
+template void load_test_data(std::string fname, std::vector<int32_t>& input, std::vector<std::vector<int32_t>>& output);
+
 void load_nested_test_data(
         std::string fname,
         std::vector<std::vector<int>>& input,

@@ -19,6 +19,9 @@ bool run_test_on_codes(bark_codes truth, bark_codes result);
 template <typename T, typename U>
 void load_test_data(std::string fname, std::vector<T>& input, std::vector<U>& output);
 
+template <typename T, typename U>
+void load_test_data(std::string fname, std::vector<T>& input, std::vector<std::vector<U>>& output);
+
 void load_nested_test_data(
         std::string fname,
         std::vector<std::vector<int>>& input,

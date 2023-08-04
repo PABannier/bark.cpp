@@ -5,11 +5,6 @@ build/
 bark
 encodec
 main
-tests/test-tokenizer
-tests/test-text-encoder
-tests/test-coarse-encoder
-tests/test-fine-encoder
-tests/test-forward-semantic
 
 *.o
 *.plist
@@ -17,3 +12,12 @@ tests/test-forward-semantic
 .DS_Store
 
 !ggml_weights/ggml_vocab.bin
+
+tests/test-text-encoder
+tests/test-coarse-encoder
+tests/test-fine-encoder
+
+tests/test-forward-coarse
+tests/test-forward-semantic
+
+tests/test-tokenizer

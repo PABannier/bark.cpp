@@ -46,6 +46,7 @@ int main(int argc, char** argv) {
         std::string path = test_data[i];
 
         load_test_data(path, input, truth);
+
         bark_codes output = bark_forward_coarse_encoder(
             input, model, rng, n_threads, 0.0f, max_coarse_history, sliding_window_size);
 
