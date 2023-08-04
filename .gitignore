@@ -9,6 +9,7 @@ tests/test-tokenizer
 tests/test-text-encoder
 tests/test-coarse-encoder
 tests/test-fine-encoder
+tests/test-forward-semantic
 
 *.o
 *.plist
