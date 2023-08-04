@@ -327,3 +327,6 @@ tests/test-coarse-encoder: tests/test-coarse-encoder.cpp ggml.o bark.o encodec.o
 
 tests/test-fine-encoder: tests/test-fine-encoder.cpp ggml.o bark.o encodec.o common.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
+
+tests/test-forward-semantic: tests/test-forward-semantic.cpp ggml.o bark.o encodec.o common.o $(OBJS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
