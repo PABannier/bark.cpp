@@ -32,9 +32,6 @@ int main(int argc, char** argv) {
 
     bool success = true;
 
-    size_t mem_per_token = 0;
-    logit_sequence logits;
-
     printf("%s: reading bark text model\n", __func__);
     if(!gpt_model_load(fname, model)) {
         fprintf(stderr, "%s: invalid model file '%s'\n", __func__, fname.c_str());
@@ -46,17 +43,15 @@ int main(int argc, char** argv) {
         std::string path = test_data[i];
 
         load_test_data(path, input, truth);
-        bark_forward_text_encoder(input, model, rng, n_threads, 0.0f, min_eos_p);
+        bark_sequence output = bark_forward_text_encoder(input, model, rng, n_threads, 0.0f, min_eos_p);
 
         fprintf(stderr, "%s", path.c_str());
-        if (!run_test_on_sequence(truth, logits)) {
+        if (!run_test_on_sequence(truth, output)) {
             success = false;
             fprintf(stderr, "   TEST %d FAILED.\n", i+1);
         } else {
             fprintf(stderr, "   TEST %d PASSED.\n", i+1);
         }
-
-        logits.clear();
     }
 
     if (success)

@@ -10,14 +10,13 @@
 typedef std::vector<float> logit_sequence;
 typedef std::vector<std::vector<float>> logit_matrix;
 
-bool run_test_on_sequence(logit_sequence truth, logit_sequence logits);
+template <typename T, typename U>
+bool run_test_on_sequence(std::vector<T> truth, std::vector<U> logits);
 
 bool run_test_on_codes(logit_matrix truth, logit_matrix logits);
 
-void load_test_data(
-        std::string fname,
-        std::vector<int>& input,
-        logit_sequence& logits);
+template <typename T, typename U>
+void load_test_data(std::string fname, std::vector<T>& input, std::vector<U>& output);
 
 void load_nested_test_data(
         std::string fname,
