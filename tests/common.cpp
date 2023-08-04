@@ -50,6 +50,23 @@ inline bool all_close_nested(
     return *n_violations == 0;
 }
 
+template <typename T, typename U>
+inline bool all_equal_nested(
+    std::vector<std::vector<T>> s1, std::vector<std::vector<U>> s2,
+    int * n_violations) {
+    if (s1.size() != s2.size()) { return false; }
+    for (int i = 0; i < (int) s1.size(); i++) {
+        if (s1[i].size() != s2[i].size()) { return false; }
+        for (int j = 0; j < (int) s1[i].size(); j++) {
+            if (s1[i][j] != s2[i][j])
+                *n_violations += 1;
+        }
+    }
+    return *n_violations == 0;
+}
+
+template bool all_equal_nested(std::vector<std::vector<int>>, std::vector<std::vector<int>>, int * n_violations);
+
 bool run_test_on_sequence(std::vector<float> truth, std::vector<float> result) {
     float max_violation = 0.0f;
     int n_violations = 0;
@@ -91,6 +108,22 @@ bool run_test_on_codes(logit_matrix truth, logit_matrix result) {
             fprintf(stderr, "%s : wrong shape (%zu != %zu).\n", __func__, truth.size(), result.size());
         } else {
             fprintf(stderr, "       abs_tol=%.4f, rel_tol=%.4f, abs max viol=%.4f, viol=%.1f%%", ABS_TOL, REL_TOL, max_violation, (float)n_violations/(truth.size()*truth[0].size())*100);
+            fprintf(stderr, "\n");
+        }
+        return false;
+    }
+    return true;
+}
+
+bool run_test_on_codes(bark_codes truth, bark_codes result) {
+    int n_violations = 0;
+    if (!all_equal_nested(result, truth, &n_violations)) {
+        fprintf(stderr, "\n");
+        fprintf(stderr, "%s : failed test\n", __func__);
+        if (n_violations == 0) {
+            fprintf(stderr, "%s : wrong shape (%zu != %zu).\n", __func__, truth.size(), result.size());
+        } else {
+            fprintf(stderr, "       viol=%.1f%%", (float)n_violations/(truth.size()*truth[0].size())*100);
             fprintf(stderr, "\n");
         }
         return false;

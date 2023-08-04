@@ -13,7 +13,8 @@ typedef std::vector<std::vector<float>> logit_matrix;
 bool run_test_on_sequence(std::vector<int> truth, std::vector<int> result);
 bool run_test_on_sequence(std::vector<float> truth, std::vector<float> result);
 
-bool run_test_on_codes(logit_matrix truth, logit_matrix logits);
+bool run_test_on_codes(logit_matrix truth, logit_matrix result);
+bool run_test_on_codes(bark_codes truth, bark_codes result);
 
 template <typename T, typename U>
 void load_test_data(std::string fname, std::vector<T>& input, std::vector<U>& output);
