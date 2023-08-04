@@ -6,6 +6,19 @@
 #include "common.h"
 
 template <typename T, typename U>
+inline bool all_equal(std::vector<T> s1, std::vector<U> s2, int * n_violations) {
+    if (s1.size() != s2.size()) { return false; }
+    for (int i = 0; i < (int) s1.size(); i++) {
+        if (s1[i] != s2[i])
+            *n_violations += 1;
+    }
+    return *n_violations == 0;
+}
+
+template bool all_equal(std::vector<int> s1, std::vector<int> s2, int * n_violations);
+template bool all_equal(std::vector<float> s1, std::vector<float> s2, int * n_violations);
+
+template <typename T, typename U>
 inline bool all_close(
     std::vector<T> s1, std::vector<U> s2, float * max_violation, int * n_violations) {
     if (s1.size() != s2.size()) { return false; }
@@ -37,8 +50,7 @@ inline bool all_close_nested(
     return *n_violations == 0;
 }
 
-template <typename T, typename U>
-bool run_test_on_sequence(std::vector<T> truth, std::vector<U> result) {
+bool run_test_on_sequence(std::vector<float> truth, std::vector<float> result) {
     float max_violation = 0.0f;
     int n_violations = 0;
     if (!all_close(result, truth, &max_violation, &n_violations)) {
@@ -54,8 +66,20 @@ bool run_test_on_sequence(std::vector<T> truth, std::vector<U> result) {
     return true;
 }
 
-template bool run_test_on_sequence(std::vector<int> truth, std::vector<int> result);
-template bool run_test_on_sequence(std::vector<float> truth, std::vector<float> result);
+bool run_test_on_sequence(std::vector<int> truth, std::vector<int> result) {
+    int n_violations = 0;
+    if (!all_equal(result, truth, &n_violations)) {
+        if (n_violations == 0) {
+            fprintf(stderr, "%s : wrong shape (%zu != %zu).\n", __func__, truth.size(), result.size());
+        } else {
+            fprintf(stderr, "\n");
+            fprintf(stderr, "       viol=%.1f%%", (float)n_violations/truth.size()*100);
+            fprintf(stderr, "\n");
+        }
+        return false;
+    }
+    return true;
+}
 
 bool run_test_on_codes(logit_matrix truth, logit_matrix result) {
     float max_violation = 0.0f;
@@ -118,7 +142,7 @@ void load_test_data(std::string fname, std::vector<T>& input, std::vector<U>& ou
 }
 
 template void load_test_data(std::string fname, std::vector<int>& input, std::vector<float>& output);
-template void load_test_data(std::string fname, std::vector<int>& input, std::vector<int>  & output);
+template void load_test_data(std::string fname, std::vector<int32_t>& input, std::vector<int32_t>& output);
 
 void load_nested_test_data(
         std::string fname,

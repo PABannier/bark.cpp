@@ -13,8 +13,8 @@ purposes to remove the stochasticity from sampling.
 #include "common.h"
 
 static const std::vector<std::string> test_data = {
-    "",
-    ""
+    "./data/semantic/test_pass_semantic_1.bin",
+    "./data/semantic/test_pass_semantic_2.bin",
 };
 
 int main(int argc, char** argv) {
@@ -39,7 +39,7 @@ int main(int argc, char** argv) {
     }
 
     for (int i = 0; i < (int) test_data.size(); i++) {
-        bark_sequence input, truth;
+        std::vector<int32_t> input, truth;
         std::string path = test_data[i];
 
         load_test_data(path, input, truth);

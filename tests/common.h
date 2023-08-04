@@ -10,8 +10,8 @@
 typedef std::vector<float> logit_sequence;
 typedef std::vector<std::vector<float>> logit_matrix;
 
-template <typename T, typename U>
-bool run_test_on_sequence(std::vector<T> truth, std::vector<U> logits);
+bool run_test_on_sequence(std::vector<int> truth, std::vector<int> result);
+bool run_test_on_sequence(std::vector<float> truth, std::vector<float> result);
 
 bool run_test_on_codes(logit_matrix truth, logit_matrix logits);
 
