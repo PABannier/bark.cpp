@@ -29,6 +29,20 @@ https://github.com/skeskinen/bert.cpp/
 #include <regex>
 #include <string>
 
+struct bark_context {
+    bark_context(const bark_model & model) : model(model) {}
+
+    std::mt19937 rng;
+
+    int64_t t_sample_us = 0;
+    int64_t t_eval_us   = 0;
+
+    const bark_model & model;
+
+    int64_t t_load_us   = 0;
+    int64_t t_start_us  = 0;
+};
+
 bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expected_size) {
     auto fin = std::ifstream(fname, std::ios::binary);
     if (!fin) {

@@ -24,6 +24,20 @@
 #define COARSE_SEMANTIC_PAD_TOKEN 12048
 #define COARSE_INFER_TOKEN 12050
 
+struct bark_context;
+
+struct bark_context_params {
+    uint32_t seed;         // RNG seed, -1 for random
+
+    float temp;
+    float temp_fine;
+
+    float min_eos_p;
+
+    int sliding_window_size;
+    int max_coarse_history;
+};
+
 struct gpt_hparams {
     int32_t n_in_vocab;
     int32_t n_out_vocab;
@@ -81,9 +95,7 @@ struct gpt_model {
     struct ggml_tensor * ln_f_g;
     struct ggml_tensor * ln_f_b;
 
-    struct ggml_tensor * wpe;     //     token embedding
-    // struct ggml_tensor * wte;     //  position embedding
-    // struct ggml_tensor * lm_head; // language model head
+    struct ggml_tensor * wpe;
 
     std::vector<struct ggml_tensor *> wtes;
     std::vector<struct ggml_tensor *> lm_heads;
