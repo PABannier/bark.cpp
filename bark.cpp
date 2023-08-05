@@ -526,9 +526,8 @@ bool fine_gpt_eval(
               std::vector<std::vector<float>>          & logits,
               size_t                                   & mem_per_token) {
     // embd_inp: (n_channels, seq_length)
-    const int n_past = 0;
+    const int N  = embd_inp[0].size();
     const int n_codes = embd_inp.size();
-    const int N = embd_inp[0].size();
 
     const auto & hparams = model.hparams;
 
@@ -539,6 +538,9 @@ bool fine_gpt_eval(
     const int n_vocab = hparams.n_out_vocab;
 
     const int n_codes_given = hparams.n_codes_given;
+
+    BARK_ASSERT(N <= n_ctx);
+    BARK_ASSERT(codebook_ix > 0);
 
     static size_t buf_size = 256u*1024*1024;
     static void * buf = malloc(buf_size);
@@ -571,34 +573,33 @@ bool fine_gpt_eval(
         memcpy((void *) ((char *) input->data + offset), embd_inp[c].data(), N*ggml_element_size(input));
     }
 
-    struct ggml_tensor * embd = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd, N, codebook_ix+1);
-    struct ggml_tensor * curr;
+    struct ggml_tensor * tok_emb = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd, N, codebook_ix+1);
 
     for (int wte_ix = 0; wte_ix < codebook_ix+1; wte_ix++) {
-        curr = ggml_get_rows(ctx0,
-                    model.wtes[wte_ix],
-                    ggml_view_1d(ctx0, input, N, N*wte_ix*ggml_element_size(input)));
+        struct ggml_tensor * curr = ggml_get_rows(ctx0,
+                                            model.wtes[wte_ix],
+                                            ggml_view_1d(ctx0, input, N, N*wte_ix*ggml_element_size(input)));
 
-        embd = ggml_set_2d(ctx0, embd, curr,
-                    ggml_element_size(curr)*n_embd,
-                    ggml_element_size(curr)*wte_ix*N*n_embd);
+        tok_emb = ggml_set_2d(ctx0, tok_emb, curr,
+                        ggml_element_size(curr)*n_embd,
+                        ggml_element_size(curr)*wte_ix*N*n_embd);
     }
 
     // [n_embd, N, codebook_ix+1] -> [codebook_ix+1, n_embd, N]
-    embd = ggml_cont(ctx0, ggml_permute(ctx0, embd, 1, 2, 0, 3));
+    tok_emb = ggml_cont(ctx0, ggml_permute(ctx0, tok_emb, 1, 2, 0, 3));
     // // [1, n_embd, N]
-    embd = ggml_sum_rows(ctx0, embd);
+    tok_emb = ggml_sum_rows(ctx0, tok_emb);
     // [N, n_embd]
-    embd = ggml_cont(ctx0, ggml_permute(ctx0, embd, 2, 0, 1, 3));
+    tok_emb = ggml_cont(ctx0, ggml_permute(ctx0, tok_emb, 2, 0, 1, 3));
 
     struct ggml_tensor * position = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
     for (int i = 0; i < N; ++i) {
         ((int32_t *) position->data)[i] = i;
     }
-    struct ggml_tensor * pos_embd = ggml_get_rows(ctx0, model.wpe, position);
+    struct ggml_tensor * pos_emb = ggml_get_rows(ctx0, model.wpe, position);
 
     // wte + wpe
-    struct ggml_tensor * inpL = ggml_add(ctx0, embd, pos_embd);
+    struct ggml_tensor * inpL = ggml_add(ctx0, tok_emb, pos_emb);
 
     for (int il = 0; il < n_layer; ++il) {
         struct ggml_tensor * cur;
@@ -635,20 +636,11 @@ bool fine_gpt_eval(
                     cur);
         }
 
-        // self-attention
+        // self-attention (no causal attention for fine model)
         {
             struct ggml_tensor * Qcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 0*sizeof(float)*n_embd);
             struct ggml_tensor * Kcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 1*sizeof(float)*n_embd);
             struct ggml_tensor * Vcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 2*sizeof(float)*n_embd);
-
-            // store key and value to memory
-            if (N >= 1) {
-                struct ggml_tensor * k = ggml_view_1d(ctx0, model.memory_k, N*n_embd, (ggml_element_size(model.memory_k)*n_embd)*(il*n_ctx + n_past));
-                struct ggml_tensor * v = ggml_view_1d(ctx0, model.memory_v, N*n_embd, (ggml_element_size(model.memory_v)*n_embd)*(il*n_ctx + n_past));
-
-                ggml_build_forward_expand(&gf, ggml_cpy(ctx0, Kcur, k));
-                ggml_build_forward_expand(&gf, ggml_cpy(ctx0, Vcur, v));
-            }
 
             // Q = Qcur.contiguous().view(n_embd/n_head, n_head, N).permute(0, 2, 1, 3)
             // [64, N, 12]
@@ -659,26 +651,23 @@ bool fine_gpt_eval(
                             ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
                         0, 2, 1, 3);
 
-            // K = Kmem.view(n_embd/n_head, n_head, n_past + N).permute(0, 2, 1, 3)
-            // [64, n_past + N, 12]
+            // K = Kcur.contiguous().view(n_embd/n_head, n_head, N).permute(0, 2, 1, 3)
+            // [64, N, 12]
             struct ggml_tensor * K =
                 ggml_permute(ctx0,
-                        ggml_reshape_3d(ctx0,
-                            ggml_view_1d(ctx0, model.memory_k, (n_past + N)*n_embd, il*n_ctx*ggml_element_size(model.memory_k)*n_embd),
-                            n_embd/n_head, n_head, n_past + N),
+                        ggml_cpy(ctx0,
+                            Kcur,
+                            ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
                         0, 2, 1, 3);
 
-            // GG: flash attention
-            //struct ggml_tensor * V =
-            //    ggml_cpy(ctx0,
-            //            ggml_permute(ctx0,
-            //                ggml_reshape_3d(ctx0,
-            //                    ggml_view_1d(ctx0, model.memory_v, (n_past + N)*n_embd, il*n_ctx*ggml_element_size(model.memory_v)*n_embd),
-            //                    n_embd/n_head, n_head, n_past + N),
-            //                1, 2, 0, 3),
-            //            ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_past + N, n_embd/n_head, n_head));
-
-            //struct ggml_tensor * KQV = ggml_flash_attn(ctx0, Q, K, V, true);
+            // V = Vcur.contiguous().view(n_embd/n_head, n_head, N).permute(1, 2, 0, 3)
+            // [64, N, 12]
+            struct ggml_tensor * V =
+                ggml_cont(ctx0, ggml_permute(ctx0,
+                        ggml_cpy(ctx0,
+                            Vcur,
+                            ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
+                        1, 2, 0, 3));
 
             // K * Q
             // [n_past + N, N, 12]
@@ -692,28 +681,13 @@ bool fine_gpt_eval(
                         ggml_new_f32(ctx0, 1.0f/sqrt(float(n_embd)/n_head))
                         );
 
-            // KQ_masked = mask_past(KQ_scaled)
-            // [n_past + N, N, 12]
-            struct ggml_tensor * KQ_masked = ggml_diag_mask_inf_inplace(ctx0, KQ_scaled, n_past);
-
             // KQ = soft_max(KQ_masked)
             // [n_past + N, N, 12]
-            struct ggml_tensor * KQ_soft_max = ggml_soft_max_inplace(ctx0, KQ_masked);
-
-            // V_trans = Vmem.view(n_embd/n_head, n_head, n_past + N).permute(1, 2, 0, 3).contiguous()
-            // [n_past + N, 64, 12]
-            struct ggml_tensor * V_trans =
-                ggml_cpy(ctx0,
-                        ggml_permute(ctx0,
-                            ggml_reshape_3d(ctx0,
-                                ggml_view_1d(ctx0, model.memory_v, (n_past + N)*n_embd, il*n_ctx*ggml_element_size(model.memory_v)*n_embd),
-                                n_embd/n_head, n_head, n_past + N),
-                            1, 2, 0, 3),
-                        ggml_new_tensor_3d(ctx0, model.memory_v->type, n_past + N, n_embd/n_head, n_head));
+            struct ggml_tensor * KQ_soft_max = ggml_soft_max_inplace(ctx0, KQ_scaled);
 
             // KQV = transpose(V) * KQ_soft_max
             // [64, N, 12]
-            struct ggml_tensor * KQV = ggml_mul_mat(ctx0, V_trans, KQ_soft_max);
+            struct ggml_tensor * KQV = ggml_mul_mat(ctx0, V, KQ_soft_max);
 
             // KQV_merged = KQV.permute(0, 2, 1, 3)
             // [64, 12, N]
@@ -820,12 +794,9 @@ bool fine_gpt_eval(
     }
 
     // inpL = WTE * inpL
-    // [ 1024, 1056] - model.lm_head
-    // [ 1024, N]     - inpL
     inpL = ggml_mul_mat(ctx0, model.lm_heads[codebook_ix - n_codes_given], inpL);
 
     // run the computation
-    // ggml_build_forward_expand(&gf, toy);
     ggml_build_forward_expand(&gf, inpL);
     ggml_graph_compute       (ctx0, &gf);
 
@@ -1488,13 +1459,13 @@ bark_codes bark_forward_fine_encoder(
     int n_remove_from_end = 0;
 
     // channel padding
-    for(int i = N_COARSE_CODEBOOKS; i < N_FINE_CODEBOOKS; i++) {
+    for (int i = N_COARSE_CODEBOOKS; i < N_FINE_CODEBOOKS; i++) {
         bark_sequence tmp(original_seq_len, CODEBOOK_SIZE);
         input.push_back(tmp);
     }
 
     // spatial padding if sequence is too short
-    if(original_seq_len < 1024) {
+    if (original_seq_len < 1024) {
         n_remove_from_end = 1024 - original_seq_len;
         for (int i = 0; i < (int) input.size(); i++) {
             for (int j = original_seq_len; j < 1024; j++) {

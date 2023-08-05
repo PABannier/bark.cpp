@@ -236,8 +236,8 @@ void load_nested_test_data(
         int32_t n_dims;
         read_safe(fin, n_dims);
 
-        int32_t ne[3] = { 1, 1, 1 };
-        for (int i = 0; i < n_dims; i++) { read_safe(fin, ne[i]); }
+        int32_t ne[2] = { 1, 1 };
+        for (int i = 0; i < n_dims; i++) { read_safe(fin, ne[n_dims-i-1]); }
 
         for (int i = 0; i < ne[0]; i++) {
             std::vector<int> _tmp(ne[1]);
@@ -246,13 +246,13 @@ void load_nested_test_data(
         }
     }
 
-    // logits
+    // output
     {
         int32_t n_dims;
         read_safe(fin, n_dims);
 
         int32_t ne[3] = { 1, 1, 1 };
-        for (int i = 0; i < n_dims; i++) { read_safe(fin, ne[i]); }
+        for (int i = 0; i < n_dims; i++) { read_safe(fin, ne[n_dims-i-1]); }
 
         for (int i = 0; i < ne[0]; i++) {
             std::vector<float> _tmp(ne[1]);
