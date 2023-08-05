@@ -526,8 +526,6 @@ bool fine_gpt_eval(
               std::vector<std::vector<float>>          & logits,
               size_t                                   & mem_per_token) {
     // embd_inp: (n_channels, seq_length)
-    const int n_past = 0;
-
     const int N  = embd_inp[0].size();
     const int n_codes = embd_inp.size();
 
@@ -568,8 +566,6 @@ bool fine_gpt_eval(
     struct ggml_context * ctx0 = ggml_init(params);
     struct ggml_cgraph gf = {};
     gf.n_threads = n_threads;
-
-    struct ggml_tensor * toy;
 
     struct ggml_tensor * input = ggml_new_tensor_2d(ctx0, GGML_TYPE_I32, N, n_codes);
     for (int c = 0; c < n_codes; c++) {
