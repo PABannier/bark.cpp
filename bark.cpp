@@ -525,10 +525,22 @@ bool fine_gpt_eval(
         const bark_codes & embd_inp,
               std::vector<std::vector<float>>          & logits,
               size_t                                   & mem_per_token) {
-    // embd_inp: (n_channels, seq_length)
+    // embd_inp: (seq_length, n_channels)
     const int n_past = 0;
+    // const int N = embd_inp.size();
+    // const int n_codes = embd_inp[0].size();
+    const int N  = embd_inp[0].size();
     const int n_codes = embd_inp.size();
-    const int N = embd_inp[0].size();
+
+    // fprintf(stderr, "input shape: [%zu, %zu]\n", embd_inp.size(), embd_inp[0].size());
+    // if (embd_inp.size() == 1024) {
+    //     for (int i = 0; i < 10; i++) {
+    //         for (int j = 0; j < 8; j++) {
+    //             fprintf(stderr, "%d ", embd_inp[i][j]);
+    //         }
+    //         fprintf(stderr, "\n");
+    //     }
+    // }
 
     const auto & hparams = model.hparams;
 
@@ -539,6 +551,9 @@ bool fine_gpt_eval(
     const int n_vocab = hparams.n_out_vocab;
 
     const int n_codes_given = hparams.n_codes_given;
+
+    BARK_ASSERT(N <= n_ctx);
+    BARK_ASSERT(codebook_ix > 0);
 
     static size_t buf_size = 256u*1024*1024;
     static void * buf = malloc(buf_size);
@@ -565,40 +580,41 @@ bool fine_gpt_eval(
     struct ggml_cgraph gf = {};
     gf.n_threads = n_threads;
 
+    struct ggml_tensor * toy;
+
     struct ggml_tensor * input = ggml_new_tensor_2d(ctx0, GGML_TYPE_I32, N, n_codes);
     for (int c = 0; c < n_codes; c++) {
         int offset = ggml_element_size(input)*c*N;
         memcpy((void *) ((char *) input->data + offset), embd_inp[c].data(), N*ggml_element_size(input));
     }
 
-    struct ggml_tensor * embd = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd, N, codebook_ix+1);
-    struct ggml_tensor * curr;
+    struct ggml_tensor * tok_emb = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd, N, codebook_ix+1);
 
     for (int wte_ix = 0; wte_ix < codebook_ix+1; wte_ix++) {
-        curr = ggml_get_rows(ctx0,
-                    model.wtes[wte_ix],
-                    ggml_view_1d(ctx0, input, N, N*wte_ix*ggml_element_size(input)));
+        struct ggml_tensor * curr = ggml_get_rows(ctx0,
+                                            model.wtes[wte_ix],
+                                            ggml_view_1d(ctx0, input, N, N*wte_ix*ggml_element_size(input)));
 
-        embd = ggml_set_2d(ctx0, embd, curr,
-                    ggml_element_size(curr)*n_embd,
-                    ggml_element_size(curr)*wte_ix*N*n_embd);
+        tok_emb = ggml_set_2d(ctx0, tok_emb, curr,
+                        ggml_element_size(curr)*n_embd,
+                        ggml_element_size(curr)*wte_ix*N*n_embd);
     }
 
     // [n_embd, N, codebook_ix+1] -> [codebook_ix+1, n_embd, N]
-    embd = ggml_cont(ctx0, ggml_permute(ctx0, embd, 1, 2, 0, 3));
+    tok_emb = ggml_cont(ctx0, ggml_permute(ctx0, tok_emb, 1, 2, 0, 3));
     // // [1, n_embd, N]
-    embd = ggml_sum_rows(ctx0, embd);
+    tok_emb = ggml_sum_rows(ctx0, tok_emb);
     // [N, n_embd]
-    embd = ggml_cont(ctx0, ggml_permute(ctx0, embd, 2, 0, 1, 3));
+    tok_emb = ggml_cont(ctx0, ggml_permute(ctx0, tok_emb, 2, 0, 1, 3));
 
     struct ggml_tensor * position = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
     for (int i = 0; i < N; ++i) {
         ((int32_t *) position->data)[i] = i;
     }
-    struct ggml_tensor * pos_embd = ggml_get_rows(ctx0, model.wpe, position);
+    struct ggml_tensor * pos_emb = ggml_get_rows(ctx0, model.wpe, position);
 
     // wte + wpe
-    struct ggml_tensor * inpL = ggml_add(ctx0, embd, pos_embd);
+    struct ggml_tensor * inpL = ggml_add(ctx0, tok_emb, pos_emb);
 
     for (int il = 0; il < n_layer; ++il) {
         struct ggml_tensor * cur;
@@ -819,15 +835,33 @@ bool fine_gpt_eval(
                 ggml_repeat(ctx0, model.ln_f_b, inpL));
     }
 
+    toy = inpL;
+
     // inpL = WTE * inpL
     // [ 1024, 1056] - model.lm_head
     // [ 1024, N]     - inpL
     inpL = ggml_mul_mat(ctx0, model.lm_heads[codebook_ix - n_codes_given], inpL);
 
     // run the computation
-    // ggml_build_forward_expand(&gf, toy);
-    ggml_build_forward_expand(&gf, inpL);
+    ggml_build_forward_expand(&gf, toy);
+    // ggml_build_forward_expand(&gf, inpL);
     ggml_graph_compute       (ctx0, &gf);
+
+    if (toy) {
+        for (int j = 0; j < toy->ne[0]; j++) {
+            for (int k = 0; k < toy->ne[1]; k++) {
+                // for (int i = 0; i < toy->ne[2]; i++) {
+                    // float * v = (float*) ((char*)toy->data + k*toy->nb[0] + j*toy->nb[1] + i*toy->nb[2]);
+                    float * v = (float*) ((char*)toy->data + k*toy->nb[0] + j*toy->nb[1]);
+                    printf("%.4f ", *v);
+                    // int * v = (int *) ((char*) toy->data + k*toy->nb[1] + j*toy->nb[0] + i*toy->nb[2]);
+                    // printf("%d ", *v);
+                // }
+                // printf("\n");
+            }
+            printf("\n");
+        }
+    }
 
     // [1056, 1024]
     logits.resize(N);
@@ -1488,13 +1522,13 @@ bark_codes bark_forward_fine_encoder(
     int n_remove_from_end = 0;
 
     // channel padding
-    for(int i = N_COARSE_CODEBOOKS; i < N_FINE_CODEBOOKS; i++) {
+    for (int i = N_COARSE_CODEBOOKS; i < N_FINE_CODEBOOKS; i++) {
         bark_sequence tmp(original_seq_len, CODEBOOK_SIZE);
         input.push_back(tmp);
     }
 
     // spatial padding if sequence is too short
-    if(original_seq_len < 1024) {
+    if (original_seq_len < 1024) {
         n_remove_from_end = 1024 - original_seq_len;
         for (int i = 0; i < (int) input.size(); i++) {
             for (int j = original_seq_len; j < 1024; j++) {
