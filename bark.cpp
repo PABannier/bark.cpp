@@ -1475,7 +1475,7 @@ bark_codes bark_forward_fine_encoder(
     }
 
     // dry run to estimate mem_per_token
-    fine_gpt_eval(model, n_threads, n_coarse, { {0, 1}, {1, 2}, {2, 3}, {3, 4}, {4, 5}, {5, 6}, {6, 7}, {7, 8} }, logits, mem_per_token);
+    fine_gpt_eval(model, n_threads, 2, { {0, 1}, {1, 2}, {2, 3}, {3, 4}, {4, 5}, {5, 6}, {6, 7}, {7, 8} }, logits, mem_per_token);
 
     int n_loops = std::max(0, (int) ceilf((input[0].size() - 1024)/512.f)) + 1;
 
@@ -1530,7 +1530,7 @@ bark_codes bark_forward_fine_encoder(
 
     const int64_t t_main_end_us = ggml_time_us();
 
-    printf("\n\n");
+    printf("\n");
     printf("%s: mem per token = %8.2f MB\n", __func__, mem_per_token/1000.0f/1000.0f);
     printf("%s:   sample time = %8.2f ms\n", __func__, t_sample_us/1000.0f);
     printf("%s:  predict time = %8.2f ms\n", __func__, t_predict_us/1000.0f);
