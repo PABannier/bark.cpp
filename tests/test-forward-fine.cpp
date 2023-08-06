@@ -47,7 +47,7 @@ int main(int argc, char** argv) {
         bark_codes output_t = transpose(output);
 
         fprintf(stderr, " input = [%zu, %zu]\n", input_t.size(), input_t[0].size());
-        fprintf(stderr, "output = [%zu, %zu]\n",  output.size(),  output[0].size());
+        fprintf(stderr, "output = [%zu, %zu]\n", output_t.size(),  output_t[0].size());
         fprintf(stderr, " truth = [%zu, %zu]\n",   truth.size(),   truth[0].size());
 
         fprintf(stderr, "%s", path.c_str());
