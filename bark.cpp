@@ -1504,8 +1504,6 @@ bark_codes bark_forward_fine_encoder(
             fine_gpt_eval(model, n_threads, nn, in_buffer, logits, mem_per_token);
             t_predict_us += (ggml_time_us() - t_predict_start_us);
 
-            bark_sequence predictions(CODEBOOK_SIZE - rel_start_fill_ix);
-
             for (int i = 0; i < (int) logits.size(); i++) {
                 logits[i].resize(CODEBOOK_SIZE);
 
@@ -1522,7 +1520,7 @@ bark_codes bark_forward_fine_encoder(
         // transfer over info into model_in
         for (int nn = n_coarse; nn < N_FINE_CODEBOOKS; nn++) {
             for (int j = 0; j < CODEBOOK_SIZE - rel_start_fill_ix; j++) {
-                in_arr[nn][start_fill_ix+j] = in_buffer[nn][rel_start_fill_ix+j];
+                in_arr[start_fill_ix+j][nn] = in_buffer[nn][rel_start_fill_ix+j];
             }
         }
 
