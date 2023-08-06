@@ -1530,14 +1530,13 @@ bark_codes bark_forward_fine_encoder(
 
     if (n_remove_from_end > 0) {
         in_arr.resize(in_arr.size() - n_remove_from_end);
-        fprintf(stderr, "[%zu, %zu], %d\n", in_arr.size(), in_arr[0].size(), n_remove_from_end);
     }
 
     BARK_ASSERT(tokens.size() == in_arr.size());
 
     const int64_t t_main_end_us = ggml_time_us();
 
-    printf("\n");
+    printf("\n\n");
     printf("%s: mem per token = %8.2f MB\n", __func__, mem_per_token/1000.0f/1000.0f);
     printf("%s:   sample time = %8.2f ms\n", __func__, t_sample_us/1000.0f);
     printf("%s:  predict time = %8.2f ms\n", __func__, t_predict_us/1000.0f);
