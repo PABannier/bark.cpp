@@ -1475,51 +1475,28 @@ bark_codes bark_forward_fine_encoder(
         }
     }
 
-    // // channel padding
-    // for (int i = N_COARSE_CODEBOOKS; i < N_FINE_CODEBOOKS; i++) {
-    //     bark_sequence tmp(original_seq_len, CODEBOOK_SIZE);
-    //     input.push_back(tmp);
-    // }
-
-    // // spatial padding if sequence is too short
-    // if (original_seq_len < 1024) {
-    //     n_remove_from_end = 1024 - original_seq_len;
-    //     for (int i = 0; i < (int) input.size(); i++) {
-    //         for (int j = original_seq_len; j < 1024; j++) {
-    //             input[i].push_back(CODEBOOK_SIZE);
-    //         }
-    //     }
-    // }
-
     // dry run to estimate mem_per_token
     bark_codes toy_codes = { {0, 1}, {1, 2}, {2, 3}, {3, 4}, {4, 5}, {5, 6}, {6, 7}, {7, 8} };
     fine_gpt_eval(model, n_threads, 2, toy_codes, logits, mem_per_token);
 
     int n_loops = std::max(0, (int) ceilf((input.size() - 1024)/512.f)) + 1;
 
+    // in_arr: [seq_length, n_codes]
     bark_codes in_arr = input;
-
-    fprintf(stderr, "n_loops=%d\n", n_loops);
-    fprintf(stderr, "n_coarse=%d\n", n_coarse);
-    fprintf(stderr, "remove_from_end=%d\n", n_remove_from_end);
 
     for (int n = 0; n < n_loops; n++) {
         int start_ix          = std::min(n * 512, (int) in_arr.size() - 1024);
         int start_fill_ix     = std::min(n * 512, (int) in_arr.size() - 512);
         int rel_start_fill_ix = start_fill_ix - start_ix;
 
-        fprintf(stderr, "start_ix=%d\n", start_ix);
-        fprintf(stderr, "start_fill_ix=%d\n", start_fill_ix);
-        fprintf(stderr, "rel_start_fill_ix=%d\n", rel_start_fill_ix);
-
-        // bark_codes in_buffer(in_arr.size());
-        // for (int ix = 0; ix < (int) in_buffer.size(); ix++) {
-        //     bark_sequence buf(in_arr[ix].begin() + start_ix, in_arr[ix].begin() + start_ix + 1024);
-        //     in_buffer[ix] = buf;
-        // }
+        // in_buffer: [n_codes, seq_length]
         bark_codes in_buffer;
-        for (int ix = start_ix; ix < start_ix + 1024; ix++) {
-            in_buffer.push_back(in_arr[ix]);
+        for (int i = 0; i < N_FINE_CODEBOOKS; i++) {
+            bark_sequence _buf;
+            for (int j = start_ix; j < start_ix + 1024; j++) {
+                _buf.push_back(in_arr[j][i]);
+            }
+            in_buffer.push_back(_buf);
         }
 
         for (int nn = n_coarse; nn < N_FINE_CODEBOOKS; nn++) {
@@ -1552,9 +1529,6 @@ bark_codes bark_forward_fine_encoder(
     }
 
     if (n_remove_from_end > 0) {
-        // for (int i = 0; i < (int) in_arr.size(); i++) {
-        //     in_arr[i].resize(in_arr[i].size() - n_remove_from_end);
-        // }
         in_arr.resize(in_arr.size() - n_remove_from_end);
         fprintf(stderr, "[%zu, %zu], %d\n", in_arr.size(), in_arr[0].size(), n_remove_from_end);
     }
