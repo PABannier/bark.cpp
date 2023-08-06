@@ -14,7 +14,7 @@ purposes to remove the stochasticity from sampling.
 
 static const std::vector<std::string> test_data = {
     "./data/fine/test_pass_fine_1.bin",
-    // "./data/semantic/test_pass_fine_2.bin",
+    "./data/fine/test_pass_fine_2.bin",
 };
 
 int main(int argc, char** argv) {
