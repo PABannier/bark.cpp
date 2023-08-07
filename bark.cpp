@@ -800,7 +800,8 @@ bool fine_gpt_eval(
     ggml_build_forward_expand(&gf, inpL);
     ggml_graph_compute       (ctx0, &gf);
 
-    // [1056, 1024]
+    // [seq_length, n_vocab]
+    // [1024, 1056]
     logits.resize(N);
 
     for (int i = 0; i < N; i++) {
@@ -1440,6 +1441,7 @@ bark_codes bark_forward_fine_encoder(
     std::mt19937 & rng,
     const int n_threads,
     const float temp) {
+    // input shape: (N, n_codes)
 
     bark_codes input = tokens;
     std::vector<std::vector<float>> logits;
@@ -1454,50 +1456,54 @@ bark_codes bark_forward_fine_encoder(
 
     const int64_t t_main_start_us = ggml_time_us();
 
-    int n_coarse          = input.size();
-    int original_seq_len  = input[0].size();
+    int n_coarse          = input[0].size();
+    int original_seq_len  = input.size();
     int n_remove_from_end = 0;
 
     // channel padding
-    for (int i = N_COARSE_CODEBOOKS; i < N_FINE_CODEBOOKS; i++) {
-        bark_sequence tmp(original_seq_len, CODEBOOK_SIZE);
-        input.push_back(tmp);
+    for (int i = 0; i < (int) input.size(); i++) {
+        for (int j = N_COARSE_CODEBOOKS; j < N_FINE_CODEBOOKS; j++) {
+            input[i].push_back(CODEBOOK_SIZE);
+        }
     }
 
     // spatial padding if sequence is too short
     if (original_seq_len < 1024) {
         n_remove_from_end = 1024 - original_seq_len;
-        for (int i = 0; i < (int) input.size(); i++) {
-            for (int j = original_seq_len; j < 1024; j++) {
-                input[i].push_back(CODEBOOK_SIZE);
-            }
+        for (int i = original_seq_len; i < 1024; i++) {
+            bark_sequence _tmp(N_FINE_CODEBOOKS, CODEBOOK_SIZE);
+            input.push_back(_tmp);
         }
     }
 
     // dry run to estimate mem_per_token
-    fine_gpt_eval(model, n_threads, n_coarse, { {0, 1}, {1, 2}, {2, 3}, {3, 4}, {4, 5}, {5, 6}, {6, 7}, {7, 8} }, logits, mem_per_token);
+    bark_codes toy_codes = { {0, 1}, {1, 2}, {2, 3}, {3, 4}, {4, 5}, {5, 6}, {6, 7}, {7, 8} };
+    fine_gpt_eval(model, n_threads, 2, toy_codes, logits, mem_per_token);
 
-    int n_loops = std::max(0, (int) ceilf((input[0].size() - 1024)/512.f)) + 1;
+    int n_loops = std::max(0, (int) ceilf((input.size() - 1024)/512.f)) + 1;
 
+    // in_arr: [seq_length, n_codes]
     bark_codes in_arr = input;
 
     for (int n = 0; n < n_loops; n++) {
-        int start_ix          = std::min(n * 512, (int) in_arr[0].size() - 1024);
-        int start_fill_ix     = std::min(n * 512, (int) in_arr[0].size() - 512);
+        int start_ix          = std::min(n * 512, (int) in_arr.size() - 1024);
+        int start_fill_ix     = std::min(n * 512, (int) in_arr.size() - 512);
         int rel_start_fill_ix = start_fill_ix - start_ix;
 
-        bark_codes in_buffer(in_arr.size());
-        for (int ix = 0; ix < (int) in_buffer.size(); ix++) {
-            bark_sequence buf(in_arr[ix].begin() + start_ix, in_arr[ix].begin() + start_ix + 1024);
-            in_buffer[ix] = buf;
+        // in_buffer: [n_codes, seq_length]
+        bark_codes in_buffer;
+        for (int i = 0; i < N_FINE_CODEBOOKS; i++) {
+            bark_sequence _buf;
+            for (int j = start_ix; j < start_ix + 1024; j++) {
+                _buf.push_back(in_arr[j][i]);
+            }
+            in_buffer.push_back(_buf);
         }
 
         for (int nn = n_coarse; nn < N_FINE_CODEBOOKS; nn++) {
             int64_t t_predict_start_us = ggml_time_us();
             fine_gpt_eval(model, n_threads, nn, in_buffer, logits, mem_per_token);
             t_predict_us += (ggml_time_us() - t_predict_start_us);
-
-            bark_sequence predictions(CODEBOOK_SIZE - rel_start_fill_ix);
 
             for (int i = 0; i < (int) logits.size(); i++) {
                 logits[i].resize(CODEBOOK_SIZE);
@@ -1515,18 +1521,17 @@ bark_codes bark_forward_fine_encoder(
         // transfer over info into model_in
         for (int nn = n_coarse; nn < N_FINE_CODEBOOKS; nn++) {
             for (int j = 0; j < CODEBOOK_SIZE - rel_start_fill_ix; j++) {
-                in_arr[nn][start_fill_ix+j] = in_buffer[nn][rel_start_fill_ix+j];
+                in_arr[start_fill_ix+j][nn] = in_buffer[nn][rel_start_fill_ix+j];
             }
         }
+
     }
 
     if (n_remove_from_end > 0) {
-        for (int i = 0; i < (int) in_arr.size(); i++) {
-            in_arr[i].resize(in_arr[i].size() - n_remove_from_end);
-        }
+        in_arr.resize(in_arr.size() - n_remove_from_end);
     }
 
-    BARK_ASSERT(tokens[0].size() == in_arr[0].size());
+    BARK_ASSERT(tokens.size() == in_arr.size());
 
     const int64_t t_main_end_us = ggml_time_us();
 
@@ -1549,7 +1554,7 @@ bool bark_generate_audio(
     const int seed  = 0;
 
     // const float top_p     = 0.2;
-    const float temp      = 1.0;
+    const float temp      = 0.7;
     const float fine_temp = 0.5;
 
     const int sliding_window_size = 60;
