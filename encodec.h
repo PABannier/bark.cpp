@@ -1,5 +1,5 @@
 /* This is a shortened version of the original Encodec.CPP here: https://github.com/PABannier/encodec.cpp.
-Since bark only uses the decoder, only the decoding forward pass is present in this file.
+Only the decoding quantizer and decoder part is implemented in this file.
 */
 #pragma once
 
@@ -12,6 +12,14 @@ Since bark only uses the decoder, only the decoding forward pass is present in t
 #include <thread>
 #include <string>
 #include <vector>
+
+#define ENCODEC_ASSERT(x) \
+    do { \
+        if (!(x)) { \
+            fprintf(stderr, "ENCODEC_ASSERT: %s:%d: %s\n", __FILE__, __LINE__, #x); \
+            abort(); \
+        } \
+    } while (0)
 
 struct encodec_hparams {
     int32_t in_channels          = 1;
