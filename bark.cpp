@@ -800,7 +800,8 @@ bool fine_gpt_eval(
     ggml_build_forward_expand(&gf, inpL);
     ggml_graph_compute       (ctx0, &gf);
 
-    // [1056, 1024]
+    // [seq_length, n_vocab]
+    // [1024, 1056]
     logits.resize(N);
 
     for (int i = 0; i < N; i++) {
@@ -1553,7 +1554,7 @@ bool bark_generate_audio(
     const int seed  = 0;
 
     // const float top_p     = 0.2;
-    const float temp      = 1.0;
+    const float temp      = 0.7;
     const float fine_temp = 0.5;
 
     const int sliding_window_size = 60;

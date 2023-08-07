@@ -46,10 +46,6 @@ int main(int argc, char** argv) {
         bark_codes output  = bark_forward_fine_encoder(input_t, model, rng, n_threads, 0.0f);
         bark_codes output_t = transpose(output);
 
-        fprintf(stderr, " input = [%zu, %zu]\n", input_t.size(), input_t[0].size());
-        fprintf(stderr, "output = [%zu, %zu]\n", output_t.size(),  output_t[0].size());
-        fprintf(stderr, " truth = [%zu, %zu]\n",   truth.size(),   truth[0].size());
-
         fprintf(stderr, "%s", path.c_str());
         if (!run_test_on_codes(truth, output_t)) {
             success = false;
