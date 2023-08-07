@@ -1577,10 +1577,26 @@ audio_arr_t bark_forward_encodec(
     struct ggml_tensor * output;
 
     struct ggml_tensor * codes = ggml_new_tensor_2d(ctx0, GGML_TYPE_I32, N, n_codes);
-    // TODO: copy input into ggml_tensor
+    for (int c = 0; c < n_codes; c++) {
+        bark_sequence _tmp;
+        for (int i = 0; i < N; i++)
+            _tmp.push_back(input[i][c]);
+        int offset = ggml_element_size(codes)*c*N;
+        memcpy(ggml_get_data(codes) + offset, _tmp.data(), N*ggml_element_size(codes));
+    }
 
     encodec_quantizer_decode_eval(ctx0, model, codes, quantized_out);
     encodec_decoder_eval(ctx0, model, quantized_out, output);
+
+    if (output) {
+        for (int i = 0; i < output->ne[1]; i++) {
+            for (int j = 0; j < output->ne[0]; j++) {
+                float * v = (float *) ((char *) output->data + i*output->nb[1] + j*output->nb[0]);
+                fprintf(stderr, "%.4f ", *v);
+            }
+            fprintf(stderr, "\n");
+        }
+    }
 
     // TODO: write output into audio_arr
 
