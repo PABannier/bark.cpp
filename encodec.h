@@ -116,3 +116,15 @@ struct encodec_model {
 
 
 bool encodec_model_load(const std::string& fname, encodec_model& model);
+
+void encodec_quantizer_decode_eval(
+                    struct ggml_context * ctx0,
+                    const encodec_model & model,
+                    struct ggml_tensor  * codes,
+                    struct ggml_tensor  * quantized_out);
+
+void encodec_decoder_eval(
+                    struct ggml_context * ctx0,
+                    const encodec_model & model,
+                    struct ggml_tensor  * quantized_out,
+                    struct ggml_tensor  * output);
