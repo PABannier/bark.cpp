@@ -274,3 +274,27 @@ bool encodec_model_load(const std::string& fname, encodec_model& model) {
 
     return true;
 }
+
+void encodec_quantizer_decode(
+                    struct ggml_context * ctx0,
+                    const encodec_model & model,
+                    struct ggml_tensor  * codes,
+                    struct ggml_tensor  * quantized_out) {
+    // codes: [seq_length, n_codes]
+    const int hidden_dim = model.hparams.hidden_dim;
+    const int seq_length = codes->ne[0];
+    const int n_q        = codes->ne[1];
+
+    quantized_out = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, hidden_dim, seq_length);
+
+    for (int i = 0; i < n_q; i++) {
+        encodec_quant_block block = model.quantizer.blocks[i];
+
+        struct ggml_tensor * indices   = ggml_view_1d(ctx0, codes, seq_length, i*codes->nb[1]);
+        struct ggml_tensor * quantized = ggml_get_rows(ctx0, block.embed, indices);
+
+        quantized_out = ggml_add(ctx0, quantized_out, quantized);
+    }
+
+    quantized_out = ggml_cont(ctx0, ggml_transpose(ctx0, quantized_out));
+}
