@@ -1417,12 +1417,15 @@ bark_codes bark_forward_coarse_encoder(
     BARK_ASSERT((int) out.size() == n_steps);
     BARK_ASSERT(out.size() % N_COARSE_CODEBOOKS == 0);
 
+    // out_coarse: [n_codes, seq_length]
     for (int i = 0; i < (int) out.size(); i++) {
         if (i % 2 == 0)
             out_coarse[0].push_back(out[i] - SEMANTIC_VOCAB_SIZE);
         else
             out_coarse[1].push_back(out[i] - SEMANTIC_VOCAB_SIZE - CODEBOOK_SIZE);
     }
+
+    // TODO: transpose out_coarse
 
     const int64_t t_main_end_us = ggml_time_us();
 
@@ -1544,6 +1547,28 @@ bark_codes bark_forward_fine_encoder(
     return in_arr;
 }
 
+std::vector<std::vector<float>> bark_forward_encodec(
+    const bark_codes & tokens,
+    const encodec_model model,
+    const int n_threads) {
+    // input shape: [seq_length, n_codes]
+
+    bark_codes input = tokens;
+    std::vector<std::vector<float>> output;
+
+    bark_progress progress;
+    progress.func = __func__;
+
+    int64_t t_sample_us  = 0;
+    int64_t t_predict_us = 0;
+
+    size_t mem_per_token = 0;
+    
+    const int64_t t_main_start_us = ggml_time_us();
+
+    return output;
+}
+
 bool bark_generate_audio(
         bark_model model,
         const bark_vocab& vocab,
@@ -1576,20 +1601,22 @@ bool bark_generate_audio(
 
     printf("\n");
 
-    // semantic encoding
-    bark_sequence out_semantic = bark_forward_text_encoder(
+    // semantic encoding (text model)
+    bark_sequence semantic_tokens = bark_forward_text_encoder(
             tokens, model.text_model, rng, n_threads, temp, min_eos_p);
     printf("\n");
 
     // coarse encoding (coarse model)
-    bark_codes out_coarse = bark_forward_coarse_encoder(
-            out_semantic, model.coarse_model, rng, n_threads, temp, max_coarse_history, sliding_window_size);
+    bark_codes coarse_tokens = bark_forward_coarse_encoder(
+            semantic_tokens, model.coarse_model, rng, n_threads, temp, max_coarse_history, sliding_window_size);
     printf("\n");
 
     // fine encoding (fine model)
-    bark_codes out_fine = bark_forward_fine_encoder(
-            out_coarse, model.fine_model, rng, n_threads, fine_temp);
+    bark_codes fine_tokens = bark_forward_fine_encoder(
+            coarse_tokens, model.fine_model, rng, n_threads, fine_temp);
     printf("\n");
+
+    // audio generation (Encodec)
 
     return true;
 }
