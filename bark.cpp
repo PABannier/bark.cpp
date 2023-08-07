@@ -1547,26 +1547,44 @@ bark_codes bark_forward_fine_encoder(
     return in_arr;
 }
 
-std::vector<std::vector<float>> bark_forward_encodec(
+audio_arr_t bark_forward_encodec(
     const bark_codes & tokens,
     const encodec_model model,
     const int n_threads) {
     // input shape: [seq_length, n_codes]
+    const size_t N       = tokens.size();
+    const size_t n_codes = tokens[0].size();
 
     bark_codes input = tokens;
-    std::vector<std::vector<float>> output;
+    audio_arr_t audio_arr;
 
-    bark_progress progress;
-    progress.func = __func__;
+    static size_t buf_size = 256u*1024*1024;
+    static void * buf = malloc(buf_size);
 
-    int64_t t_sample_us  = 0;
-    int64_t t_predict_us = 0;
+    struct ggml_init_params params = {
+        /*.mem_size   =*/ buf_size,
+        /*.mem_buffer =*/ buf,
+        /*.no_alloc   =*/ false,
+    };
 
-    size_t mem_per_token = 0;
-    
-    const int64_t t_main_start_us = ggml_time_us();
+    struct ggml_context * ctx0 = ggml_init(params);
+    struct ggml_cgraph gf = {};
+    gf.n_threads = 1;  // check implementation of conv when n_t > 1
+    // gf.n_threads = n_threads;
 
-    return output;
+    struct ggml_tensor * codes;
+    struct ggml_tensor * quantized_out;
+    struct ggml_tensor * output;
+
+    struct ggml_tensor * codes = ggml_new_tensor_2d(ctx0, GGML_TYPE_I32, N, n_codes);
+    // TODO: copy input into ggml_tensor
+
+    encodec_quantizer_decode_eval(ctx0, model, codes, quantized_out);
+    encodec_decoder_eval(ctx0, model, quantized_out, output);
+
+    // TODO: write output into audio_arr
+
+    return audio_arr;
 }
 
 bool bark_generate_audio(
