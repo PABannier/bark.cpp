@@ -184,6 +184,11 @@ bark_codes bark_forward_fine_encoder(
     const int n_threads,
     const float temp);
 
+audio_arr_t bark_forward_encodec(
+    const bark_codes & tokens,
+    const encodec_model model,
+    const int n_threads);
+
 struct bark_progress {
     float current = 0.0f;
     const char * func = NULL;
