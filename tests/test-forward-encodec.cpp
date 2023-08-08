@@ -37,8 +37,9 @@ int main(int argc, char** argv) {
         std::string path = test_data[i];
 
         load_nested_test_data(path, input, truth);
+        bark_codes input_t = transpose(input);
 
-        audio_arr_t output = bark_forward_encodec(input, model, n_threads);
+        audio_arr_t output = bark_forward_encodec(input_t, model, n_threads);
 
         fprintf(stderr, "%s", path.c_str());
         if (!run_test_on_codes(truth, output)) {

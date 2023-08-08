@@ -1547,19 +1547,32 @@ bark_codes bark_forward_fine_encoder(
     return in_arr;
 }
 
-audio_arr_t bark_forward_encodec(
-    const bark_codes & tokens,
-    const encodec_model model,
-    const int n_threads) {
+bool encodec_eval(
+        const bark_codes    & tokens,
+        const encodec_model & model,
+        audio_arr_t         & audio_arr,
+        const int n_threads,
+        size_t & mem_per_token) {
     // input shape: [seq_length, n_codes]
     const int N       = tokens.size();
     const int n_codes = tokens[0].size();
 
     bark_codes input = tokens;
-    audio_arr_t audio_arr;
 
     static size_t buf_size = 256u*1024*1024;
     static void * buf = malloc(buf_size);
+
+    if (mem_per_token > 0 && mem_per_token*N*n_codes > buf_size) {
+        const size_t buf_size_new = 1.1*(mem_per_token*N*n_codes);  // add 10% to account for ggml object overhead
+
+        // reallocate
+        buf_size = buf_size_new;
+        buf = realloc(buf, buf_size);
+        if (buf == nullptr) {
+            fprintf(stderr, "%s: failed to allocate %zu bytes\n", __func__, buf_size);
+            return false;
+        }
+    }
 
     struct ggml_init_params params = {
         /*.mem_size   =*/ buf_size,
@@ -1582,7 +1595,10 @@ audio_arr_t bark_forward_encodec(
     }
 
     struct ggml_tensor * quantized_out = encodec_quantizer_decode_eval(ctx0, model, codes);
-    struct ggml_tensor * output = encodec_decoder_eval(ctx0, model, quantized_out);
+    struct ggml_tensor * output        = encodec_decoder_eval(ctx0, model, quantized_out);
+
+    ggml_build_forward_expand(&gf, output);
+    ggml_graph_compute       (ctx0, &gf);
 
     if (output) {
         for (int i = 0; i < output->ne[1]; i++) {
@@ -1595,6 +1611,41 @@ audio_arr_t bark_forward_encodec(
     }
 
     // TODO: write output into audio_arr
+
+    if (mem_per_token == 0) {
+        mem_per_token = ggml_used_mem(ctx0)/N/n_codes;
+    }
+
+    ggml_free(ctx0);
+
+    return true;
+}
+
+audio_arr_t bark_forward_encodec(
+    const bark_codes & tokens,
+    const encodec_model model,
+    const int n_threads) {
+
+    audio_arr_t audio_arr;
+
+    int64_t t_predict_us = 0;
+
+    const int64_t t_main_start_us = ggml_time_us();
+
+    // dry run to estimate mem_per_token
+    size_t mem_per_token = 0;
+    encodec_eval({{0, 1}, {2, 3}}, model, audio_arr, n_threads, mem_per_token);
+
+    int64_t t_predict_start_us = ggml_time_us();
+    encodec_eval(tokens, model, audio_arr, n_threads, mem_per_token);
+    t_predict_us += (ggml_time_us() - t_predict_start_us);
+
+    const int64_t t_main_end_us = ggml_time_us();
+
+    printf("\n\n");
+    printf("%s: mem per token = %8.2f MB\n", __func__, mem_per_token/1000.0f/1000.0f);
+    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, t_predict_us/1000.0f, t_predict_us/1000.0f);
+    printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us)/1000.0f);
 
     return audio_arr;
 }

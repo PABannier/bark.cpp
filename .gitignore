@@ -20,5 +20,6 @@ tests/test-fine-encoder
 tests/test-forward-coarse
 tests/test-forward-semantic
 tests/test-forward-fine
+tests/test-forward-encodec
 
 tests/test-tokenizer
