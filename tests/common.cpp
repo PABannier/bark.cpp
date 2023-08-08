@@ -221,7 +221,7 @@ void load_test_data(std::string fname, std::vector<T>& input, std::vector<std::v
 
 template void load_test_data(std::string fname, std::vector<int32_t>& input, std::vector<std::vector<int32_t>>& output);
 
-void load_test_data(std::string fname, std::vector<std::vector<int32_t>>& input, std::vector<float> output) {
+void load_test_data(std::string fname, std::vector<std::vector<int32_t>>& input, std::vector<float>& output) {
     auto fin = std::ifstream(fname, std::ios::binary);
     if (!fin) {
         fprintf(stderr, "%s: failed to open '%s'\n", __func__, fname.c_str());

@@ -1595,22 +1595,15 @@ bool encodec_eval(
     }
 
     struct ggml_tensor * quantized_out = encodec_quantizer_decode_eval(ctx0, model, codes);
-    struct ggml_tensor * output        = encodec_decoder_eval(ctx0, model, quantized_out);
+    // struct ggml_tensor * output        = encodec_decoder_eval(ctx0, model, quantized_out);
+    struct ggml_tensor * output = quantized_out;
 
     ggml_build_forward_expand(&gf, output);
     ggml_graph_compute       (ctx0, &gf);
 
-    if (output) {
-        for (int i = 0; i < output->ne[1]; i++) {
-            for (int j = 0; j < output->ne[0]; j++) {
-                float * v = (float *) ((char *) output->data + i*output->nb[1] + j*output->nb[0]);
-                fprintf(stderr, "%.4f ", *v);
-            }
-            fprintf(stderr, "\n");
-        }
-    }
-
-    // TODO: write output into audio_arr
+    int out_seq_length = output->ne[0];
+    audio_arr.resize(out_seq_length);
+    memcpy(audio_arr.data(), (float *) ggml_get_data(output), sizeof(float)*out_seq_length);
 
     if (mem_per_token == 0) {
         mem_per_token = ggml_used_mem(ctx0)/N/n_codes;
@@ -1643,7 +1636,7 @@ audio_arr_t bark_forward_encodec(
     const int64_t t_main_end_us = ggml_time_us();
 
     printf("\n\n");
-    printf("%s: mem per token = %8.2f MB\n", __func__, mem_per_token/1000.0f/1000.0f);
+    printf("%s: mem per token = %zu bytes\n", __func__, mem_per_token);
     printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, t_predict_us/1000.0f, t_predict_us/1000.0f);
     printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us)/1000.0f);
 
