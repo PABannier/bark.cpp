@@ -3,7 +3,8 @@ BUILD_TARGETS = main
 
 # Binaries only useful for tests
 TEST_TARGETS = tests/test-tokenizer tests/test-text-encoder tests/test-coarse-encoder tests/test-fine-encoder
-TEST_TARGETS += tests/test-forward-semantic tests/test-forward-coarse
+TEST_TARGETS += tests/test-forward-semantic tests/test-forward-coarse tests/test-forward-fine
+TEST_TARGETS += tests/test-forward-encodec
 
 default: $(BUILD_TARGETS)
 
@@ -336,4 +337,7 @@ tests/test-forward-coarse: tests/test-forward-coarse.cpp ggml.o bark.o encodec.o
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
 
 tests/test-forward-fine: tests/test-forward-fine.cpp ggml.o bark.o encodec.o common.o $(OBJS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
+
+tests/test-forward-encodec: tests/test-forward-encodec.cpp ggml.o bark.o encodec.o common.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)

@@ -10,7 +10,7 @@ yields the same output as the original bark implementation.
 #include "common.h"
 
 static const std::vector<std::string> test_data = {
-    "./data/coarse/test_pass_encodec_1.bin",
+    "./data/encodec/test_pass_encodec_1.bin",
 };
 
 int main(int argc, char** argv) {
@@ -26,7 +26,6 @@ int main(int argc, char** argv) {
 
     bool success = true;
 
-    printf("%s: reading bark coarse model\n", __func__);
     if(!encodec_model_load(fname, model)) {
         fprintf(stderr, "%s: invalid model file '%s'\n", __func__, fname.c_str());
         return 1;
@@ -37,7 +36,7 @@ int main(int argc, char** argv) {
         audio_arr_t truth;
         std::string path = test_data[i];
 
-        load_test_data(path, input, truth);
+        load_nested_test_data(path, input, truth);
 
         audio_arr_t output = bark_forward_encodec(input, model, n_threads);
 
