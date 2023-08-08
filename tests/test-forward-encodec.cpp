@@ -36,13 +36,17 @@ int main(int argc, char** argv) {
         audio_arr_t truth;
         std::string path = test_data[i];
 
-        load_nested_test_data(path, input, truth);
+        load_test_data(path, input, truth);
         bark_codes input_t = transpose(input);
 
         audio_arr_t output = bark_forward_encodec(input_t, model, n_threads);
 
+        fprintf(stderr, "input_t = [%zu, %zu]\n", input_t.size(), input_t[0].size());
+        fprintf(stderr, "output  = [%zu, 1]\n", output.size());
+        fprintf(stderr, "truth   = [%zu, 1]\n", truth.size());
+
         fprintf(stderr, "%s", path.c_str());
-        if (!run_test_on_codes(truth, output)) {
+        if (!run_test_on_sequence(truth, output)) {
             success = false;
             fprintf(stderr, "   TEST %d FAILED.\n", i+1);
         } else {
