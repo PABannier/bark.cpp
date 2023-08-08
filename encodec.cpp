@@ -71,13 +71,13 @@ static struct ggml_tensor * forward_pass_lstm_unilayer(
 
     struct ggml_tensor * hs = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, hidden_dim, seq_length);
 
-    struct ggml_tensor * c_t = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, hidden_dim); 
+    struct ggml_tensor * c_t = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, hidden_dim);
     struct ggml_tensor * h_t = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, hidden_dim);
 
     ggml_set_zero(h_t);
 
     struct ggml_tensor * current = ggml_cont(ctx0, ggml_transpose(ctx0, inp));
-    
+
     for (int t = 0; t < seq_length; t++) {
         struct ggml_tensor * x_t = ggml_view_1d(ctx0, current, input_dim, t*current->nb[1]);
 
@@ -419,17 +419,16 @@ bool encodec_model_load(const std::string& fname, encodec_model& model) {
     return true;
 }
 
-void encodec_quantizer_decode_eval(
+struct ggml_tensor * encodec_quantizer_decode_eval(
                     struct ggml_context * ctx0,
                     const encodec_model & model,
-                    struct ggml_tensor  * codes,
-                    struct ggml_tensor  * quantized_out) {
+                    struct ggml_tensor  * codes) {
     // codes: [seq_length, n_codes]
     const int hidden_dim = model.hparams.hidden_dim;
     const int seq_length = codes->ne[0];
     const int n_q        = codes->ne[1];
 
-    quantized_out = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, hidden_dim, seq_length);
+    struct ggml_tensor * quantized_out = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, hidden_dim, seq_length);
 
     for (int i = 0; i < n_q; i++) {
         encodec_quant_block block = model.quantizer.blocks[i];
@@ -441,13 +440,14 @@ void encodec_quantizer_decode_eval(
     }
 
     quantized_out = ggml_cont(ctx0, ggml_transpose(ctx0, quantized_out));
+
+    return quantized_out;
 }
 
-void encodec_decoder_eval(
+struct ggml_tensor * encodec_decoder_eval(
                     struct ggml_context * ctx0,
                     const encodec_model & model,
-                    struct ggml_tensor  * quantized_out,
-                    struct ggml_tensor  * output) {
+                    struct ggml_tensor  * quantized_out) {
     const auto & hparams = model.hparams;
     const int * ratios   = hparams.ratios;
     const int stride     = hparams.stride;
@@ -504,10 +504,10 @@ void encodec_decoder_eval(
     }
 
     // final conv
-    {
-        inpL = ggml_elu(ctx0, inpL);
+    inpL = ggml_elu(ctx0, inpL);
 
-        output = strided_conv_1d(
-            ctx0, inpL, model.decoder.final_conv_w, model.decoder.final_conv_b, stride);
-    }
+    struct ggml_tensor * output = strided_conv_1d(
+        ctx0, inpL, model.decoder.final_conv_w, model.decoder.final_conv_b, stride);
+
+    return output;
 }
