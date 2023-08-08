@@ -25,14 +25,15 @@ static struct ggml_tensor * pad_1d(ggml_context * ctx0, ggml_tensor * inp, int p
     const int max_pad = std::max(padding_left, padding_right);
     int extra_pad = 0;
 
-    if (length <= max_pad) {
-        extra_pad = max_pad - length + 1;
-        int padding[2] = {0, extra_pad};
-        inp = ggml_pad_1d_constant(ctx0, inp, padding, 0);
-    }
+    // if (length <= max_pad) {
+    //     extra_pad = max_pad - length + 1;
+    //     int padding[2] = {0, extra_pad};
+    //     inp = ggml_pad_1d_constant(ctx0, inp, padding, 0);
+    // }
 
-    int padding[2] = {padding_left, padding_right};
-    struct ggml_tensor * padded = ggml_pad_1d_reflective(ctx0, inp, padding);
+    // int padding[2] = {padding_left, padding_right};
+    // struct ggml_tensor * padded = ggml_pad_1d_reflective(ctx0, inp, padding);
+    struct ggml_tensor * padded;
 
     const int end = padded->ne[0] - extra_pad;
 
@@ -113,12 +114,10 @@ static struct ggml_tensor * strided_conv_1d(
                      int   stride) {
     int kernel_size   = conv_w->ne[0];
     int padding_total = kernel_size - stride;
-
     int extra_padding = get_extra_padding_for_conv_1d(inp, kernel_size, stride, padding_total);
 
     struct ggml_tensor * padded_inp = pad_1d(ctx0, inp, padding_total, extra_padding);
-
-    struct ggml_tensor * dst = ggml_conv_1d(ctx0, conv_w, padded_inp, stride);
+    struct ggml_tensor * dst = ggml_conv_1d(ctx0, conv_w, padded_inp, stride, 0, 1);
 
     // add bias
     dst = ggml_transpose(ctx0, dst);
@@ -137,7 +136,8 @@ static struct ggml_tensor * strided_conv_transpose_1d(
     int kernel_size   = conv_w->ne[0];
     int padding_total = kernel_size - stride;
 
-    struct ggml_tensor * dst = ggml_transpose_conv_1d(ctx0, conv_w, inp, stride);
+    // struct ggml_tensor * dst = ggml_transpose_conv_1d(ctx0, conv_w, inp, stride);
+    struct ggml_tensor * dst;
 
     // add bias
     dst = ggml_transpose(ctx0, dst);
