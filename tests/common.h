@@ -22,6 +22,8 @@ void load_test_data(std::string fname, std::vector<T>& input, std::vector<U>& ou
 template <typename T, typename U>
 void load_test_data(std::string fname, std::vector<T>& input, std::vector<std::vector<U>>& output);
 
+void load_test_data(std::string fname, std::vector<std::vector<int32_t>>& input, std::vector<float> output);
+
 template <typename T>
 void load_nested_test_data(
                 std::string fname,

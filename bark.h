@@ -50,7 +50,7 @@ struct bark_vocab {
 
 typedef std::vector<bark_vocab::id>              bark_sequence;
 typedef std::vector<std::vector<bark_vocab::id>> bark_codes;
-typedef std::vector<std::vector<float>>          audio_arr_t;
+typedef std::vector<float>                       audio_arr_t;
 
 struct gpt_layer {
     // normalization
