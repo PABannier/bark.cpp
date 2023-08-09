@@ -6897,6 +6897,7 @@ GGML_API struct ggml_tensor * ggml_conv_1d(
         int                   d0) {
     GGML_ASSERT(ggml_is_matrix(b));
     GGML_ASSERT(a->ne[1] == b->ne[1]);
+    GGML_ASSERT(b->ne[0] >= a->ne[0]);
     bool is_node = false;
 
     if (a->grad || b->grad) {
@@ -12767,6 +12768,95 @@ static void ggml_compute_forward_conv_1d_s1_ph_f32(
     }
 }
 
+static void ggml_compute_forward_conv_1d_f32(
+        const struct ggml_compute_params * params,
+        const struct ggml_tensor * src0,
+        const struct ggml_tensor * src1,
+              struct ggml_tensor * dst,
+                         size_t    s0) {
+    GGML_ASSERT(src0->type == GGML_TYPE_F32);
+    GGML_ASSERT(src1->type == GGML_TYPE_F32);
+    GGML_ASSERT( dst->type == GGML_TYPE_F32);
+
+    int64_t t0 = ggml_perf_time_us();
+    UNUSED(t0);
+
+    GGML_TENSOR_BINARY_OP_LOCALS;
+
+    const int ith = params->ith;
+    const int nth = params->nth;
+
+    const int nk = ne00;
+
+    const int ew0 = ggml_up32(ne01);
+
+    GGML_ASSERT(nb00 == sizeof(float));
+    GGML_ASSERT(nb10 == sizeof(float));
+
+    if (params->type == GGML_TASK_INIT) {
+        // TODO: fix this memset (wsize is overestimated)
+        memset(params->wdata, 0, params->wsize);
+
+        // prepare kernel data (src0)
+        {
+            float * const wdata = (float *) params->wdata + 0;
+
+            for (int64_t i02 = 0; i02 < ne02; i02++) {
+                for (int64_t i01 = 0; i01 < ne01; i01++) {
+                    const float * const src = (float *)((char *) src0->data + i02*nb02 + i01*nb01);
+                    float * dst_data = wdata + i02*ew0*ne00;
+                    for (int64_t i00 = 0; i00 < ne00; i00++) {
+                        dst_data[i00*ew0 + i01] = src[i00];
+                    }
+                }
+            }
+        }
+
+        // prepare source data (src1)
+        {
+            float * const wdata = (float *) params->wdata + ne02*ew0*ne00;
+
+            for (int64_t i11 = 0; i11 < ne11; i11++) {
+                const float * const src = (float *)((char *) src1->data + i11*nb11);
+                float * dst_data = wdata;
+                for (int64_t i10 = 0; i10 < ne10; i10++) {
+                    dst_data[i10*ew0 + i11] = src[i10];
+                }
+            }
+        }
+
+        return;
+    }
+
+    if (params->type == GGML_TASK_FINALIZE) {
+        return;
+    }
+
+    // total rows in dst
+    const int nr = ne02;
+
+    // rows per thread
+    const int dr = (nr + nth - 1)/nth;
+
+    // row range for this thread
+    const int ir0 = dr*ith;
+    const int ir1 = MIN(ir0 + dr, nr);
+
+    for (int i1 = ir0; i1 < ir1; i1++) {
+        float * dst_data = (float *)((char *) dst->data + i1*nb1);
+        for (int64_t i0 = 0; i0 < ne10; i0 += s0) {
+            dst_data[i0/s0] = 0;
+            for (int k = 0; k < nk; k++) {
+                float v = 0.0f;
+                ggml_vec_dot_f32(ew0, &v,
+                        (float *) params->wdata +   i1*ew0*ne00 +      (k)*ew0,
+                        (float *) params->wdata + ne02*ew0*ne00 + (i0 + k)*ew0);
+                dst_data[i0/s0] += v;
+            }
+        }
+    }
+}
+
 static void ggml_compute_forward_conv_1d_s1_ph(
         const struct ggml_compute_params * params,
         const struct ggml_tensor * src0,
@@ -13002,14 +13092,15 @@ static void ggml_compute_forward_conv_1d(
     const int32_t p0 = ((const int32_t*)(dst->op_params))[1];
     const int32_t d0 = ((const int32_t*)(dst->op_params))[2];
     GGML_ASSERT(d0 == 1); // dilation not supported
-    GGML_ASSERT(p0 == src0->ne[0]/2); // only half padding supported
-    if (s0 == 1) {
-        ggml_compute_forward_conv_1d_s1_ph(params, src0, src1, dst);
-    } else if (s0 == 2) {
-        ggml_compute_forward_conv_1d_s2_ph(params, src0, src1, dst);
-    } else {
-        GGML_ASSERT(false); // only stride 1 and 2 supported
-    };
+    // GGML_ASSERT(p0 == src0->ne[0]/2); // only half padding supported
+    ggml_compute_forward_conv_1d_f32(params, src0, src1, dst, s0);
+    // if (s0 == 1) {
+    //     ggml_compute_forward_conv_1d_s1_ph(params, src0, src1, dst);
+    // } else if (s0 == 2) {
+    //     ggml_compute_forward_conv_1d_s2_ph(params, src0, src1, dst);
+    // } else {
+    //     GGML_ASSERT(false); // only stride 1 and 2 supported
+    // };
 }
 
 // ggml_compute_forward_conv_2d
