@@ -5,6 +5,7 @@ build/
 bark
 encodec
 main
+toy
 
 *.o
 *.plist
