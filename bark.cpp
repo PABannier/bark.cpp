@@ -414,7 +414,7 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
             fprintf(stderr, "%s: invalid model file '%s' (bad codec)\n", __func__, fname.c_str());
             return false;
         }
-        model.memsize += model.coarse_model.memsize;
+        model.memsize += model.codec_model.memsize;
     }
 
     printf("\n%s: total model size  = %8.2f MB\n", __func__, model.memsize/1024.0/1024.0);
