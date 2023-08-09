@@ -1415,12 +1415,15 @@ bark_codes bark_forward_coarse_encoder(
     BARK_ASSERT((int) out.size() == n_steps);
     BARK_ASSERT(out.size() % N_COARSE_CODEBOOKS == 0);
 
+    // out_coarse: [n_codes, seq_length]
     for (int i = 0; i < (int) out.size(); i++) {
         if (i % 2 == 0)
             out_coarse[0].push_back(out[i] - SEMANTIC_VOCAB_SIZE);
         else
             out_coarse[1].push_back(out[i] - SEMANTIC_VOCAB_SIZE - CODEBOOK_SIZE);
     }
+
+    // TODO: transpose out_coarse
 
     const int64_t t_main_end_us = ggml_time_us();
 
@@ -1542,6 +1545,106 @@ bark_codes bark_forward_fine_encoder(
     return in_arr;
 }
 
+bool encodec_eval(
+        const bark_codes    & tokens,
+        const encodec_model & model,
+        audio_arr_t         & audio_arr,
+        const int n_threads,
+        size_t & mem_per_token) {
+    // input shape: [seq_length, n_codes]
+    const int N       = tokens.size();
+    const int n_codes = tokens[0].size();
+
+    bark_codes input = tokens;
+
+    static size_t buf_size = 256u*1024*1024;
+    static void * buf = malloc(buf_size);
+
+    if (mem_per_token > 0 && mem_per_token*N*n_codes > buf_size) {
+        const size_t buf_size_new = 1.1*(mem_per_token*N*n_codes);  // add 10% to account for ggml object overhead
+
+        // reallocate
+        buf_size = buf_size_new;
+        buf = realloc(buf, buf_size);
+        if (buf == nullptr) {
+            fprintf(stderr, "%s: failed to allocate %zu bytes\n", __func__, buf_size);
+            return false;
+        }
+    }
+
+    struct ggml_init_params params = {
+        /*.mem_size   =*/ buf_size,
+        /*.mem_buffer =*/ buf,
+        /*.no_alloc   =*/ false,
+    };
+
+    struct ggml_context * ctx0 = ggml_init(params);
+    struct ggml_cgraph gf = {};
+
+    struct ggml_tensor * codes = ggml_new_tensor_2d(ctx0, GGML_TYPE_I32, N, n_codes);
+    for (int c = 0; c < n_codes; c++) {
+        bark_sequence _tmp;
+        for (int i = 0; i < N; i++)
+            _tmp.push_back(input[i][c]);
+        int offset = ggml_element_size(codes)*c*N;
+        memcpy((void *) ((char *) codes->data + offset), _tmp.data(), N*ggml_element_size(codes));
+    }
+
+    struct ggml_tensor * quantized_out = encodec_quantizer_decode_eval(ctx0, model, codes);
+    struct ggml_tensor * output        = encodec_decoder_eval(ctx0, model, quantized_out);
+
+    ggml_build_forward_expand(&gf, output);
+    // TODO: adapt ggml_conv_1d and ggml_conv_trans_1d implementation to use multiple
+    // threads.
+    ggml_graph_compute_with_ctx(ctx0, &gf, 1);
+
+    int out_seq_length = output->ne[0];
+    audio_arr.resize(out_seq_length);
+    memcpy(audio_arr.data(), (float *) ggml_get_data(output), sizeof(float)*out_seq_length);
+
+    if (mem_per_token == 0) {
+        mem_per_token = ggml_used_mem(ctx0)/N/n_codes;
+    }
+
+    ggml_free(ctx0);
+
+    return true;
+}
+
+audio_arr_t bark_forward_encodec(
+    const bark_codes & tokens,
+    const encodec_model model,
+    const int n_threads) {
+
+    audio_arr_t audio_arr;
+
+    int64_t t_predict_us = 0;
+
+    const int64_t t_main_start_us = ggml_time_us();
+
+    // dry run to estimate mem_per_token
+    size_t mem_per_token = 0;
+    bark_codes toy_data;
+    for (int i = 0; i < 20; i++) {
+        bark_sequence _tmp(4, i);
+        toy_data.push_back(_tmp);
+    }
+    encodec_eval(toy_data, model, audio_arr, n_threads, mem_per_token);
+
+    int64_t t_predict_start_us = ggml_time_us();
+    encodec_eval(tokens, model, audio_arr, n_threads, mem_per_token);
+    t_predict_us += (ggml_time_us() - t_predict_start_us);
+
+    const int64_t t_main_end_us = ggml_time_us();
+
+    printf("\n\n");
+    printf("%s: mem per token = %zu bytes\n", __func__, mem_per_token);
+    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, t_predict_us/1000.0f, t_predict_us/1000.0f);
+    printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us)/1000.0f);
+
+    return audio_arr;
+}
+
 bool bark_generate_audio(
         bark_model model,
         const bark_vocab& vocab,
@@ -1574,19 +1677,19 @@ bool bark_generate_audio(
 
     printf("\n");
 
-    // semantic encoding
-    bark_sequence out_semantic = bark_forward_text_encoder(
+    bark_sequence semantic_tokens = bark_forward_text_encoder(
             tokens, model.text_model, rng, n_threads, temp, min_eos_p);
     printf("\n");
 
-    // coarse encoding (coarse model)
-    bark_codes out_coarse = bark_forward_coarse_encoder(
-            out_semantic, model.coarse_model, rng, n_threads, temp, max_coarse_history, sliding_window_size);
+    bark_codes coarse_tokens = bark_forward_coarse_encoder(
+            semantic_tokens, model.coarse_model, rng, n_threads, temp, max_coarse_history, sliding_window_size);
     printf("\n");
 
-    // fine encoding (fine model)
-    bark_codes out_fine = bark_forward_fine_encoder(
-            out_coarse, model.fine_model, rng, n_threads, fine_temp);
+    bark_codes fine_tokens = bark_forward_fine_encoder(
+            coarse_tokens, model.fine_model, rng, n_threads, fine_temp);
+    printf("\n");
+
+    audio_arr_t audio_arr = bark_forward_encodec(fine_tokens, model.codec_model, n_threads);
     printf("\n");
 
     return true;

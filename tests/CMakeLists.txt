@@ -12,3 +12,5 @@ bark_add_test(test-tokenizer.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../ggml_weights/ggm
 # bark_add_test(test-fine-encoder.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../ggml_weights/ggml_weights_fine.bin)
 # bark_add_test(test-forward-semantic.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../ggml_weights/ggml_weights_text.bin)
 # bark_add_test(test-forward-coarse.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../ggml_weights/ggml_weights_text.bin)
+# bark_add_test(test-forward-fine.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../ggml_weights/ggml_weights_fine.bin)
+# bark_add_test(test-forward-encodec.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../ggml_weights/ggml_weights_encodec.bin)

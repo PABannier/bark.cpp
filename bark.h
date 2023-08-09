@@ -50,6 +50,7 @@ struct bark_vocab {
 
 typedef std::vector<bark_vocab::id>              bark_sequence;
 typedef std::vector<std::vector<bark_vocab::id>> bark_codes;
+typedef std::vector<float>                       audio_arr_t;
 
 struct gpt_layer {
     // normalization
@@ -182,6 +183,11 @@ bark_codes bark_forward_fine_encoder(
     std::mt19937 & rng,
     const int n_threads,
     const float temp);
+
+audio_arr_t bark_forward_encodec(
+    const bark_codes & tokens,
+    const encodec_model model,
+    const int n_threads);
 
 struct bark_progress {
     float current = 0.0f;

@@ -203,7 +203,7 @@
 #define GGML_QNT_VERSION_FACTOR 1000 // do not change this
 
 #define GGML_MAX_DIMS          4
-#define GGML_MAX_NODES         4096
+#define GGML_MAX_NODES         100000
 #define GGML_MAX_PARAMS        256
 #define GGML_MAX_CONTEXTS      64
 #define GGML_MAX_SRC           6
@@ -371,6 +371,8 @@ extern "C" {
         GGML_OP_CONV_2D,
         GGML_OP_POOL_1D,
         GGML_OP_POOL_2D,
+        GGML_OP_PAD_REFLEC_1D,
+        GGML_OP_TRANS_CONV_1D,
 
         GGML_OP_FLASH_ATTN,
         GGML_OP_FLASH_FF,
@@ -489,7 +491,8 @@ extern "C" {
     // next prime after GGML_MAX_NODES
     // #define GGML_GRAPH_HASHTABLE_SIZE 4099
     // next prime after GGML_MAX_NODES * 2 (nodes + leafs)
-    #define GGML_GRAPH_HASHTABLE_SIZE 8273
+//     #define GGML_GRAPH_HASHTABLE_SIZE 8273
+    #define GGML_GRAPH_HASHTABLE_SIZE 200003
 
     // computation graph
     struct ggml_cgraph {
@@ -1293,6 +1296,20 @@ extern "C" {
             int                   k1,
             int                   s0,
             int                   s1,
+            int                   p0,
+            int                   p1);
+
+    GGML_API struct ggml_tensor * ggml_transpose_conv_1d(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * a,
+            struct ggml_tensor  * b,
+            int                   s0,  // stride
+            int                   p0,  // padding
+            int                   d0); // dilation
+
+    GGML_API struct ggml_tensor * ggml_pad_reflec_1d(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * a,
             int                   p0,
             int                   p1);
 
