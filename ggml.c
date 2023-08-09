@@ -3792,6 +3792,7 @@ static const char * GGML_OP_NAME[GGML_OP_COUNT] = {
     "CONV_2D",
     "POOL_1D",
     "POOL_2D",
+    "PAD_REFLEC_1D",
 
     "FLASH_ATTN",
     "FLASH_FF",
@@ -3812,7 +3813,7 @@ static const char * GGML_OP_NAME[GGML_OP_COUNT] = {
     "CROSS_ENTROPY_LOSS_BACK",
 };
 
-static_assert(GGML_OP_COUNT == 62, "GGML_OP_COUNT != 62");
+static_assert(GGML_OP_COUNT == 63, "GGML_OP_COUNT != 63");
 
 static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "none",
@@ -3864,6 +3865,7 @@ static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "conv_2d(x)",
     "pool_1d(x)",
     "pool_2d(x)",
+    "pad_reflec_1d(x)",
 
     "flash_attn(x)",
     "flash_ff(x)",
@@ -3884,7 +3886,7 @@ static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "cross_entropy_loss_back(x,y)",
 };
 
-static_assert(GGML_OP_COUNT == 62, "GGML_OP_COUNT != 62");
+static_assert(GGML_OP_COUNT == 63, "GGML_OP_COUNT != 63");
 
 static_assert(GGML_OP_POOL_COUNT == 2, "GGML_OP_POOL_COUNT != 2");
 
@@ -7062,7 +7064,7 @@ struct ggml_tensor * ggml_pad_reflec_1d(
         is_node = true;
     }
 
-    const int64_t ne[2] = { p0 + a->ne[1] + p1, a->ne[1] };
+    const int64_t ne[2] = { p0 + a->ne[0] + p1, a->ne[1] };
     struct ggml_tensor * result = ggml_new_tensor(ctx, GGML_TYPE_F32, 2, ne);
 
     int32_t params[] = { p0, p1 };
@@ -13290,7 +13292,7 @@ static void ggml_compute_forward_pool_2d(
 
 // ggml_compute_forward_pad_reflec_2d
 
-static void ggml_compute_forward_pad_reflec_2d(
+static void ggml_compute_forward_pad_reflec_1d(
         const struct ggml_compute_params * params,
         const struct ggml_tensor * src0,
               struct ggml_tensor * dst) {
@@ -16744,6 +16746,7 @@ struct ggml_cplan ggml_graph_plan(struct ggml_cgraph * cgraph, int n_threads) {
                 } break;
             case GGML_OP_POOL_1D:
             case GGML_OP_POOL_2D:
+            case GGML_OP_PAD_REFLEC_1D:
                 {
                     n_tasks = 1;
                 } break;
