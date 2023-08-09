@@ -73,7 +73,8 @@ static struct ggml_tensor * forward_pass_lstm_unilayer(
     struct ggml_tensor * c_t = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, hidden_dim);
     struct ggml_tensor * h_t = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, hidden_dim);
 
-    ggml_set_zero(h_t);
+    h_t = ggml_set_zero(h_t);
+    c_t = ggml_set_zero(c_t);
 
     struct ggml_tensor * current = ggml_cont(ctx0, ggml_transpose(ctx0, inp));
 
@@ -426,6 +427,7 @@ struct ggml_tensor * encodec_quantizer_decode_eval(
     const int n_q        = codes->ne[1];
 
     struct ggml_tensor * quantized_out = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, hidden_dim, seq_length);
+    quantized_out = ggml_set_zero(quantized_out);
 
     for (int i = 0; i < n_q; i++) {
         encodec_quant_block block = model.quantizer.blocks[i];
