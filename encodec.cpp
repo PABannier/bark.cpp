@@ -19,24 +19,22 @@ static int get_extra_padding_for_conv_1d(ggml_tensor * inp, float kernel_size, f
 static struct ggml_tensor * pad_1d(ggml_context * ctx0, ggml_tensor * inp, int padding_left, int padding_right) {
     int length = inp->ne[0];
     int dim = inp->ne[1];
-    ENCODEC_ASSERT(padding_left  >= 0);
-    ENCODEC_ASSERT(padding_right >= 0);
 
     const int max_pad = std::max(padding_left, padding_right);
     int extra_pad = 0;
 
-    // if (length <= max_pad) {
-    //     extra_pad = max_pad - length + 1;
-    //     int padding[2] = {0, extra_pad};
-    //     inp = ggml_pad_1d_constant(ctx0, inp, padding, 0);
-    // }
+    if (length <= max_pad) {
+        extra_pad = max_pad - length + 1;
 
-    // int padding[2] = {padding_left, padding_right};
-    // struct ggml_tensor * padded = ggml_pad_1d_reflective(ctx0, inp, padding);
-    struct ggml_tensor * padded;
+        // constant padding
+        struct ggml_tensor * out = ggml_new_tensor_2d(ctx0, inp->type, length+extra_pad, dim);
+        ggml_set_zero(out);
+        out = ggml_set_2d(ctx0, out, inp, out->nb[1], 0);
+    }
+
+    struct ggml_tensor * padded = ggml_pad_reflec_1d(ctx0, inp, padding_left, padding_right);
 
     const int end = padded->ne[0] - extra_pad;
-
     struct ggml_tensor *dest = ggml_view_2d(ctx0, padded, end, dim, padded->nb[1], 0);
 
     return dest;
