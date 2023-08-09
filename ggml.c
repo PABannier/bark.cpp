@@ -4116,7 +4116,8 @@ size_t ggml_nbytes(const struct ggml_tensor * tensor) {
     //
     // is enough, but just in case, adding the second part
 
-    return GGML_PAD(MAX(tensor->ne[3]*tensor->nb[3], (ggml_nelements(tensor)*GGML_TYPE_SIZE[tensor->type])/GGML_BLCK_SIZE[tensor->type]), GGML_MEM_ALIGN);
+    return (ggml_nelements(tensor)*GGML_TYPE_SIZE[tensor->type])/GGML_BLCK_SIZE[tensor->type];
+    // return GGML_PAD(MAX(tensor->ne[3]*tensor->nb[3], (ggml_nelements(tensor)*GGML_TYPE_SIZE[tensor->type])/GGML_BLCK_SIZE[tensor->type]), GGML_MEM_ALIGN);
 }
 
 size_t ggml_nbytes_split(const struct ggml_tensor * tensor, int nrows_split) {

@@ -330,7 +330,7 @@ bool encodec_model_load(const std::string& fname, encodec_model& model) {
             }
 
             model.decoder.final_conv_w = ggml_new_tensor_3d(ctx, GGML_TYPE_F32, kernel_size, n_filters, in_channels);
-            model.decoder.final_conv_b   = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, in_channels);
+            model.decoder.final_conv_b = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, in_channels);
 
             model.tensors["decoder.model.15.conv.conv.weight"] = model.decoder.final_conv_w;
             model.tensors["decoder.model.15.conv.conv.bias"]   = model.decoder.final_conv_b;
