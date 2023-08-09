@@ -1634,7 +1634,12 @@ audio_arr_t bark_forward_encodec(
 
     // dry run to estimate mem_per_token
     size_t mem_per_token = 0;
-    encodec_eval({{0, 1}, {2, 3}}, model, audio_arr, n_threads, mem_per_token);
+    bark_codes toy_data;
+    for (int i = 0; i < 20; i++) {
+        bark_sequence _tmp(4, i);
+        toy_data.push_back(_tmp);
+    }
+    encodec_eval(toy_data, model, audio_arr, n_threads, mem_per_token);
 
     int64_t t_predict_start_us = ggml_time_us();
     encodec_eval(tokens, model, audio_arr, n_threads, mem_per_token);
