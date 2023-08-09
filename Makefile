@@ -309,9 +309,6 @@ bark: bark.cpp         encodec.o ggml.o $(OBJS)
 main: examples/main.cpp  ggml.o bark.o encodec.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
-toy: examples/toy.cpp  ggml.o encodec.o $(OBJS)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
-
 #
 # Test
 #
