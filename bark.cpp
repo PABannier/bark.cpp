@@ -1677,22 +1677,20 @@ bool bark_generate_audio(
 
     printf("\n");
 
-    // semantic encoding (text model)
     bark_sequence semantic_tokens = bark_forward_text_encoder(
             tokens, model.text_model, rng, n_threads, temp, min_eos_p);
     printf("\n");
 
-    // coarse encoding (coarse model)
     bark_codes coarse_tokens = bark_forward_coarse_encoder(
             semantic_tokens, model.coarse_model, rng, n_threads, temp, max_coarse_history, sliding_window_size);
     printf("\n");
 
-    // fine encoding (fine model)
     bark_codes fine_tokens = bark_forward_fine_encoder(
             coarse_tokens, model.fine_model, rng, n_threads, fine_temp);
     printf("\n");
 
-    // audio generation (Encodec)
+    audio_arr_t audio_arr = bark_forward_encodec(fine_tokens, model.codec_model, n_threads);
+    printf("\n");
 
     return true;
 }
