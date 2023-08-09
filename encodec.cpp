@@ -12,7 +12,7 @@
 static int get_extra_padding_for_conv_1d(ggml_tensor * inp, float kernel_size, float stride, float padding_total) {
     float length = inp->ne[0];
     float n_frames = (length - kernel_size + padding_total) / stride + 1.0f;
-    int ideal_length = (std::ceilf(n_frames) - 1) * stride + (kernel_size - padding_total);
+    int ideal_length = (ceilf(n_frames) - 1) * stride + (kernel_size - padding_total);
     return ideal_length - length;
 }
 
@@ -142,7 +142,7 @@ static struct ggml_tensor * strided_conv_transpose_1d(
     dst = ggml_add(ctx0, ggml_repeat(ctx0, conv_b, dst), dst);
     dst = ggml_cont(ctx0, ggml_transpose(ctx0, dst));
 
-    int padding_right = std::ceilf(padding_total);
+    int padding_right = ceilf(padding_total);
     int padding_left = padding_total - padding_right;
 
     struct ggml_tensor * unpadded = unpad_1d(ctx0, dst, padding_left, padding_right);
