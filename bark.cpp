@@ -1323,6 +1323,7 @@ bark_sequence bark_forward_text_encoder(
     printf("%s:   sample time = %8.2f ms\n", __func__, t_sample_us/1000.0f);
     printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, t_predict_us/1000.0f, t_predict_us/1000.0f/n_past);
     printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us)/1000.0f);
+    printf("\n");
 
     return out;
 }
@@ -1446,6 +1447,7 @@ bark_codes bark_forward_coarse_encoder(
     printf("%s:   sample time = %8.2f ms\n", __func__, t_sample_us/1000.0f);
     printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, t_predict_us/1000.0f, t_predict_us/1000.0f/step_ix);
     printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us)/1000.0f);
+    printf("\n");
 
     return out_coarse;
 }
@@ -1555,6 +1557,7 @@ bark_codes bark_forward_fine_encoder(
     printf("%s:   sample time = %8.2f ms\n", __func__, t_sample_us/1000.0f);
     printf("%s:  predict time = %8.2f ms\n", __func__, t_predict_us/1000.0f);
     printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us)/1000.0f);
+    printf("\n");
 
     return in_arr;
 }
@@ -1655,6 +1658,7 @@ audio_arr_t bark_forward_encodec(
     printf("%s: mem per token = %zu bytes\n", __func__, mem_per_token);
     printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, t_predict_us/1000.0f, t_predict_us/1000.0f);
     printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us)/1000.0f);
+    printf("\n");
 
     return audio_arr;
 }
@@ -1689,22 +1693,16 @@ bool bark_generate_audio(
         printf("%d ", tokens[i]);
     }
 
-    printf("\n");
-
     bark_sequence semantic_tokens = bark_forward_text_encoder(
             tokens, model.text_model, rng, n_threads, temp, min_eos_p);
-    printf("\n");
 
     bark_codes coarse_tokens = bark_forward_coarse_encoder(
             semantic_tokens, model.coarse_model, rng, n_threads, temp, max_coarse_history, sliding_window_size);
-    printf("\n");
 
     bark_codes fine_tokens = bark_forward_fine_encoder(
             coarse_tokens, model.fine_model, rng, n_threads, fine_temp);
-    printf("\n");
 
     audio_arr_t audio_arr = bark_forward_encodec(fine_tokens, model.codec_model, n_threads);
-    printf("\n");
 
     return true;
 }
