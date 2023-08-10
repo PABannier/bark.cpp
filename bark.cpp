@@ -19,6 +19,10 @@ https://github.com/skeskinen/bert.cpp/
 #include "ggml.h"
 #include "bark-util.h"
 
+// third-party utilities
+#define DR_WAV_IMPLEMENTATION
+#include "dr_wav.h"
+
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -1645,6 +1649,24 @@ audio_arr_t bark_forward_encodec(
     return audio_arr;
 }
 
+int write_wav_on_disk(audio_arr_t& audio_arr, std::string dest_path) {
+    drwav_data_format format;
+    format.container     = drwav_container_riff;
+    format.format        = DR_WAVE_FORMAT_IEEE_FLOAT;
+    format.channels      = 1;
+    format.sampleRate    = SAMPLE_RATE;
+    format.bitsPerSample = 32;
+
+    drwav wav;
+    drwav_init_file_write(&wav, dest_path.c_str(), &format, NULL);
+    drwav_uint64 frames = drwav_write_pcm_frames(&wav, audio_arr.size(), audio_arr.data());
+    drwav_uninit(&wav);
+
+    fprintf(stderr, "Number of frames written = %lld.\n", frames);
+
+    return 0;
+}
+
 bool bark_generate_audio(
         bark_model model,
         const bark_vocab& vocab,
@@ -1691,6 +1713,9 @@ bool bark_generate_audio(
 
     audio_arr_t audio_arr = bark_forward_encodec(fine_tokens, model.codec_model, n_threads);
     printf("\n");
+
+    std::string dest_path = "./recording.wav";
+    write_wav_on_disk(audio_arr, dest_path);
 
     return true;
 }
