@@ -19,6 +19,10 @@ https://github.com/skeskinen/bert.cpp/
 #include "ggml.h"
 #include "bark-util.h"
 
+// third-party utilities
+#define DR_WAV_IMPLEMENTATION
+#include "dr_wav.h"
+
 #include <cassert>
 #include <cmath>
 #include <cstdio>
@@ -1685,6 +1689,28 @@ audio_arr_t bark_forward_encodec(
     return audio_arr;
 }
 
+int write_wav_on_disk(audio_arr_t& audio_arr, std::string dest_path) {
+    if (audio_arr.size() == 0) {
+        throw std::runtime_error("Empty audio array.");
+    }
+
+    drwav_data_format format;
+    format.container     = drwav_container_riff;
+    format.format        = DR_WAVE_FORMAT_IEEE_FLOAT;
+    format.channels      = 1;
+    format.sampleRate    = SAMPLE_RATE;
+    format.bitsPerSample = 32;
+
+    drwav wav;
+    drwav_init_file_write(&wav, dest_path.c_str(), &format, NULL);
+    drwav_uint64 frames = drwav_write_pcm_frames(&wav, audio_arr.size(), audio_arr.data());
+    drwav_uninit(&wav);
+
+    fprintf(stderr, "Number of frames written = %lld.\n", frames);
+
+    return 0;
+}
+
 int bark_generate_audio(
         struct bark_context * ctx,
                  const char * text,
@@ -1694,8 +1720,6 @@ int bark_generate_audio(
         return 1;
     }
 
-    // bark_sequence semantic_tokens = bark_forward_text_encoder(
-    //         tokens, model.text_model, rng, n_threads, temp, min_eos_p);
     if (!bark_forward_text_encoder(ctx, n_threads)) {
         fprintf(stderr, "Failed to encode text.");
         return 1;
@@ -1716,5 +1740,8 @@ int bark_generate_audio(
         return 1;
     }
 
-    return 0;
+    std::string dest_path = "./recording.wav";
+    write_wav_on_disk(audio_arr, dest_path);
+
+    return true;
 }
