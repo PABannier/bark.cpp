@@ -34,13 +34,23 @@ struct bark_context {
 
     std::mt19937 rng;
 
-    int64_t t_sample_us = 0;
-    int64_t t_eval_us   = 0;
-
     const bark_model & model;
 
-    int64_t t_load_us   = 0;
-    int64_t t_start_us  = 0;
+    bark_perf_stats perf_stats[4];
+
+    // tokenized input
+    bark_sequence session_tokens;
+};
+
+struct bark_perf_stats {
+    size_t mem_per_token = 0;  // memory used per token for forward pass
+
+    int64_t t_sample_us = 0;   // time to sample
+    int64_t t_eval_us   = 0;   // time for one forward pass
+    int64_t t_load_us   = 0;   // time to load
+
+    int32_t n_sample = 0;      // number of calls to `gpt_sample`
+    int32_t n_eval   = 0;      // number of calls to eval
 };
 
 bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expected_size) {
@@ -364,7 +374,6 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
         }
 
         printf("%s: model size  = %8.2f MB\n", __func__, total_size/1024.0/1024.0);
-        model.memsize = total_size;
     }
 
     fin.close();
@@ -383,7 +392,6 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
             return false;
         }
-        model.memsize += model.text_model.memsize;
     }
 
     // vocab
@@ -406,7 +414,6 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
             fprintf(stderr, "%s: invalid model file '%s' (bad coarse)\n", __func__, fname.c_str());
             return false;
         }
-        model.memsize += model.coarse_model.memsize;
     }
 
     // fine
@@ -417,7 +424,6 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
             fprintf(stderr, "%s: invalid model file '%s' (bad fine)\n", __func__, fname.c_str());
             return false;
         }
-        model.memsize += model.fine_model.memsize;
     }
 
     // codec
@@ -428,14 +434,23 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
             fprintf(stderr, "%s: invalid model file '%s' (bad codec)\n", __func__, fname.c_str());
             return false;
         }
-        model.memsize += model.codec_model.memsize;
     }
-
-    printf("\n%s: total model size  = %8.2f MB\n", __func__, model.memsize/1024.0/1024.0);
 
     return true;
 }
 
+struct bark_context_params bark_context_params_default() {
+    struct bark_context_params result = {
+        /*.seed                        =*/ 0,
+        /*.temp                        =*/ 0.7f,
+        /*.temp_fine                   =*/ 0.5f,
+        /*.min_eos_p                   =*/ 0.2f,
+        /*.sliding_window_size         =*/ 60,
+        /*.max_coarse_history          =*/ 630,
+    };
+
+    return result;
+}
 
 std::string strip_accents(const std::string &in_str) {
     std::string out_str;
@@ -1683,7 +1698,6 @@ bool bark_generate_audio(
 
     std::mt19937 rng(seed);
 
-    // tokenize input (bert tokenizer)
     int32_t block_size = model.text_model.hparams.block_size;
     bark_sequence tokens = bark_tokenize_input(text, vocab, block_size);
 

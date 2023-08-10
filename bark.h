@@ -26,6 +26,8 @@
 
 struct bark_context;
 
+struct bark_perf_stats;
+
 struct bark_context_params {
     uint32_t seed;         // RNG seed, -1 for random
 
@@ -92,6 +94,10 @@ struct gpt_layer {
 struct gpt_model {
     gpt_hparams hparams;
 
+    struct ggml_context * ctx = NULL;
+
+    struct ggml_tensor * output_tokens;
+
     // normalization
     struct ggml_tensor * ln_f_g;
     struct ggml_tensor * ln_f_b;
@@ -107,27 +113,30 @@ struct gpt_model {
     struct ggml_tensor * memory_k;
     struct ggml_tensor * memory_v;
 
-    //
-    struct ggml_context * ctx;
     std::map<std::string, struct ggml_tensor *> tensors;
 
-    int32_t memsize = 0;
+    ~gpt_model() {
+        if (ctx) {
+            ggml_free(ctx);
+        }
+    }
 };
 
 
 struct bark_model {
     // encoder
-    gpt_model coarse_model;
-    gpt_model   fine_model;
-    gpt_model   text_model;
+    gpt_model & coarse_model;
+    gpt_model & fine_model;
+    gpt_model & text_model;
 
     // decoder
-    encodec_model codec_model;
+    encodec_model & codec_model;
 
-    // vocab
     bark_vocab vocab;
 
-    int32_t memsize = 0;
+    ~bark_model() {
+        delete &coarse_model, &fine_model, &text_model, &codec_model;
+    }
 };
 
 bool gpt_model_load(const std::string& fname, gpt_model& model);
