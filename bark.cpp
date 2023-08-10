@@ -38,8 +38,12 @@ struct bark_context {
 
     bark_perf_stats perf_stats[4];
 
-    // tokenized input
     bark_sequence session_tokens;
+    bark_sequence semantic_tokens;
+    bark_codes    coarse_tokens;
+    bark_codes    fine_tokens;
+
+    audio_arr_t   audio_arr;
 };
 
 struct bark_perf_stats {
@@ -1246,7 +1250,10 @@ bark_vocab::id gpt_sample(std::vector<float> & logits, std::mt19937 & rng, float
     return gpt_multinomial_sample(logits, rng, temp, eos_p);
 }
 
-bark_sequence bark_tokenize_input(const char * text, const bark_vocab & vocab, int32_t block_size) {
+int bark_tokenize_input(struct bark_context * ctx, const char * text) {
+    const bark_vocab & vocab = ctx->model.vocab;
+    const int32_t block_size = ctx->model.text_model.hparams.block_size;
+
     // max bark length: 256
     int32_t max_ctx_size = std::min(block_size, 256);
     int32_t n_tokens;
@@ -1262,6 +1269,7 @@ bark_sequence bark_tokenize_input(const char * text, const bark_vocab & vocab, i
             tokens[i] = TEXT_PAD_TOKEN;
     } else if (n_tokens > max_ctx_size) {
         fprintf(stderr, "%s: input sequence is too long (%d > 256), truncating sequence", __func__, n_tokens);
+        return 1;
     }
 
     tokens.resize(max_ctx_size);
@@ -1273,17 +1281,17 @@ bark_sequence bark_tokenize_input(const char * text, const bark_vocab & vocab, i
 
     assert(tokens.size() == 256 + 256 + 1);
 
-    return tokens;
+    printf("%s: prompt: '%s'\n", __func__, text);
+    printf("%s: number of tokens in prompt = %zu, first 8 tokens: ", __func__, tokens.size());
+    for (int i = 0; i < std::min(8, (int) tokens.size()); i++) {
+        printf("%d ", tokens[i]);
+    }
+
+    ctx->session_tokens = tokens;
+    return 0;
 }
 
-bark_sequence bark_forward_text_encoder(
-    const bark_sequence & tokens,
-    const gpt_model model,
-    std::mt19937 & rng,
-    const int n_threads,
-    const float temp,
-    const float min_eos_p) {
-
+int bark_forward_text_encoder(struct bark_context * ctx, int n_threads) {
     bark_sequence out;
 
     bark_progress progress;
@@ -1296,7 +1304,6 @@ bark_sequence bark_forward_text_encoder(
 
     float eos_p = 0;
 
-    bark_sequence input = tokens;
     std::vector<float> logits;
 
     // dry run to estimate mem_per_token
@@ -1678,45 +1685,36 @@ audio_arr_t bark_forward_encodec(
     return audio_arr;
 }
 
-bool bark_generate_audio(
-        bark_model model,
-        const bark_vocab& vocab,
-        const char * text,
-        const int n_threads) {
-    // TODO move into params
-    // const int top_k = 10;
-    const int seed  = 0;
-
-    // const float top_p     = 0.2;
-    const float temp      = 0.7;
-    const float fine_temp = 0.5;
-
-    const int sliding_window_size = 60;
-    const int max_coarse_history = 630;
-
-    const float min_eos_p = 0.2;
-
-    std::mt19937 rng(seed);
-
-    int32_t block_size = model.text_model.hparams.block_size;
-    bark_sequence tokens = bark_tokenize_input(text, vocab, block_size);
-
-    printf("%s: prompt: '%s'\n", __func__, text);
-    printf("%s: number of tokens in prompt = %zu, first 8 tokens: ", __func__, tokens.size());
-    for (int i = 0; i < std::min(8, (int) tokens.size()); i++) {
-        printf("%d ", tokens[i]);
+int bark_generate_audio(
+        struct bark_context * ctx,
+                 const char * text,
+                        int   n_threads) {
+    if (!bark_tokenize_input(ctx, text)) {
+        fprintf(stderr, "Failed to tokenize input: %s", text);
+        return 1;
     }
 
-    bark_sequence semantic_tokens = bark_forward_text_encoder(
-            tokens, model.text_model, rng, n_threads, temp, min_eos_p);
+    // bark_sequence semantic_tokens = bark_forward_text_encoder(
+    //         tokens, model.text_model, rng, n_threads, temp, min_eos_p);
+    if (!bark_forward_text_encoder(ctx, n_threads)) {
+        fprintf(stderr, "Failed to encode text.");
+        return 1;
+    }
 
-    bark_codes coarse_tokens = bark_forward_coarse_encoder(
-            semantic_tokens, model.coarse_model, rng, n_threads, temp, max_coarse_history, sliding_window_size);
+    if (!bark_forward_coarse_encoder(ctx, n_threads)) {
+        fprintf(stderr, "Failed to generate coarse tokens.");
+        return 1;
+    }
 
-    bark_codes fine_tokens = bark_forward_fine_encoder(
-            coarse_tokens, model.fine_model, rng, n_threads, fine_temp);
+    if (!bark_forward_fine_encoder(ctx, n_threads)) {
+        fprintf(stderr, "Failed to generate fine tokens.");
+        return 1;
+    }
 
-    audio_arr_t audio_arr = bark_forward_encodec(fine_tokens, model.codec_model, n_threads);
+    if (!bark_forward_encodec(ctx, n_threads)) {
+        fprintf(stderr, "Failed to generate audio.");
+        return 1;
+    }
 
-    return true;
+    return 0;
 }
