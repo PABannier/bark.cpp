@@ -483,6 +483,7 @@ add_library(bark
             bark.cpp
             bark.h
             bark-util.h
+            dr_wav.h
             encodec.cpp
             encodec.h
             )
