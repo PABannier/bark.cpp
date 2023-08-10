@@ -98,6 +98,7 @@ struct gpt_model {
 
     struct ggml_context * ctx = NULL;
 
+    std::vector<float> logits;
     struct ggml_tensor * output_tokens;
 
     // normalization
@@ -127,14 +128,16 @@ struct gpt_model {
 
 struct bark_model {
     // encoder
+    gpt_model & text_model;
     gpt_model & coarse_model;
     gpt_model & fine_model;
-    gpt_model & text_model;
 
     // decoder
     encodec_model & codec_model;
 
     bark_vocab vocab;
+
+    float eos_p;  // for semantic model only
 
     ~bark_model() {
         delete &coarse_model, &fine_model, &text_model, &codec_model;
