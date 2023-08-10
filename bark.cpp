@@ -16,9 +16,12 @@ Source:
 https://github.com/skeskinen/bert.cpp/
 */
 #include "bark.h"
-#include "dr_wav.h"
 #include "ggml.h"
 #include "bark-util.h"
+
+// third-party utilities
+#define DR_WAV_IMPLEMENTATION
+#include "dr_wav.h"
 
 #include <cassert>
 #include <cmath>
