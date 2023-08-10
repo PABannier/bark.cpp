@@ -46,12 +46,13 @@ int main(int argc, char** argv) {
         std::string path = test_data[i];
 
         load_test_data(path, input, truth);
+        bark_codes truth_t = transpose(truth);
 
         bark_codes output = bark_forward_coarse_encoder(
             input, model, rng, n_threads, 0.0f, max_coarse_history, sliding_window_size);
 
         fprintf(stderr, "%s", path.c_str());
-        if (!run_test_on_codes(truth, output)) {
+        if (!run_test_on_codes(truth_t, output)) {
             success = false;
             fprintf(stderr, "   TEST %d FAILED.\n", i+1);
         } else {

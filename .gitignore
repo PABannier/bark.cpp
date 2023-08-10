@@ -9,6 +9,7 @@ toy
 
 *.o
 *.plist
+*.wav
 
 .DS_Store
 

@@ -1325,7 +1325,7 @@ bark_codes bark_forward_coarse_encoder(
     const float temp,
     const int max_coarse_history,
     const int sliding_window_size) {
-    bark_codes out_coarse(N_COARSE_CODEBOOKS);
+    bark_codes out_coarse;
     bark_sequence out;
 
     bark_progress progress;
@@ -1419,15 +1419,15 @@ bark_codes bark_forward_coarse_encoder(
     BARK_ASSERT((int) out.size() == n_steps);
     BARK_ASSERT(out.size() % N_COARSE_CODEBOOKS == 0);
 
-    // out_coarse: [n_codes, seq_length]
-    for (int i = 0; i < (int) out.size(); i++) {
-        if (i % 2 == 0)
-            out_coarse[0].push_back(out[i] - SEMANTIC_VOCAB_SIZE);
-        else
-            out_coarse[1].push_back(out[i] - SEMANTIC_VOCAB_SIZE - CODEBOOK_SIZE);
+    // out_coarse: [seq_length, n_codes]
+    for (int i = 0; i < (int) out.size(); i += N_COARSE_CODEBOOKS) {
+        // this assumes N_COARSE_CODEBOOKS = 2
+        bark_sequence _tmp = {
+            out[i] - SEMANTIC_VOCAB_SIZE,
+            out[i+1] - SEMANTIC_VOCAB_SIZE - CODEBOOK_SIZE
+        };
+        out_coarse.push_back(_tmp);
     }
-
-    // TODO: transpose out_coarse
 
     const int64_t t_main_end_us = ggml_time_us();
 
