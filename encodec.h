@@ -1,5 +1,5 @@
 /* This is a shortened version of the original Encodec.CPP here: https://github.com/PABannier/encodec.cpp.
-Since bark only uses the decoder, only the decoding forward pass is present in this file.
+Only the decoding quantizer and decoder part is implemented in this file.
 */
 #pragma once
 
@@ -12,6 +12,14 @@ Since bark only uses the decoder, only the decoding forward pass is present in t
 #include <thread>
 #include <string>
 #include <vector>
+
+#define ENCODEC_ASSERT(x) \
+    do { \
+        if (!(x)) { \
+            fprintf(stderr, "ENCODEC_ASSERT: %s:%d: %s\n", __FILE__, __LINE__, #x); \
+            abort(); \
+        } \
+    } while (0)
 
 struct encodec_hparams {
     int32_t in_channels          = 1;
@@ -112,7 +120,19 @@ struct encodec_model {
     int n_loaded;
 
     std::map<std::string, struct ggml_tensor *> tensors;
+
+    int32_t memsize = 0;
 };
 
 
 bool encodec_model_load(const std::string& fname, encodec_model& model);
+
+struct ggml_tensor * encodec_quantizer_decode_eval(
+                        struct ggml_context * ctx0,
+                        const encodec_model & model,
+                        struct ggml_tensor  * codes);
+
+struct ggml_tensor * encodec_decoder_eval(
+                        struct ggml_context * ctx0,
+                        const encodec_model & model,
+                        struct ggml_tensor  * quantized_out);

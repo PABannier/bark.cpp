@@ -428,7 +428,7 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
             fprintf(stderr, "%s: invalid model file '%s' (bad codec)\n", __func__, fname.c_str());
             return false;
         }
-        model.memsize += model.coarse_model.memsize;
+        model.memsize += model.codec_model.memsize;
     }
 
     printf("\n%s: total model size  = %8.2f MB\n", __func__, model.memsize/1024.0/1024.0);
@@ -540,9 +540,8 @@ bool fine_gpt_eval(
               std::vector<std::vector<float>>          & logits,
               size_t                                   & mem_per_token) {
     // embd_inp: (n_channels, seq_length)
-    const int n_past = 0;
+    const int N  = embd_inp[0].size();
     const int n_codes = embd_inp.size();
-    const int N = embd_inp[0].size();
 
     const auto & hparams = model.hparams;
 
@@ -553,6 +552,9 @@ bool fine_gpt_eval(
     const int n_vocab = hparams.n_out_vocab;
 
     const int n_codes_given = hparams.n_codes_given;
+
+    BARK_ASSERT(N <= n_ctx);
+    BARK_ASSERT(codebook_ix > 0);
 
     static size_t buf_size = 256u*1024*1024;
     static void * buf = malloc(buf_size);
@@ -577,7 +579,6 @@ bool fine_gpt_eval(
 
     struct ggml_context * ctx0 = ggml_init(params);
     struct ggml_cgraph gf = {};
-    gf.n_threads = n_threads;
 
     struct ggml_tensor * input = ggml_new_tensor_2d(ctx0, GGML_TYPE_I32, N, n_codes);
     for (int c = 0; c < n_codes; c++) {
@@ -585,34 +586,33 @@ bool fine_gpt_eval(
         memcpy((void *) ((char *) input->data + offset), embd_inp[c].data(), N*ggml_element_size(input));
     }
 
-    struct ggml_tensor * embd = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd, N, codebook_ix+1);
-    struct ggml_tensor * curr;
+    struct ggml_tensor * tok_emb = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd, N, codebook_ix+1);
 
     for (int wte_ix = 0; wte_ix < codebook_ix+1; wte_ix++) {
-        curr = ggml_get_rows(ctx0,
-                    model.wtes[wte_ix],
-                    ggml_view_1d(ctx0, input, N, N*wte_ix*ggml_element_size(input)));
+        struct ggml_tensor * curr = ggml_get_rows(ctx0,
+                                            model.wtes[wte_ix],
+                                            ggml_view_1d(ctx0, input, N, N*wte_ix*ggml_element_size(input)));
 
-        embd = ggml_set_2d(ctx0, embd, curr,
-                    ggml_element_size(curr)*n_embd,
-                    ggml_element_size(curr)*wte_ix*N*n_embd);
+        tok_emb = ggml_set_2d(ctx0, tok_emb, curr,
+                        ggml_element_size(curr)*n_embd,
+                        ggml_element_size(curr)*wte_ix*N*n_embd);
     }
 
     // [n_embd, N, codebook_ix+1] -> [codebook_ix+1, n_embd, N]
-    embd = ggml_cont(ctx0, ggml_permute(ctx0, embd, 1, 2, 0, 3));
+    tok_emb = ggml_cont(ctx0, ggml_permute(ctx0, tok_emb, 1, 2, 0, 3));
     // // [1, n_embd, N]
-    embd = ggml_sum_rows(ctx0, embd);
+    tok_emb = ggml_sum_rows(ctx0, tok_emb);
     // [N, n_embd]
-    embd = ggml_cont(ctx0, ggml_permute(ctx0, embd, 2, 0, 1, 3));
+    tok_emb = ggml_cont(ctx0, ggml_permute(ctx0, tok_emb, 2, 0, 1, 3));
 
     struct ggml_tensor * position = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
     for (int i = 0; i < N; ++i) {
         ((int32_t *) position->data)[i] = i;
     }
-    struct ggml_tensor * pos_embd = ggml_get_rows(ctx0, model.wpe, position);
+    struct ggml_tensor * pos_emb = ggml_get_rows(ctx0, model.wpe, position);
 
     // wte + wpe
-    struct ggml_tensor * inpL = ggml_add(ctx0, embd, pos_embd);
+    struct ggml_tensor * inpL = ggml_add(ctx0, tok_emb, pos_emb);
 
     for (int il = 0; il < n_layer; ++il) {
         struct ggml_tensor * cur;
@@ -649,20 +649,11 @@ bool fine_gpt_eval(
                     cur);
         }
 
-        // self-attention
+        // self-attention (no causal attention for fine model)
         {
             struct ggml_tensor * Qcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 0*sizeof(float)*n_embd);
             struct ggml_tensor * Kcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 1*sizeof(float)*n_embd);
             struct ggml_tensor * Vcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 2*sizeof(float)*n_embd);
-
-            // store key and value to memory
-            if (N >= 1) {
-                struct ggml_tensor * k = ggml_view_1d(ctx0, model.memory_k, N*n_embd, (ggml_element_size(model.memory_k)*n_embd)*(il*n_ctx + n_past));
-                struct ggml_tensor * v = ggml_view_1d(ctx0, model.memory_v, N*n_embd, (ggml_element_size(model.memory_v)*n_embd)*(il*n_ctx + n_past));
-
-                ggml_build_forward_expand(&gf, ggml_cpy(ctx0, Kcur, k));
-                ggml_build_forward_expand(&gf, ggml_cpy(ctx0, Vcur, v));
-            }
 
             // Q = Qcur.contiguous().view(n_embd/n_head, n_head, N).permute(0, 2, 1, 3)
             // [64, N, 12]
@@ -673,26 +664,23 @@ bool fine_gpt_eval(
                             ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
                         0, 2, 1, 3);
 
-            // K = Kmem.view(n_embd/n_head, n_head, n_past + N).permute(0, 2, 1, 3)
-            // [64, n_past + N, 12]
+            // K = Kcur.contiguous().view(n_embd/n_head, n_head, N).permute(0, 2, 1, 3)
+            // [64, N, 12]
             struct ggml_tensor * K =
                 ggml_permute(ctx0,
-                        ggml_reshape_3d(ctx0,
-                            ggml_view_1d(ctx0, model.memory_k, (n_past + N)*n_embd, il*n_ctx*ggml_element_size(model.memory_k)*n_embd),
-                            n_embd/n_head, n_head, n_past + N),
+                        ggml_cpy(ctx0,
+                            Kcur,
+                            ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
                         0, 2, 1, 3);
 
-            // GG: flash attention
-            //struct ggml_tensor * V =
-            //    ggml_cpy(ctx0,
-            //            ggml_permute(ctx0,
-            //                ggml_reshape_3d(ctx0,
-            //                    ggml_view_1d(ctx0, model.memory_v, (n_past + N)*n_embd, il*n_ctx*ggml_element_size(model.memory_v)*n_embd),
-            //                    n_embd/n_head, n_head, n_past + N),
-            //                1, 2, 0, 3),
-            //            ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_past + N, n_embd/n_head, n_head));
-
-            //struct ggml_tensor * KQV = ggml_flash_attn(ctx0, Q, K, V, true);
+            // V = Vcur.contiguous().view(n_embd/n_head, n_head, N).permute(1, 2, 0, 3)
+            // [64, N, 12]
+            struct ggml_tensor * V =
+                ggml_cont(ctx0, ggml_permute(ctx0,
+                        ggml_cpy(ctx0,
+                            Vcur,
+                            ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
+                        1, 2, 0, 3));
 
             // K * Q
             // [n_past + N, N, 12]
@@ -706,28 +694,13 @@ bool fine_gpt_eval(
                         ggml_new_f32(ctx0, 1.0f/sqrt(float(n_embd)/n_head))
                         );
 
-            // KQ_masked = mask_past(KQ_scaled)
-            // [n_past + N, N, 12]
-            struct ggml_tensor * KQ_masked = ggml_diag_mask_inf_inplace(ctx0, KQ_scaled, n_past);
-
             // KQ = soft_max(KQ_masked)
             // [n_past + N, N, 12]
-            struct ggml_tensor * KQ_soft_max = ggml_soft_max_inplace(ctx0, KQ_masked);
-
-            // V_trans = Vmem.view(n_embd/n_head, n_head, n_past + N).permute(1, 2, 0, 3).contiguous()
-            // [n_past + N, 64, 12]
-            struct ggml_tensor * V_trans =
-                ggml_cpy(ctx0,
-                        ggml_permute(ctx0,
-                            ggml_reshape_3d(ctx0,
-                                ggml_view_1d(ctx0, model.memory_v, (n_past + N)*n_embd, il*n_ctx*ggml_element_size(model.memory_v)*n_embd),
-                                n_embd/n_head, n_head, n_past + N),
-                            1, 2, 0, 3),
-                        ggml_new_tensor_3d(ctx0, model.memory_v->type, n_past + N, n_embd/n_head, n_head));
+            struct ggml_tensor * KQ_soft_max = ggml_soft_max_inplace(ctx0, KQ_scaled);
 
             // KQV = transpose(V) * KQ_soft_max
             // [64, N, 12]
-            struct ggml_tensor * KQV = ggml_mul_mat(ctx0, V_trans, KQ_soft_max);
+            struct ggml_tensor * KQV = ggml_mul_mat(ctx0, V, KQ_soft_max);
 
             // KQV_merged = KQV.permute(0, 2, 1, 3)
             // [64, 12, N]
@@ -834,16 +807,14 @@ bool fine_gpt_eval(
     }
 
     // inpL = WTE * inpL
-    // [ 1024, 1056] - model.lm_head
-    // [ 1024, N]     - inpL
     inpL = ggml_mul_mat(ctx0, model.lm_heads[codebook_ix - n_codes_given], inpL);
 
     // run the computation
-    // ggml_build_forward_expand(&gf, toy);
     ggml_build_forward_expand(&gf, inpL);
-    ggml_graph_compute       (ctx0, &gf);
+    ggml_graph_compute_with_ctx(ctx0, &gf, n_threads);
 
-    // [1056, 1024]
+    // [seq_length, n_vocab]
+    // [1024, 1056]
     logits.resize(N);
 
     for (int i = 0; i < N; i++) {
@@ -905,7 +876,6 @@ bool gpt_eval(
 
     struct ggml_context * ctx0 = ggml_init(params);
     struct ggml_cgraph gf = {};
-    gf.n_threads = n_threads;
 
     struct ggml_tensor * input = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
     memcpy(input->data, embd_inp.data(), N*ggml_element_size(input));
@@ -1172,7 +1142,7 @@ bool gpt_eval(
 
     // run the computation
     ggml_build_forward_expand(&gf, inpL);
-    ggml_graph_compute       (ctx0, &gf);
+    ggml_graph_compute_with_ctx(ctx0, &gf, n_threads);
 
     // return result just for the last token
     embd_w.resize(n_vocab);
@@ -1459,12 +1429,15 @@ bark_codes bark_forward_coarse_encoder(
     BARK_ASSERT((int) out.size() == n_steps);
     BARK_ASSERT(out.size() % N_COARSE_CODEBOOKS == 0);
 
+    // out_coarse: [n_codes, seq_length]
     for (int i = 0; i < (int) out.size(); i++) {
         if (i % 2 == 0)
             out_coarse[0].push_back(out[i] - SEMANTIC_VOCAB_SIZE);
         else
             out_coarse[1].push_back(out[i] - SEMANTIC_VOCAB_SIZE - CODEBOOK_SIZE);
     }
+
+    // TODO: transpose out_coarse
 
     const int64_t t_main_end_us = ggml_time_us();
 
@@ -1483,6 +1456,7 @@ bark_codes bark_forward_fine_encoder(
     std::mt19937 & rng,
     const int n_threads,
     const float temp) {
+    // input shape: (N, n_codes)
 
     bark_codes input = tokens;
     std::vector<std::vector<float>> logits;
@@ -1497,50 +1471,54 @@ bark_codes bark_forward_fine_encoder(
 
     const int64_t t_main_start_us = ggml_time_us();
 
-    int n_coarse          = input.size();
-    int original_seq_len  = input[0].size();
+    int n_coarse          = input[0].size();
+    int original_seq_len  = input.size();
     int n_remove_from_end = 0;
 
     // channel padding
-    for(int i = N_COARSE_CODEBOOKS; i < N_FINE_CODEBOOKS; i++) {
-        bark_sequence tmp(original_seq_len, CODEBOOK_SIZE);
-        input.push_back(tmp);
+    for (int i = 0; i < (int) input.size(); i++) {
+        for (int j = N_COARSE_CODEBOOKS; j < N_FINE_CODEBOOKS; j++) {
+            input[i].push_back(CODEBOOK_SIZE);
+        }
     }
 
     // spatial padding if sequence is too short
-    if(original_seq_len < 1024) {
+    if (original_seq_len < 1024) {
         n_remove_from_end = 1024 - original_seq_len;
-        for (int i = 0; i < (int) input.size(); i++) {
-            for (int j = original_seq_len; j < 1024; j++) {
-                input[i].push_back(CODEBOOK_SIZE);
-            }
+        for (int i = original_seq_len; i < 1024; i++) {
+            bark_sequence _tmp(N_FINE_CODEBOOKS, CODEBOOK_SIZE);
+            input.push_back(_tmp);
         }
     }
 
     // dry run to estimate mem_per_token
-    fine_gpt_eval(model, n_threads, n_coarse, { {0, 1}, {1, 2}, {2, 3}, {3, 4}, {4, 5}, {5, 6}, {6, 7}, {7, 8} }, logits, mem_per_token);
+    bark_codes toy_codes = { {0, 1}, {1, 2}, {2, 3}, {3, 4}, {4, 5}, {5, 6}, {6, 7}, {7, 8} };
+    fine_gpt_eval(model, n_threads, 2, toy_codes, logits, mem_per_token);
 
-    int n_loops = std::max(0, (int) ceilf((input[0].size() - 1024)/512.f)) + 1;
+    int n_loops = std::max(0, (int) ceilf((input.size() - 1024)/512.f)) + 1;
 
+    // in_arr: [seq_length, n_codes]
     bark_codes in_arr = input;
 
     for (int n = 0; n < n_loops; n++) {
-        int start_ix          = std::min(n * 512, (int) in_arr[0].size() - 1024);
-        int start_fill_ix     = std::min(n * 512, (int) in_arr[0].size() - 512);
+        int start_ix          = std::min(n * 512, (int) in_arr.size() - 1024);
+        int start_fill_ix     = std::min(n * 512, (int) in_arr.size() - 512);
         int rel_start_fill_ix = start_fill_ix - start_ix;
 
-        bark_codes in_buffer(in_arr.size());
-        for (int ix = 0; ix < (int) in_buffer.size(); ix++) {
-            bark_sequence buf(in_arr[ix].begin() + start_ix, in_arr[ix].begin() + start_ix + 1024);
-            in_buffer[ix] = buf;
+        // in_buffer: [n_codes, seq_length]
+        bark_codes in_buffer;
+        for (int i = 0; i < N_FINE_CODEBOOKS; i++) {
+            bark_sequence _buf;
+            for (int j = start_ix; j < start_ix + 1024; j++) {
+                _buf.push_back(in_arr[j][i]);
+            }
+            in_buffer.push_back(_buf);
         }
 
         for (int nn = n_coarse; nn < N_FINE_CODEBOOKS; nn++) {
             int64_t t_predict_start_us = ggml_time_us();
             fine_gpt_eval(model, n_threads, nn, in_buffer, logits, mem_per_token);
             t_predict_us += (ggml_time_us() - t_predict_start_us);
-
-            bark_sequence predictions(CODEBOOK_SIZE - rel_start_fill_ix);
 
             for (int i = 0; i < (int) logits.size(); i++) {
                 logits[i].resize(CODEBOOK_SIZE);
@@ -1558,18 +1536,17 @@ bark_codes bark_forward_fine_encoder(
         // transfer over info into model_in
         for (int nn = n_coarse; nn < N_FINE_CODEBOOKS; nn++) {
             for (int j = 0; j < CODEBOOK_SIZE - rel_start_fill_ix; j++) {
-                in_arr[nn][start_fill_ix+j] = in_buffer[nn][rel_start_fill_ix+j];
+                in_arr[start_fill_ix+j][nn] = in_buffer[nn][rel_start_fill_ix+j];
             }
         }
+
     }
 
     if (n_remove_from_end > 0) {
-        for (int i = 0; i < (int) in_arr.size(); i++) {
-            in_arr[i].resize(in_arr[i].size() - n_remove_from_end);
-        }
+        in_arr.resize(in_arr.size() - n_remove_from_end);
     }
 
-    BARK_ASSERT(tokens[0].size() == in_arr[0].size());
+    BARK_ASSERT(tokens.size() == in_arr.size());
 
     const int64_t t_main_end_us = ggml_time_us();
 
@@ -1582,6 +1559,106 @@ bark_codes bark_forward_fine_encoder(
     return in_arr;
 }
 
+bool encodec_eval(
+        const bark_codes    & tokens,
+        const encodec_model & model,
+        audio_arr_t         & audio_arr,
+        const int n_threads,
+        size_t & mem_per_token) {
+    // input shape: [seq_length, n_codes]
+    const int N       = tokens.size();
+    const int n_codes = tokens[0].size();
+
+    bark_codes input = tokens;
+
+    static size_t buf_size = 256u*1024*1024;
+    static void * buf = malloc(buf_size);
+
+    if (mem_per_token > 0 && mem_per_token*N*n_codes > buf_size) {
+        const size_t buf_size_new = 1.1*(mem_per_token*N*n_codes);  // add 10% to account for ggml object overhead
+
+        // reallocate
+        buf_size = buf_size_new;
+        buf = realloc(buf, buf_size);
+        if (buf == nullptr) {
+            fprintf(stderr, "%s: failed to allocate %zu bytes\n", __func__, buf_size);
+            return false;
+        }
+    }
+
+    struct ggml_init_params params = {
+        /*.mem_size   =*/ buf_size,
+        /*.mem_buffer =*/ buf,
+        /*.no_alloc   =*/ false,
+    };
+
+    struct ggml_context * ctx0 = ggml_init(params);
+    struct ggml_cgraph gf = {};
+
+    struct ggml_tensor * codes = ggml_new_tensor_2d(ctx0, GGML_TYPE_I32, N, n_codes);
+    for (int c = 0; c < n_codes; c++) {
+        bark_sequence _tmp;
+        for (int i = 0; i < N; i++)
+            _tmp.push_back(input[i][c]);
+        int offset = ggml_element_size(codes)*c*N;
+        memcpy((void *) ((char *) codes->data + offset), _tmp.data(), N*ggml_element_size(codes));
+    }
+
+    struct ggml_tensor * quantized_out = encodec_quantizer_decode_eval(ctx0, model, codes);
+    struct ggml_tensor * output        = encodec_decoder_eval(ctx0, model, quantized_out);
+
+    ggml_build_forward_expand(&gf, output);
+    // TODO: adapt ggml_conv_1d and ggml_conv_trans_1d implementation to use multiple
+    // threads.
+    ggml_graph_compute_with_ctx(ctx0, &gf, 1);
+
+    int out_seq_length = output->ne[0];
+    audio_arr.resize(out_seq_length);
+    memcpy(audio_arr.data(), (float *) ggml_get_data(output), sizeof(float)*out_seq_length);
+
+    if (mem_per_token == 0) {
+        mem_per_token = ggml_used_mem(ctx0)/N/n_codes;
+    }
+
+    ggml_free(ctx0);
+
+    return true;
+}
+
+audio_arr_t bark_forward_encodec(
+    const bark_codes & tokens,
+    const encodec_model model,
+    const int n_threads) {
+
+    audio_arr_t audio_arr;
+
+    int64_t t_predict_us = 0;
+
+    const int64_t t_main_start_us = ggml_time_us();
+
+    // dry run to estimate mem_per_token
+    size_t mem_per_token = 0;
+    bark_codes toy_data;
+    for (int i = 0; i < 20; i++) {
+        bark_sequence _tmp(4, i);
+        toy_data.push_back(_tmp);
+    }
+    encodec_eval(toy_data, model, audio_arr, n_threads, mem_per_token);
+
+    int64_t t_predict_start_us = ggml_time_us();
+    encodec_eval(tokens, model, audio_arr, n_threads, mem_per_token);
+    t_predict_us += (ggml_time_us() - t_predict_start_us);
+
+    const int64_t t_main_end_us = ggml_time_us();
+
+    printf("\n\n");
+    printf("%s: mem per token = %zu bytes\n", __func__, mem_per_token);
+    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, t_predict_us/1000.0f, t_predict_us/1000.0f);
+    printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us)/1000.0f);
+
+    return audio_arr;
+}
+
 bool bark_generate_audio(
         bark_model model,
         const bark_vocab& vocab,
@@ -1592,7 +1669,7 @@ bool bark_generate_audio(
     const int seed  = 0;
 
     // const float top_p     = 0.2;
-    const float temp      = 1.0;
+    const float temp      = 0.7;
     const float fine_temp = 0.5;
 
     const int sliding_window_size = 60;
@@ -1614,19 +1691,19 @@ bool bark_generate_audio(
 
     printf("\n");
 
-    // semantic encoding
-    bark_sequence out_semantic = bark_forward_text_encoder(
+    bark_sequence semantic_tokens = bark_forward_text_encoder(
             tokens, model.text_model, rng, n_threads, temp, min_eos_p);
     printf("\n");
 
-    // coarse encoding (coarse model)
-    bark_codes out_coarse = bark_forward_coarse_encoder(
-            out_semantic, model.coarse_model, rng, n_threads, temp, max_coarse_history, sliding_window_size);
+    bark_codes coarse_tokens = bark_forward_coarse_encoder(
+            semantic_tokens, model.coarse_model, rng, n_threads, temp, max_coarse_history, sliding_window_size);
     printf("\n");
 
-    // fine encoding (fine model)
-    bark_codes out_fine = bark_forward_fine_encoder(
-            out_coarse, model.fine_model, rng, n_threads, fine_temp);
+    bark_codes fine_tokens = bark_forward_fine_encoder(
+            coarse_tokens, model.fine_model, rng, n_threads, fine_temp);
+    printf("\n");
+
+    audio_arr_t audio_arr = bark_forward_encodec(fine_tokens, model.codec_model, n_threads);
     printf("\n");
 
     return true;
