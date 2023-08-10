@@ -5,6 +5,8 @@
 #include <random>
 #include <vector>
 
+#define SAMPLE_RATE 24000
+
 #define CLS_TOKEN_ID 101
 #define SEP_TOKEN_ID 102
 
