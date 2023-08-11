@@ -28,7 +28,6 @@ int main(int argc, char **argv) {
     fprintf(stderr, "%s : reading vocab from: '%s'\n", __func__, fname.c_str());
 
     bark_vocab vocab;
-    int max_ctx_size = 256;
 
     if(!bark_vocab_load(fname, vocab, 119547)) {
         fprintf(stderr, "%s: invalid vocab file '%s'\n", __func__, fname.c_str());
