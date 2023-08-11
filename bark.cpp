@@ -460,7 +460,7 @@ void word_piece(std::string word, bark_sequence & tokens, const bark_vocab & voc
         tokens.push_back(token_id);
         word.erase(0, i);
 
-        if (!word.empty()) {
+        if (word.size() > 0) {
             word = "##" + word;
         }
     }
