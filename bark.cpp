@@ -426,7 +426,6 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
     return true;
 }
 
-
 std::string strip_accents(const std::string &in_str) {
     std::string out_str;
     std::map<std::string, char> accent_map = {{"À", 'A'},{"Á", 'A'},
@@ -456,17 +455,34 @@ std::string strip_accents(const std::string &in_str) {
     return out_str;
 }
 
+void word_piece(std::string word, bark_sequence & tokens, const bark_vocab & vocab) {
+    auto * token_map = &vocab.token_to_id;
+    int i = word.size();
 
-void bert_tokenize(
-    const bark_vocab& vocab,
-    const char * text,
-    int32_t * tokens,
-    int32_t * n_tokens,
-    int32_t n_max_tokens) {
+    while (i > 0) {
+        while (i > 0 && token_map->find(word.substr(0, i)) == token_map->end()) { --i; }
+
+        if (i == 0) {
+            tokens.push_back(101);  // [UNK] token
+            fprintf(stderr, "%s: unknown token '%s'\n", __func__, word.c_str());
+            return;
+        }
+
+        bark_vocab::id token_id = token_map->find(word.substr(0, i))->second;
+        tokens.push_back(token_id);
+        word.erase(0, i);
+
+        if (!word.empty()) {
+            word = "##" + word;
+        }
+    }
+}
+
+void bert_tokenize(const bark_vocab & vocab, const char * text, bark_sequence & tokens) {
     std::string str = text;
     std::vector<std::string> words;
 
-    // first split the text into words
+    // split the text into words
     {
         str = strip_accents(text);
 
@@ -482,44 +498,13 @@ void bert_tokenize(
         }
     }
 
-    int32_t t = 0;
-
-    // find the longest tokens that form the words:
-    for (const auto &word : words)
-    {
+    // apply wordpiece
+    for (const auto &word : words) {
         if (word.size() == 0)
             continue;
 
-        int i = 0;
-        int n = word.size();
-        auto *token_map = &vocab.token_to_id;
-    loop:
-        while (i < n)
-        {
-            if (t >= n_max_tokens - 1)
-                break;
-            int j = n;
-            while (j > i)
-            {
-                auto it = token_map->find(word.substr(i, j - i));
-                if (it != token_map->end())
-                {
-                    tokens[t++] = it->second;
-                    i = j;
-                    token_map = &vocab.subword_token_to_id;
-                    goto loop;
-                }
-                --j;
-            }
-            if (j == i)
-            {
-                fprintf(stderr, "%s: unknown token '%s'\n", __func__, word.substr(i, 1).data());
-                token_map = &vocab.subword_token_to_id;
-                ++i;
-            }
-        }
+        word_piece(word, tokens, vocab);
     }
-    *n_tokens = t;
 }
 
 bool fine_gpt_eval(
@@ -1222,13 +1207,13 @@ bark_vocab::id gpt_sample(std::vector<float> & logits, std::mt19937 & rng, float
 }
 
 bark_sequence bark_tokenize_input(const char * text, const bark_vocab & vocab, int32_t block_size) {
-    // max bark length: 256
     int32_t max_ctx_size = std::min(block_size, 256);
-    int32_t n_tokens;
 
-    bark_sequence tokens(max_ctx_size);
+    bark_sequence tokens;
+    bert_tokenize(vocab, text, tokens);
 
-    bert_tokenize(vocab, text, tokens.data(), &n_tokens, max_ctx_size);
+    int n_tokens = tokens.size();
+
     for (int i = 0; i < (int) tokens.size(); i++)
         tokens[i] += TEXT_ENCODING_OFFSET;
 
