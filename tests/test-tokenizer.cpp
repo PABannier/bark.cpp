@@ -35,8 +35,7 @@ int main(int argc, char **argv) {
     }
 
     for (const auto & test_kv : k_tests()) {
-        bark_sequence res;
-        bert_tokenize(vocab, test_kv.first.c_str(), res);
+        bark_sequence res = bert_tokenize(vocab, test_kv.first.c_str());
 
         bool correct = res.size() == test_kv.second.size();
 

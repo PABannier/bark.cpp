@@ -460,13 +460,15 @@ void word_piece(std::string word, bark_sequence & tokens, const bark_vocab & voc
         tokens.push_back(token_id);
         word.erase(0, i);
 
-        if (!word.empty()) {
+        if (word.size() > 0) {
             word = "##" + word;
         }
     }
 }
 
-void bert_tokenize(const bark_vocab & vocab, const char * text, bark_sequence & tokens) {
+bark_sequence bert_tokenize(const bark_vocab & vocab, const char * text) {
+    bark_sequence tokens;
+
     std::string str = text;
     std::vector<std::string> words;
 
@@ -493,6 +495,8 @@ void bert_tokenize(const bark_vocab & vocab, const char * text, bark_sequence & 
 
         word_piece(word, tokens, vocab);
     }
+
+    return tokens;
 }
 
 bool fine_gpt_eval(
@@ -1197,9 +1201,7 @@ bark_vocab::id gpt_sample(std::vector<float> & logits, std::mt19937 & rng, float
 bark_sequence bark_tokenize_input(const char * text, const bark_vocab & vocab, int32_t block_size) {
     int32_t max_ctx_size = std::min(block_size, 256);
 
-    bark_sequence tokens;
-    bert_tokenize(vocab, text, tokens);
-
+    bark_sequence tokens = bert_tokenize(vocab, text);
     int n_tokens = tokens.size();
 
     for (int i = 0; i < (int) tokens.size(); i++)
@@ -1207,7 +1209,7 @@ bark_sequence bark_tokenize_input(const char * text, const bark_vocab & vocab, i
 
     if (n_tokens < max_ctx_size) {
         for (int i = n_tokens; i < max_ctx_size; i++)
-            tokens[i] = TEXT_PAD_TOKEN;
+            tokens.push_back(TEXT_PAD_TOKEN);
     } else if (n_tokens > max_ctx_size) {
         fprintf(stderr, "%s: input sequence is too long (%d > 256), truncating sequence", __func__, n_tokens);
     }
