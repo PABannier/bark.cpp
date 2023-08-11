@@ -447,7 +447,7 @@ void word_piece(std::string word, bark_sequence & tokens, const bark_vocab & voc
     auto * token_map = &vocab.token_to_id;
     int i = word.size();
 
-    while (i > 0) {
+    while (word.size() > 0) {
         while (i > 0 && token_map->find(word.substr(0, i)) == token_map->end()) { --i; }
 
         if (i == 0) {
