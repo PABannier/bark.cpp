@@ -2,18 +2,6 @@
 Port of Suno's Bark to C/C++.
 
 Author: Pierre-Antoine Bannier <pierreantoine.bannier@gmail.com>
-
-Note on tokenization
---------------------
-Even if bark relies on GPT to generate semantic tokens, the tokenizer is based on
-Bert's multilingual cased tokenizer. This uses the WordPiece algorithm to split raw text
-into tokens.
-
-This file contains an unofficial (Google has not released an official implementation of
-WordPiece) implementation of WordPiece.
-
-Source:
-https://github.com/skeskinen/bert.cpp/
 */
 #include "bark.h"
 #include "ggml.h"
