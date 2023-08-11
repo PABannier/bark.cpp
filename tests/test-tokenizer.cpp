@@ -28,6 +28,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "%s : reading vocab from: '%s'\n", __func__, fname.c_str());
 
     bark_vocab vocab;
+    int max_ctx_size = 256;
 
     if(!bark_vocab_load(fname, vocab, 119547)) {
         fprintf(stderr, "%s: invalid vocab file '%s'\n", __func__, fname.c_str());
@@ -35,7 +36,10 @@ int main(int argc, char **argv) {
     }
 
     for (const auto & test_kv : k_tests()) {
-        bark_sequence res = bert_tokenize(vocab, test_kv.first.c_str());
+        bark_sequence res(test_kv.first.size());
+        int n_tokens;
+        bert_tokenize(vocab, test_kv.first.c_str(), res.data(), &n_tokens, max_ctx_size);
+        res.resize(n_tokens);
 
         bool correct = res.size() == test_kv.second.size();
 

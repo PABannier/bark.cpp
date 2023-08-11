@@ -149,7 +149,12 @@ bool bark_model_load(const std::string & dirname, bark_model & model);
 
 bool bark_vocab_load(const std::string & fname, bark_vocab& vocab, int32_t expected_size);
 
-bark_sequence bert_tokenize(const bark_vocab & vocab, const char * text);
+void bert_tokenize(
+        const bark_vocab & vocab, 
+              const char * text, 
+                 int32_t * tokens,
+                 int32_t * n_tokens,
+                 int32_t   n_max_tokens);
 
 bool bark_generate_audio(
         bark_model model,
