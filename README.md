@@ -2,7 +2,7 @@
 
 ![bark.cpp]()
 
-[![Actions Status](https://github.com/pabannier/bark.cpp/workflows/CI/badge.svg)](https://github.com/pabannier/bark.cpp/actions)
+[![Actions Status](https://github.com/PABannier/bark.cpp/actions/workflows/build.yml/badge.svg)](https://github.com/pabannier/bark.cpp/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 [Roadmap](https://github.com/users/pabannier/projects/1) / [encodec.cpp](https://github.com/pabannier/encodec.cpp) / [ggml](https://github.com/ggerganov/ggml)
@@ -195,21 +195,18 @@ python convert.py \
 ### Seminal papers and background on models
 
 - Bark
-    - []()
+    - [Text Prompted Generative Audio](https://github.com/suno-ai/bark)
 - Encodec
-    - []()
+    - [High Fidelity Neural Audio Compression](https://arxiv.org/abs/2210.13438)
 - GPT-3
     - [Language Models are Few-Shot Learners](https://arxiv.org/abs/2005.14165)
-- GPT-3.5 / InstructGPT / ChatGPT:
-    - [Aligning language models to follow instructions](https://openai.com/research/instruction-following)
-    - [Training language models to follow instructions with human feedback](https://arxiv.org/abs/2203.02155)
 
 ### Contributing
 
 `bark.cpp` is a continuous endeavour that relies on the community efforts to last and evolve. Your contribution is welcome and highly valuable. It can be
 
 - bug report: you may encounter a bug while using `bark.cpp`. Don't hesitate to report it on the issue section.
-- feature request: you want to add a new model or support a new platform`. You can use the issue section to make suggestions.
+- feature request: you want to add a new model or support a new platform. You can use the issue section to make suggestions.
 - pull request: you may have fixed a bug, added a features, or even fixed a small typo in the documentation, ... you can submit a pull request and a reviewer will reach out to you.
 
 ### Coding guidelines
