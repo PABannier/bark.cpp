@@ -1,6 +1,6 @@
 # bark.cpp
 
-<!-- ![bark.cpp]() -->
+![bark.cpp](./assets/banner.jpeg)
 
 [![Actions Status](https://github.com/PABannier/bark.cpp/actions/workflows/build.yml/badge.svg)](https://github.com/PABannier/bark.cpp/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
