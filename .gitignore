@@ -1,6 +1,7 @@
 ggml_weights/*
 *.dSYM/
 build/
+models/
 
 bark
 encodec
