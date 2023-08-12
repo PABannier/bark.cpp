@@ -110,7 +110,7 @@ struct gpt_model {
     struct ggml_context * ctx;
     std::map<std::string, struct ggml_tensor *> tensors;
 
-    int32_t memsize = 0;
+    int64_t memsize = 0;
 };
 
 
@@ -126,7 +126,7 @@ struct bark_model {
     // vocab
     bark_vocab vocab;
 
-    int32_t memsize = 0;
+    int64_t memsize = 0;
 };
 
 bool gpt_model_load(const std::string& fname, gpt_model& model);
