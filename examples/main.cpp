@@ -1,14 +1,25 @@
 #include "ggml.h"
 #include "bark.h"
 
-int main() {
+
+int main(int argc, char **argv) {
     const int64_t t_main_start_us = ggml_time_us();
+
+    bark_params params;
+
+    if (bark_params_parse(argc, argv, params) == false) {
+        return 1;
+    }
 
     int64_t t_load_us = 0;
     int64_t t_eval_us = 0;
 
     bark_model model;
     std::string fname = "./ggml_weights";
+
+    if (!params.model.empty()) {
+        fname = params.model;
+    }
 
     // load the model
     {
@@ -24,13 +35,14 @@ int main() {
 
     printf("\n");
 
-    // forward pass
-    const std::string prompt = "hi! i'm john and i'm a software engineer.";
-    {
-        const int64_t t_eval_us_start = ggml_time_us();
-        bark_generate_audio(model, model.vocab, prompt.data(), 4);
-        t_eval_us = ggml_time_us() - t_eval_us_start;
+    std::string prompt = "this is an audio";
+    if (!params.prompt.empty()) {
+        prompt = params.prompt;
     }
+
+    const int64_t t_eval_us_start = ggml_time_us();
+    bark_generate_audio(model, model.vocab, prompt.data(), params.n_threads);
+    t_eval_us = ggml_time_us() - t_eval_us_start;
 
     // report timing
     {

@@ -3,6 +3,7 @@
 
 #include <map>
 #include <random>
+#include <thread>
 #include <vector>
 
 #define SAMPLE_RATE 24000
@@ -25,6 +26,14 @@
 #define COARSE_RATE_HZ 75
 #define COARSE_SEMANTIC_PAD_TOKEN 12048
 #define COARSE_INFER_TOKEN 12050
+
+struct bark_params {
+    int32_t n_threads = std::min(4, (int32_t) std::thread::hardware_concurrency());
+
+    std::string model = "./ggml_weights/";  // weights location
+
+    std::string prompt;  // user prompt
+};
 
 struct gpt_hparams {
     int32_t n_in_vocab;
@@ -150,8 +159,8 @@ bool bark_model_load(const std::string & dirname, bark_model & model);
 bool bark_vocab_load(const std::string & fname, bark_vocab& vocab, int32_t expected_size);
 
 void bert_tokenize(
-        const bark_vocab & vocab, 
-              const char * text, 
+        const bark_vocab & vocab,
+              const char * text,
                  int32_t * tokens,
                  int32_t * n_tokens,
                  int32_t   n_max_tokens);
@@ -212,3 +221,7 @@ struct bark_progress {
         }
     }
 };
+
+bool bark_params_parse(int argc, char ** argv, bark_params & params);
+
+void bark_print_usage(char ** argv, const bark_params & params);
