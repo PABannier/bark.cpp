@@ -1655,10 +1655,12 @@ bool bark_generate_audio(
         bark_model model,
         const bark_vocab& vocab,
         const char * text,
-        const int n_threads) {
+        const int n_threads,
+        const int32_t seed,
+        const std::string &dest_wav_path) {
     // TODO move into params
     // const int top_k = 10;
-    const int seed  = 0;
+    // const int seed  = 0;
 
     // const float top_p     = 0.2;
     const float temp      = 0.7;
@@ -1698,8 +1700,9 @@ bool bark_generate_audio(
     audio_arr_t audio_arr = bark_forward_encodec(fine_tokens, model.codec_model, n_threads);
     printf("\n");
 
-    std::string dest_path = "./recording.wav";
-    write_wav_on_disk(audio_arr, dest_path);
+    if (dest_wav_path != "") {
+        write_wav_on_disk(audio_arr, dest_wav_path);
+    }
 
     return true;
 }
@@ -1714,6 +1717,10 @@ bool bark_params_parse(int argc, char ** argv, bark_params & params) {
             params.prompt = argv[++i];
         } else if (arg == "-m" || arg == "--model") {
             params.model = argv[++i];
+        } else if (arg == "-s" || arg == "--seed") {
+            params.seed = std::stoi(argv[++i]);
+        } else if (arg == "-o" || arg == "--outwav") {
+            params.dest_wav_path = argv[++i];
         } else if (arg == "-h" || arg == "--help") {
             bark_print_usage(argv, params);
             exit(0);
@@ -1733,9 +1740,12 @@ void bark_print_usage(char ** argv, const bark_params & params) {
     fprintf(stderr, "options:\n");
     fprintf(stderr, "  -h, --help            show this help message and exit\n");
     fprintf(stderr, "  -t N, --threads N     number of threads to use during computation (default: %d)\n", params.n_threads);
+    fprintf(stderr, "  -s N, --seed N        seed for random number generator (default: %d)\n", params.seed);
     fprintf(stderr, "  -p PROMPT, --prompt PROMPT\n");
     fprintf(stderr, "                        prompt to start generation with (default: random)\n");
     fprintf(stderr, "  -m FNAME, --model FNAME\n");
     fprintf(stderr, "                        model path (default: %s)\n", params.model.c_str());
+    fprintf(stderr, "  -o FNAME, --outwav FNAME\n");
+    fprintf(stderr, "                        output generated wav (default: %s)\n", params.dest_wav_path.c_str());
     fprintf(stderr, "\n");
 }
