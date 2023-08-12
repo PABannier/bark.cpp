@@ -1,11 +1,11 @@
 # bark.cpp
 
-![bark.cpp]()
+<!-- ![bark.cpp]() -->
 
-[![Actions Status](https://github.com/PABannier/bark.cpp/actions/workflows/build.yml/badge.svg)](https://github.com/pabannier/bark.cpp/actions)
+[![Actions Status](https://github.com/PABannier/bark.cpp/actions/workflows/build.yml/badge.svg)](https://github.com/PABannier/bark.cpp/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-[Roadmap](https://github.com/users/pabannier/projects/1) / [encodec.cpp](https://github.com/pabannier/encodec.cpp) / [ggml](https://github.com/ggerganov/ggml)
+[Roadmap](https://github.com/users/PABannier/projects/1) / [encodec.cpp](https://github.com/PABannier/encodec.cpp) / [ggml](https://github.com/ggerganov/ggml)
 
 Inference of [SunoAI's bark model](https://github.com/suno-ai/bark) in pure C/C++.
 
