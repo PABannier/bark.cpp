@@ -1,5 +1,7 @@
 # bark.cpp
 
+![bark.cpp]()
+
 [![Actions Status](https://github.com/pabannier/bark.cpp/workflows/CI/badge.svg)](https://github.com/pabannier/bark.cpp/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
