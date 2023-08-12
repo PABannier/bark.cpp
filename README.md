@@ -172,11 +172,8 @@ In order to build bark.cpp you have two different options. We recommend using `C
 ### Prepare data & Run
 
 ```bash
-# obtain the original bark model weights and place them in ./models
-mkdir models && ls ./models
-
-# obtain the original encodec model weights and place them in ./models
-TODO
+# obtain the original bark and encodec weights and place them in ./models
+python3 download_weights.py --download-dir ./models
 
 # install Python dependencies
 python3 -m pip install -r requirements.txt
