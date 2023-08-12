@@ -76,6 +76,7 @@ option(BARK_CLBLAST                         "bark: use CLBlast"                 
 option(BARK_METAL                           "bark: use Metal"                                 OFF)
 
 option(BARK_BUILD_TESTS                "bark: build tests"    ${BARK_STANDALONE})
+option(BARK_BUILD_EXAMPLES             "bark: build examples" ${BARK_STANDALONE})
 
 #
 # Build info header
@@ -519,6 +520,10 @@ install(
 #
 # programs, examples and tests
 #
+
+if (BARK_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
 
 if (BARK_BUILD_TESTS AND NOT CMAKE_JS_VERSION)
     include(CTest)
