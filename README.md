@@ -179,14 +179,14 @@ python3 download_weights.py --download-dir ./models
 python3 -m pip install -r requirements.txt
 
 # convert the model to ggml format
-python convert.py \
+python3 convert.py \
         --dir-model ./models \
         --codec-path ./models \
         --vocab-path ./models \
         --out-dir ./ggml_weights/
 
 # run the inference
-./main -m ./models/ggml_weights/ -p "this is an audio"
+./main -m ./ggml_weights/ -p "this is an audio"
 ```
 
 ### Seminal papers and background on models
