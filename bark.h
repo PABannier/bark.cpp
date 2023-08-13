@@ -32,7 +32,11 @@ struct bark_params {
 
     std::string model = "./ggml_weights/";  // weights location
 
+    int32_t seed = 0;
+
     std::string prompt;  // user prompt
+
+    std::string dest_wav_path = "./output.wav";
 };
 
 struct gpt_hparams {
@@ -169,7 +173,9 @@ bool bark_generate_audio(
         bark_model model,
         const bark_vocab& vocab,
         const char * text,
-        const int n_threads);
+        const int n_threads,
+        const int32_t seed,
+        const std::string& dest_wav_path);
 
 bark_sequence bark_forward_text_encoder(
     const bark_sequence & tokens,
