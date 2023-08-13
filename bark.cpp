@@ -1657,7 +1657,7 @@ bool bark_generate_audio(
         const char * text,
         const int n_threads,
         const int32_t seed,
-        const std::string &dest_wav_path) {
+        const std::string& dest_wav_path) {
     // TODO move into params
     // const int top_k = 10;
     // const int seed  = 0;

@@ -175,7 +175,7 @@ bool bark_generate_audio(
         const char * text,
         const int n_threads,
         const int32_t seed,
-        const std::string &dest_wav_path);
+        const std::string& dest_wav_path);
 
 bark_sequence bark_forward_text_encoder(
     const bark_sequence & tokens,
