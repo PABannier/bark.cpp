@@ -1502,7 +1502,6 @@ bool encodec_eval(
         const bark_codes    & tokens,
         const encodec_model & model,
         audio_arr_t         & audio_arr,
-        const int n_threads,
         size_t & mem_per_token) {
     // input shape: [seq_length, n_codes]
     const int N       = tokens.size();
@@ -1564,11 +1563,7 @@ bool encodec_eval(
     return true;
 }
 
-audio_arr_t bark_forward_encodec(
-    const bark_codes & tokens,
-    const encodec_model model,
-    const int n_threads) {
-
+audio_arr_t bark_forward_encodec(const bark_codes & tokens, const encodec_model model) {
     audio_arr_t audio_arr;
 
     int64_t t_predict_us = 0;
@@ -1582,10 +1577,10 @@ audio_arr_t bark_forward_encodec(
         bark_sequence _tmp(4, i);
         toy_data.push_back(_tmp);
     }
-    encodec_eval(toy_data, model, audio_arr, n_threads, mem_per_token);
+    encodec_eval(toy_data, model, audio_arr, mem_per_token);
 
     int64_t t_predict_start_us = ggml_time_us();
-    encodec_eval(tokens, model, audio_arr, n_threads, mem_per_token);
+    encodec_eval(tokens, model, audio_arr, mem_per_token);
     t_predict_us += (ggml_time_us() - t_predict_start_us);
 
     const int64_t t_main_end_us = ggml_time_us();
@@ -1662,7 +1657,7 @@ bool bark_generate_audio(
             coarse_tokens, model.fine_model, rng, n_threads, fine_temp);
     printf("\n");
 
-    audio_arr_t audio_arr = bark_forward_encodec(fine_tokens, model.codec_model, n_threads);
+    audio_arr_t audio_arr = bark_forward_encodec(fine_tokens, model.codec_model);
     printf("\n");
 
     if (dest_wav_path != "") {
