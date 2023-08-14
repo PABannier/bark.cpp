@@ -570,24 +570,17 @@ bool fine_gpt_eval(
         memcpy((void *) ((char *) input->data + offset), embd_inp[c].data(), N*ggml_element_size(input));
     }
 
-    struct ggml_tensor * tok_emb = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd, N, codebook_ix+1);
+    struct ggml_tensor * tok_emb = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N);
+    tok_emb = ggml_set_zero(tok_emb);
 
-    for (int wte_ix = 0; wte_ix < codebook_ix+1; wte_ix++) {
-        struct ggml_tensor * curr = ggml_get_rows(ctx0,
-                                            model.wtes[wte_ix],
-                                            ggml_view_1d(ctx0, input, N, N*wte_ix*ggml_element_size(input)));
-
-        tok_emb = ggml_set_2d(ctx0, tok_emb, curr,
-                        ggml_element_size(curr)*n_embd,
-                        ggml_element_size(curr)*wte_ix*N*n_embd);
+    for (int wte_ix = 0; wte_ix < codebook_ix + 1; wte_ix++) {
+        struct ggml_tensor * cur = ggml_get_rows(ctx0,
+                        model.wtes[wte_ix],
+                        ggml_view_1d(ctx0, input, N, wte_ix*input->nb[1]));
+        tok_emb = ggml_add(ctx0, tok_emb, cur);
     }
 
-    // [n_embd, N, codebook_ix+1] -> [codebook_ix+1, n_embd, N]
-    tok_emb = ggml_cont(ctx0, ggml_permute(ctx0, tok_emb, 1, 2, 0, 3));
-    // // [1, n_embd, N]
-    tok_emb = ggml_sum_rows(ctx0, tok_emb);
-    // [N, n_embd]
-    tok_emb = ggml_cont(ctx0, ggml_permute(ctx0, tok_emb, 2, 0, 1, 3));
+    toy = input;
 
     struct ggml_tensor * position = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
     for (int i = 0; i < N; ++i) {
@@ -639,9 +632,6 @@ bool fine_gpt_eval(
                             ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
                         0, 2, 1, 3);
 
-            printf("ne = [%lld, %lld, %lld]\n", Q->ne[0], Q->ne[1], Q->ne[2]);
-            printf("nb = [%zu, %zu, %zu]\n", Q->nb[0], Q->nb[1], Q->nb[2]);
-
             // [n_embd/n_head, N, n_head]
             struct ggml_tensor * K =
                 ggml_permute(ctx0,
@@ -652,8 +642,6 @@ bool fine_gpt_eval(
 
             // [N, N, n_head]
             struct ggml_tensor * KQ = ggml_mul_mat(ctx0, K, Q);
-
-            toy = KQ;
 
             // [N, N, n_head]
             struct ggml_tensor * KQ_scaled =
@@ -779,6 +767,7 @@ bool fine_gpt_eval(
 
     if (toy) {
         for (int j = 0; j < toy->ne[2]; j++) {
+        // for (int j = 0; j < 1; j++) {
             for (int k = 0; k < toy->ne[1]; k++) {
                 for (int l = 0; l < toy->ne[0]; l++) {
                     float * v = (float *) (
@@ -792,13 +781,21 @@ bool fine_gpt_eval(
             }
             printf("\n\n");
         }
-        printf("shape=[%lld, %lld, %lld]\n", toy->ne[0], toy->ne[1], toy->ne[2]);
+        printf("ne = [%lld, %lld, %lld]\n", toy->ne[0], toy->ne[1], toy->ne[2]);
+        printf("nb = [%zu, %zu, %zu]\n",    toy->nb[0], toy->nb[1], toy->nb[2]);
+
+        // size_t n_elements = toy->ne[0] * toy->ne[1] * toy->ne[2];
+        // std::vector<float> tmp(n_elements);
+        // memcpy(tmp.data(), ggml_get_data(toy), sizeof(float)*tmp.size());
+        // float sum_toy = std::accumulate(tmp.begin(), tmp.end(), 0.0f);
+        // printf("sum=%.4f\n", sum_toy);
 
         size_t n_elements = toy->ne[0] * toy->ne[1] * toy->ne[2];
-        std::vector<float> tmp(n_elements);
-        memcpy(tmp.data(), ggml_get_data(toy), sizeof(float)*tmp.size());
-        float sum_toy = std::accumulate(tmp.begin(), tmp.end(), 0.0f);
-        printf("sum=%.4f\n", sum_toy);
+        std::vector<int32_t> tmp(n_elements);
+        memcpy(tmp.data(), ggml_get_data(toy), sizeof(int32_t)*tmp.size());
+        int sum_toy = std::accumulate(tmp.begin(), tmp.end(), 0);
+        printf("sum=%d\n", sum_toy);
+
     }
 
     // [seq_length, n_vocab]
