@@ -580,8 +580,6 @@ bool fine_gpt_eval(
         tok_emb = ggml_add(ctx0, tok_emb, cur);
     }
 
-    toy = input;
-
     struct ggml_tensor * position = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
     for (int i = 0; i < N; ++i) {
         ((int32_t *) position->data)[i] = i;
@@ -765,38 +763,6 @@ bool fine_gpt_eval(
     ggml_build_forward_expand(&gf, inpL);
     ggml_graph_compute_with_ctx(ctx0, &gf, n_threads);
 
-    if (toy) {
-        for (int j = 0; j < toy->ne[2]; j++) {
-        // for (int j = 0; j < 1; j++) {
-            for (int k = 0; k < toy->ne[1]; k++) {
-                for (int l = 0; l < toy->ne[0]; l++) {
-                    float * v = (float *) (
-                        (char *) toy->data + j*toy->nb[2]
-                                           + k*toy->nb[1]
-                                           + l*toy->nb[0]
-                    );
-                    printf("%.4f ", *v);
-                }
-                printf("\n");
-            }
-            printf("\n\n");
-        }
-        printf("ne = [%lld, %lld, %lld]\n", toy->ne[0], toy->ne[1], toy->ne[2]);
-        printf("nb = [%zu, %zu, %zu]\n",    toy->nb[0], toy->nb[1], toy->nb[2]);
-
-        // size_t n_elements = toy->ne[0] * toy->ne[1] * toy->ne[2];
-        // std::vector<float> tmp(n_elements);
-        // memcpy(tmp.data(), ggml_get_data(toy), sizeof(float)*tmp.size());
-        // float sum_toy = std::accumulate(tmp.begin(), tmp.end(), 0.0f);
-        // printf("sum=%.4f\n", sum_toy);
-
-        size_t n_elements = toy->ne[0] * toy->ne[1] * toy->ne[2];
-        std::vector<int32_t> tmp(n_elements);
-        memcpy(tmp.data(), ggml_get_data(toy), sizeof(int32_t)*tmp.size());
-        int sum_toy = std::accumulate(tmp.begin(), tmp.end(), 0);
-        printf("sum=%d\n", sum_toy);
-
-    }
 
     // [seq_length, n_vocab]
     // [1024, 1056]
