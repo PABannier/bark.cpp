@@ -507,13 +507,6 @@ void bert_tokenize(
     *n_tokens = t;
 }
 
-float sum_on_dims(const struct ggml_tensor * t) {
-    size_t n_elements = t->ne[0]*t->ne[1]*t->ne[2]*t->ne[3];
-    std::vector<float> tmp(n_elements);
-    memcpy(tmp.data(), ggml_get_data(t), n_elements*sizeof(float));
-    return std::accumulate(tmp.begin(), tmp.end(), 0.f);
-}
-
 bool fine_gpt_eval(
         const gpt_model & model,
         const int n_threads,
@@ -562,8 +555,6 @@ bool fine_gpt_eval(
     struct ggml_context * ctx0 = ggml_init(params);
     struct ggml_cgraph gf = {};
 
-    struct ggml_tensor * toy;
-
     struct ggml_tensor * input = ggml_new_tensor_2d(ctx0, GGML_TYPE_I32, N, n_codes);
     for (int c = 0; c < n_codes; c++) {
         int offset = ggml_element_size(input)*c*N;
@@ -589,8 +580,7 @@ bool fine_gpt_eval(
     // wte + wpe
     struct ggml_tensor * inpL = ggml_add(ctx0, tok_emb, pos_emb);
 
-    // for (int il = 0; il < n_layer; ++il) {
-    for (int il = 0; il < 1; ++il) {
+    for (int il = 0; il < n_layer; ++il) {
         struct ggml_tensor * cur;
 
         // norm
@@ -762,7 +752,6 @@ bool fine_gpt_eval(
     // run the computation
     ggml_build_forward_expand(&gf, inpL);
     ggml_graph_compute_with_ctx(ctx0, &gf, n_threads);
-
 
     // [seq_length, n_vocab]
     // [1024, 1056]
