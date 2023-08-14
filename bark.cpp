@@ -507,14 +507,21 @@ void bert_tokenize(
     *n_tokens = t;
 }
 
+float sum_on_dims(const struct ggml_tensor * t) {
+    size_t n_elements = t->ne[0]*t->ne[1]*t->ne[2]*t->ne[3];
+    std::vector<float> tmp(n_elements);
+    memcpy(tmp.data(), ggml_get_data(t), n_elements*sizeof(float));
+    return std::accumulate(tmp.begin(), tmp.end(), 0.f);
+}
+
 bool fine_gpt_eval(
         const gpt_model & model,
         const int n_threads,
         const int codebook_ix,
         const bark_codes & embd_inp,
-              std::vector<std::vector<float>>          & logits,
-              size_t                                   & mem_per_token) {
-    // embd_inp: (n_channels, seq_length)
+              std::vector<std::vector<float>> & logits,
+              size_t                          & mem_per_token) {
+    // embd_inp: [n_channels, seq_length]
     const int N  = embd_inp[0].size();
     const int n_codes = embd_inp.size();
 
@@ -555,6 +562,8 @@ bool fine_gpt_eval(
     struct ggml_context * ctx0 = ggml_init(params);
     struct ggml_cgraph gf = {};
 
+    struct ggml_tensor * toy;
+
     struct ggml_tensor * input = ggml_new_tensor_2d(ctx0, GGML_TYPE_I32, N, n_codes);
     for (int c = 0; c < n_codes; c++) {
         int offset = ggml_element_size(input)*c*N;
@@ -589,16 +598,15 @@ bool fine_gpt_eval(
     // wte + wpe
     struct ggml_tensor * inpL = ggml_add(ctx0, tok_emb, pos_emb);
 
-    for (int il = 0; il < n_layer; ++il) {
+    // for (int il = 0; il < n_layer; ++il) {
+    for (int il = 0; il < 1; ++il) {
         struct ggml_tensor * cur;
 
         // norm
         {
-            // [ 768, N]
             cur = ggml_norm(ctx0, inpL);
 
             // cur = ln_1_g*cur + ln_1_b
-            // [ 768, N]
             cur = ggml_add(ctx0,
                     ggml_mul(ctx0,
                         ggml_repeat(ctx0, model.layers[il].ln_1_g, cur),
@@ -606,14 +614,7 @@ bool fine_gpt_eval(
                     ggml_repeat(ctx0, model.layers[il].ln_1_b, cur));
         }
 
-        // attn
-        // [2304, 768] - model.layers[il].c_attn_attn_w
-        // [2304,   1] - model.layers[il].c_attn_attn_b
-        // [ 768,   N] - cur (in)
-        // [2304,   N] - cur (out)
-        //
         // cur = attn_w*cur + attn_b
-        // [2304, N]
         {
             cur = ggml_mul_mat(ctx0,
                     model.layers[il].c_attn_attn_w,
@@ -630,8 +631,8 @@ bool fine_gpt_eval(
             struct ggml_tensor * Kcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 1*sizeof(float)*n_embd);
             struct ggml_tensor * Vcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 2*sizeof(float)*n_embd);
 
-            // Q = Qcur.contiguous().view(n_embd/n_head, n_head, N).permute(0, 2, 1, 3)
-            // [64, N, 12]
+            Vcur = ggml_cont(ctx0, Vcur);
+
             struct ggml_tensor * Q =
                 ggml_permute(ctx0,
                         ggml_cpy(ctx0,
@@ -639,8 +640,6 @@ bool fine_gpt_eval(
                             ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
                         0, 2, 1, 3);
 
-            // K = Kcur.contiguous().view(n_embd/n_head, n_head, N).permute(0, 2, 1, 3)
-            // [64, N, 12]
             struct ggml_tensor * K =
                 ggml_permute(ctx0,
                         ggml_cpy(ctx0,
@@ -648,52 +647,24 @@ bool fine_gpt_eval(
                             ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
                         0, 2, 1, 3);
 
-            // V = Vcur.contiguous().view(n_embd/n_head, n_head, N).permute(1, 2, 0, 3)
-            // [64, N, 12]
             struct ggml_tensor * V =
-                ggml_cont(ctx0, ggml_permute(ctx0,
-                        ggml_cpy(ctx0,
-                            Vcur,
-                            ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
-                        1, 2, 0, 3));
+                ggml_cpy(ctx0,
+                        ggml_permute(ctx0,
+                            ggml_reshape_3d(ctx0,
+                                Vcur,
+                                n_embd/n_head, n_head, N),
+                            1, 2, 0, 3),
+                        ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, N, n_embd/n_head, n_head));
 
-            // K * Q
-            // [n_past + N, N, 12]
-            struct ggml_tensor * KQ = ggml_mul_mat(ctx0, K, Q);
+            struct ggml_tensor * KQV = ggml_flash_attn(ctx0, Q, K, V, false);
 
-            // KQ_scaled = KQ / sqrt(n_embd/n_head)
-            // [n_past + N, N, 12]
-            struct ggml_tensor * KQ_scaled =
-                ggml_scale_inplace(ctx0,
-                        KQ,
-                        ggml_new_f32(ctx0, 1.0f/sqrt(float(n_embd)/n_head))
-                        );
-
-            // KQ = soft_max(KQ_masked)
-            // [n_past + N, N, 12]
-            struct ggml_tensor * KQ_soft_max = ggml_soft_max_inplace(ctx0, KQ_scaled);
-
-            // KQV = transpose(V) * KQ_soft_max
-            // [64, N, 12]
-            struct ggml_tensor * KQV = ggml_mul_mat(ctx0, V, KQ_soft_max);
-
-            // KQV_merged = KQV.permute(0, 2, 1, 3)
-            // [64, 12, N]
             struct ggml_tensor * KQV_merged = ggml_permute(ctx0, KQV, 0, 2, 1, 3);
 
-            // cur = KQV_merged.contiguous().view(n_embd, N)
-            // [768, N]
             cur = ggml_cpy(ctx0,
                     KQV_merged,
                     ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N));
         }
 
-        // projection
-        // [ 768, 768] - model.layers[il].c_attn_proj_w
-        // [ 768,   1] - model.layers[il].c_attn_proj_b
-        // [ 768,   N] - cur (in)
-        // [ 768,   N] - cur (out)
-        //
         // cur = proj_w*cur + proj_b
         // [768, N]
         {
@@ -787,6 +758,30 @@ bool fine_gpt_eval(
     // run the computation
     ggml_build_forward_expand(&gf, inpL);
     ggml_graph_compute_with_ctx(ctx0, &gf, n_threads);
+
+    if (toy) {
+        for (int j = 0; j < toy->ne[2]; j++) {
+            for (int k = 0; k < toy->ne[1]; k++) {
+                for (int l = 0; l < toy->ne[0]; l++) {
+                    float * v = (float *) (
+                        (char *) toy->data + j*toy->nb[2]
+                                           + k*toy->nb[1]
+                                           + l*toy->nb[0]
+                    );
+                    printf("%.4f ", *v);
+                }
+                printf("\n");
+            }
+            printf("\n\n");
+        }
+        printf("shape=[%lld, %lld, %lld]\n", toy->ne[0], toy->ne[1], toy->ne[2]);
+
+        size_t n_elements = toy->ne[0] * toy->ne[1] * toy->ne[2];
+        std::vector<float> tmp(n_elements);
+        memcpy(tmp.data(), ggml_get_data(toy), sizeof(float)*tmp.size());
+        float sum_toy = std::accumulate(tmp.begin(), tmp.end(), 0.0f);
+        printf("sum=%.4f\n", sum_toy);
+    }
 
     // [seq_length, n_vocab]
     // [1024, 1056]
