@@ -631,8 +631,7 @@ bool fine_gpt_eval(
             struct ggml_tensor * Kcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 1*sizeof(float)*n_embd);
             struct ggml_tensor * Vcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 2*sizeof(float)*n_embd);
 
-            Vcur = ggml_cont(ctx0, Vcur);
-
+            // [n_embd/n_head, N, n_head]
             struct ggml_tensor * Q =
                 ggml_permute(ctx0,
                         ggml_cpy(ctx0,
@@ -640,6 +639,10 @@ bool fine_gpt_eval(
                             ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
                         0, 2, 1, 3);
 
+            printf("ne = [%lld, %lld, %lld]\n", Q->ne[0], Q->ne[1], Q->ne[2]);
+            printf("nb = [%zu, %zu, %zu]\n", Q->nb[0], Q->nb[1], Q->nb[2]);
+
+            // [n_embd/n_head, N, n_head]
             struct ggml_tensor * K =
                 ggml_permute(ctx0,
                         ggml_cpy(ctx0,
@@ -647,16 +650,31 @@ bool fine_gpt_eval(
                             ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
                         0, 2, 1, 3);
 
-            struct ggml_tensor * V =
-                ggml_cpy(ctx0,
-                        ggml_permute(ctx0,
-                            ggml_reshape_3d(ctx0,
-                                Vcur,
-                                n_embd/n_head, n_head, N),
-                            1, 2, 0, 3),
-                        ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, N, n_embd/n_head, n_head));
+            // [N, N, n_head]
+            struct ggml_tensor * KQ = ggml_mul_mat(ctx0, K, Q);
 
-            struct ggml_tensor * KQV = ggml_flash_attn(ctx0, Q, K, V, false);
+            toy = KQ;
+
+            // [N, N, n_head]
+            struct ggml_tensor * KQ_scaled =
+                ggml_scale_inplace(ctx0,
+                        KQ,
+                        ggml_new_f32(ctx0, 1.0f/sqrt(float(n_embd)/n_head)));
+
+            // [N, N, n_head]
+            struct ggml_tensor * KQ_soft_max = ggml_soft_max_inplace(ctx0, KQ_scaled);
+
+            // [N, n_embd/n_head, n_head]
+            struct ggml_tensor * V_trans =
+                ggml_cont(ctx0,
+                    ggml_permute(ctx0,
+                            ggml_cpy(ctx0,
+                                Vcur,
+                                ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
+                            1, 2, 0, 3));
+
+            // [n_embd/n_head, N, n_head]
+            struct ggml_tensor * KQV = ggml_mul_mat(ctx0, V_trans, KQ_soft_max);
 
             struct ggml_tensor * KQV_merged = ggml_permute(ctx0, KQV, 0, 2, 1, 3);
 
