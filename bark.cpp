@@ -737,157 +737,181 @@ bool fine_gpt_eval(
     // wte + wpe
     struct ggml_tensor * inpL = ggml_add(ctx0, tok_emb, pos_emb);
 
-    int il = 0;
+    for (int il = 0; il < n_layer; il++) {
 
-    // norm
-    struct ggml_tensor * cur = ggml_norm(ctx0, inpL);
+        // norm
+        struct ggml_tensor * cur = ggml_norm(ctx0, inpL);
 
-    // cur = ln_1_g*cur + ln_1_b
-    cur = ggml_add(ctx0,
-            ggml_mul(ctx0,
-                ggml_repeat(ctx0, model.layers[il].ln_1_g, cur),
-                cur),
-            ggml_repeat(ctx0, model.layers[il].ln_1_b, cur));
+        // cur = ln_1_g*cur + ln_1_b
+        cur = ggml_add(ctx0,
+                ggml_mul(ctx0,
+                    ggml_repeat(ctx0, model.layers[il].ln_1_g, cur),
+                    cur),
+                ggml_repeat(ctx0, model.layers[il].ln_1_b, cur));
 
-    // cur = attn_w*cur + attn_b
-    cur = ggml_mul_mat(ctx0, model.layers[il].c_attn_attn_w, cur);
+        // cur = attn_w*cur + attn_b
+        cur = ggml_mul_mat(ctx0, model.layers[il].c_attn_attn_w, cur);
 
-    struct ggml_tensor * Qcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 0*sizeof(float)*n_embd);
-    struct ggml_tensor * Kcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 1*sizeof(float)*n_embd);
-    struct ggml_tensor * Vcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 2*sizeof(float)*n_embd);
+        struct ggml_tensor * Qcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 0*sizeof(float)*n_embd);
+        struct ggml_tensor * Kcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 1*sizeof(float)*n_embd);
+        struct ggml_tensor * Vcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 2*sizeof(float)*n_embd);
 
-    // [n_embd/n_head, N, n_head]
-    struct ggml_tensor * Q =
-        ggml_permute(ctx0,
-                ggml_cpy(ctx0,
-                    Qcur,
-                    ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
-                0, 2, 1, 3);
-
-    // [n_embd/n_head, N, n_head]
-    struct ggml_tensor * K =
-        ggml_permute(ctx0,
-                ggml_cpy(ctx0,
-                    Kcur,
-                    ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
-                0, 2, 1, 3);
-
-    // [N, N, n_head]
-    struct ggml_tensor * KQ = ggml_mul_mat(ctx0, K, Q);
-
-    // [N, N, n_head]
-    struct ggml_tensor * KQ_scaled =
-        ggml_scale(ctx0,
-                KQ,
-                ggml_new_f32(ctx0, 1.0f/sqrt(float(n_embd)/n_head)));
-
-    // [N, N, n_head]
-    struct ggml_tensor * KQ_soft_max = ggml_soft_max_inplace(ctx0, KQ_scaled);
-
-    // [N, n_embd/n_head, n_head]
-    struct ggml_tensor * V_trans =
-        ggml_cont(ctx0,
+        // [n_embd/n_head, N, n_head]
+        struct ggml_tensor * Q =
             ggml_permute(ctx0,
                     ggml_cpy(ctx0,
-                        Vcur,
+                        Qcur,
                         ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
-                    1, 2, 0, 3));
+                    0, 2, 1, 3);
 
-    // [n_embd/n_head, N, n_head]
-    struct ggml_tensor * KQV = ggml_mul_mat(ctx0, V_trans, KQ_soft_max);
+        // [n_embd/n_head, N, n_head]
+        struct ggml_tensor * K =
+            ggml_permute(ctx0,
+                    ggml_cpy(ctx0,
+                        Kcur,
+                        ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
+                    0, 2, 1, 3);
 
-    struct ggml_tensor * KQV_merged = ggml_permute(ctx0, KQV, 0, 2, 1, 3);
+        // [N, N, n_head]
+        struct ggml_tensor * KQ = ggml_mul_mat(ctx0, K, Q);
 
-    cur = ggml_cpy(ctx0,
-            KQV_merged,
-            ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N));
+        // [N, N, n_head]
+        struct ggml_tensor * KQ_scaled =
+            ggml_scale_inplace(ctx0,
+                    KQ,
+                    ggml_new_f32(ctx0, 1.0f/sqrt(float(n_embd)/n_head)));
 
-    struct ggml_tensor * kqv_toy = cur;
+        // [N, N, n_head]
+        struct ggml_tensor * KQ_soft_max = ggml_soft_max_inplace(ctx0, KQ_scaled);
 
-    // cur = proj_w*cur 
-    cur = ggml_mul_mat(ctx0,
-            model.layers[il].c_attn_proj_w,
-            cur);
+        // [N, n_embd/n_head, n_head]
+        struct ggml_tensor * V_trans =
+            ggml_cont(ctx0,
+                ggml_permute(ctx0,
+                        ggml_cpy(ctx0,
+                            Vcur,
+                            ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
+                        1, 2, 0, 3));
 
-    // residual connection
-    cur = ggml_add(ctx0, cur, inpL);
+        // [n_embd/n_head, N, n_head]
+        struct ggml_tensor * KQV = ggml_mul_mat(ctx0, V_trans, KQ_soft_max);
 
-    struct ggml_tensor * inpFF = cur;
+        struct ggml_tensor * KQV_merged = ggml_permute(ctx0, KQV, 0, 2, 1, 3);
+
+        cur = ggml_cpy(ctx0,
+                KQV_merged,
+                ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N));
+
+        // struct ggml_tensor * kqv_toy = cur;
+
+        // cur = proj_w*cur
+        cur = ggml_mul_mat(ctx0,
+                model.layers[il].c_attn_proj_w,
+                cur);
+
+        // residual connection
+        cur = ggml_add(ctx0, cur, inpL);
+
+        struct ggml_tensor * inpFF = cur;
+
+        // norm
+        cur = ggml_norm(ctx0, inpFF);
+
+        // cur = ln_2_g*cur + ln_2_b
+        cur = ggml_add(ctx0,
+                ggml_mul(ctx0,
+                    ggml_repeat(ctx0, model.layers[il].ln_2_g, cur),
+                    cur),
+                ggml_repeat(ctx0, model.layers[il].ln_2_b, cur));
+
+        // struct ggml_tensor * outLN2 = cur;
+
+        // cur = fc_w*cur
+        // no bias for proj in fine model
+        cur = ggml_mul_mat(ctx0,
+                model.layers[il].c_mlp_fc_w,
+                cur);
+
+        // struct ggml_tensor * outPROJ1 = cur;
+
+        // GELU activation
+        cur = ggml_gelu(ctx0, cur);
+
+        // struct ggml_tensor * outGELU = cur;
+
+        // cur = proj_w*cur
+        // is there a bug here? weights are correctly loaded but the error grows here
+        cur = ggml_mul_mat(ctx0, model.layers[il].c_mlp_proj_w, cur);
+
+        // struct ggml_tensor * outPROJ2 = cur;
+
+        // input for next layer
+        inpL = ggml_add(ctx0, cur, inpFF);
+    }
 
     // norm
-    cur = ggml_norm(ctx0, inpFF);
+    inpL = ggml_norm(ctx0, inpL);
 
-    // cur = ln_2_g*cur + ln_2_b
-    cur = ggml_add(ctx0,
+    // inpL = ln_f_g*inpL + ln_f_b
+    inpL = ggml_add(ctx0,
             ggml_mul(ctx0,
-                ggml_repeat(ctx0, model.layers[il].ln_2_g, cur),
-                cur),
-            ggml_repeat(ctx0, model.layers[il].ln_2_b, cur));
+                ggml_repeat(ctx0, model.ln_f_g, inpL),
+                inpL),
+            ggml_repeat(ctx0, model.ln_f_b, inpL));
 
-    struct ggml_tensor * outLN2 = cur;
-
-    // cur = fc_w*cur
-    // no bias for proj in fine model
-    cur = ggml_mul_mat(ctx0,
-            model.layers[il].c_mlp_fc_w,
-            cur);
-
-    struct ggml_tensor * outPROJ1 = cur;
-
-    // GELU activation
-    cur = ggml_gelu(ctx0, cur);
-
-    struct ggml_tensor * outGELU = cur;
-
-    // cur = proj_w*cur
-    // is there a bug here? weights are correctly loaded but the error grows here
-    cur = ggml_mul_mat(ctx0, model.layers[il].c_mlp_proj_w, cur);
-
-    struct ggml_tensor * outPROJ2 = cur;
-
-    // // input for next layer
-    inpL = ggml_add(ctx0, cur, inpFF);
+    // inpL = WTE * inpL
+    inpL = ggml_mul_mat(ctx0, model.lm_heads[codebook_ix - n_codes_given], inpL);
 
     // run the computation
     ggml_build_forward_expand(&gf, inpL);
     ggml_graph_compute_with_ctx(ctx0, &gf, n_threads);
 
     if (mem_per_token > 0) {
-        struct ggml_tensor * gt_kqv = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N);
-        load_gt_tensor("./data/debug_kqv.bin", gt_kqv);
+        // struct ggml_tensor * gt_kqv = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N);
+        // load_gt_tensor("./data/debug_kqv.bin", gt_kqv);
 
-        struct ggml_tensor * gt_inpL = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N);
-        load_gt_tensor("./data/test_out_block_1.bin", gt_inpL);
+        // struct ggml_tensor * gt_inpL = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N);
+        // load_gt_tensor("./data/test_out_block_1.bin", gt_inpL);
 
-        struct ggml_tensor * gt_inpFF = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N);
-        load_gt_tensor("./data/debug_inpFF.bin", gt_inpFF);
+        // struct ggml_tensor * gt_inpFF = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N);
+        // load_gt_tensor("./data/debug_inpFF.bin", gt_inpFF);
 
-        struct ggml_tensor * gt_outLN2 = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N);
-        load_gt_tensor("./data/debug_ln2.bin", gt_outLN2);
+        // struct ggml_tensor * gt_outLN2 = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N);
+        // load_gt_tensor("./data/debug_ln2.bin", gt_outLN2);
 
-        struct ggml_tensor * gt_outPROJ1 = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, 4*n_embd, N);
-        load_gt_tensor("./data/debug_outPROJ1.bin", gt_outPROJ1);
+        // struct ggml_tensor * gt_outPROJ1 = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, 4*n_embd, N);
+        // load_gt_tensor("./data/debug_outPROJ1.bin", gt_outPROJ1);
 
-        struct ggml_tensor * gt_outGELU = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, 4*n_embd, N);
-        load_gt_tensor("./data/debug_outGELU.bin", gt_outGELU);
+        // struct ggml_tensor * gt_outGELU = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, 4*n_embd, N);
+        // load_gt_tensor("./data/debug_outGELU.bin", gt_outGELU);
 
-        struct ggml_tensor * gt_outPROJ2 = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N);
-        load_gt_tensor("./data/debug_outPROJ2.bin", gt_outPROJ2);
+        // struct ggml_tensor * gt_outPROJ2 = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N);
+        // load_gt_tensor("./data/debug_outPROJ2.bin", gt_outPROJ2);
 
-        struct ggml_tensor * gt_PROJ2w = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, 4*n_embd, n_embd);
-        load_gt_tensor("./data/debug_weight_PROJ2.bin", gt_PROJ2w);
+        // struct ggml_tensor * gt_PROJ2w = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, 4*n_embd, n_embd);
+        // load_gt_tensor("./data/debug_weight_PROJ2.bin", gt_PROJ2w);
 
-        printf("\n");
+        // printf("\n");
 
-        float tol = 0.001;
+        // float tol = 0.001;
 
-        allclose(gt_kqv     , kqv_toy , tol, "KQV"     );
-        allclose(gt_inpFF   , inpFF   , tol, "inpFF"   );
-        allclose(gt_outLN2  , outLN2  , tol, "outLN2"  );
-        allclose(gt_outPROJ1, outPROJ1, tol, "outPROJ1");
-        allclose(gt_outGELU , outGELU , tol, "outGELU" );
-        allclose(gt_outPROJ2, outPROJ2, tol, "outPROJ2");
-        allclose(gt_PROJ2w  , model.layers[0].c_mlp_proj_w, tol, "PROJ2_w");
+        // allclose(gt_kqv     , kqv_toy , tol, "KQV"     );
+        // allclose(gt_inpFF   , inpFF   , tol, "inpFF"   );
+        // allclose(gt_outLN2  , outLN2  , tol, "outLN2"  );
+        // allclose(gt_outPROJ1, outPROJ1, tol, "outPROJ1");
+        // allclose(gt_outGELU , outGELU , tol, "outGELU" );
+        // allclose(gt_outPROJ2, outPROJ2, tol, "outPROJ2");
+        // allclose(gt_PROJ2w  , model.layers[0].c_mlp_proj_w, tol, "PROJ2_w");
+    }
+
+    // [N, n_vocab]
+    // [1024, 1056]
+    logits.resize(N);
+
+    for (int i = 0; i < N; i++) {
+        std::vector<float> tmp(n_vocab);
+        memcpy(tmp.data(), (float *) ggml_get_data(inpL) + (i*n_vocab), sizeof(float)*n_vocab);
+        logits[i] = tmp;
     }
 
     if (mem_per_token == 0) {
