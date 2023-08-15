@@ -2,13 +2,22 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug",
+            "name": "Debug fine encoder",
             "type": "lldb",
             "request": "launch",
-            "program": "${fileDirname}/${fileBasenameNoExtension}",
+            "program": "./tests/test-fine-encoder",
             "args": [],
             "cwd": "${fileDirname}",
-            "preLaunchTask": "run makefile",
+            "preLaunchTask": "build test fine encoder",
+        },
+        {
+            "name": "Debug qkv",
+            "type": "lldb",
+            "request": "launch",
+            "program": "./tests/test-qkv",
+            "args": [],
+            "cwd": "${fileDirname}",
+            "preLaunchTask": "build test qkv",
         }
     ]
 }
