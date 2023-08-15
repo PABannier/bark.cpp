@@ -230,3 +230,11 @@ struct bark_progress {
 bool bark_params_parse(int argc, char ** argv, bark_params & params);
 
 void bark_print_usage(char ** argv, const bark_params & params);
+
+void print_tensor(struct ggml_tensor * a);
+
+void read_tensor_from_file(std::ifstream & fin, struct ggml_tensor * t);
+
+bool allequal(struct ggml_tensor * a, struct ggml_tensor * b, std::string test_name);
+
+bool allclose(struct ggml_tensor * a, struct ggml_tensor * b, float tol, std::string test_name);

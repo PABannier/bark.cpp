@@ -21,6 +21,163 @@ Author: Pierre-Antoine Bannier <pierreantoine.bannier@gmail.com>
 #include <regex>
 #include <string>
 
+bool allequal(struct ggml_tensor * a, struct ggml_tensor * b, std::string test_name) {
+    assert(a->ne[0] == b->ne[0]);
+    assert(a->ne[1] == b->ne[1]);
+    assert(a->ne[2] == b->ne[2]);
+    assert(a->ne[3] == b->ne[3]);
+
+    assert(a->type == GGML_TYPE_I32);
+    assert(b->type == GGML_TYPE_I32);
+
+    int64_t n_violations = 0;
+
+    for (int i = 0; i < a->ne[3]; i++) {
+        for (int j = 0; j < a->ne[2]; j++) {
+            for (int k = 0; k < a->ne[1]; k++) {
+                for (int l = 0; l < a->ne[0]; l++) {
+                    int32_t * aval = (int32_t *) (
+                        (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
+                    int32_t * bval = (int32_t *) (
+                        (char *) b->data + i*b->nb[3] + j*b->nb[2] + k*b->nb[1] + l*b->nb[0]);
+                    if (*aval != *bval)
+                        n_violations += 1;
+                }
+            }
+        }
+    }
+
+    int64_t n_elements = a->ne[0]*a->ne[1]*a->ne[2]*a->ne[3];
+    float perc_viol = 100.0f*float(n_violations)/n_elements;
+
+    printf("%s: %s\n", __func__, test_name.c_str());
+    printf("%s: %%_viol=%.1f\n", __func__, perc_viol);
+    printf("\n");
+    return n_violations == 0;
+}
+
+bool allclose(struct ggml_tensor * a, struct ggml_tensor * b, float tol, std::string test_name) {
+    assert(a->ne[0] == b->ne[0]);
+    assert(a->ne[1] == b->ne[1]);
+    assert(a->ne[2] == b->ne[2]);
+    assert(a->ne[3] == b->ne[3]);
+
+    assert(a->type == GGML_TYPE_F32);
+    assert(b->type == GGML_TYPE_F32);
+
+    float max_violation = -INFINITY;
+    int64_t n_violations = 0;
+
+    for (int i = 0; i < a->ne[3]; i++) {
+        for (int j = 0; j < a->ne[2]; j++) {
+            for (int k = 0; k < a->ne[1]; k++) {
+                for (int l = 0; l < a->ne[0]; l++) {
+                    float * aval = (float *) (
+                        (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
+                    float * bval = (float *) (
+                        (char *) b->data + i*b->nb[3] + j*b->nb[2] + k*b->nb[1] + l*b->nb[0]);
+                    float violation = fabs(*aval - *bval);
+                    max_violation = std::max(max_violation, violation);
+                    if (violation > tol)
+                        n_violations += 1;
+                }
+            }
+        }
+    }
+
+    int64_t n_elements = a->ne[0]*a->ne[1]*a->ne[2]*a->ne[3];
+    float perc_viol = 100.0f*float(n_violations)/n_elements;
+
+    printf("%s: %s\n", __func__, test_name.c_str());
+    printf("%s: max_viol=%.4f; viol=%.1f%% (tol=%.4f)\n", __func__, max_violation, perc_viol, tol);
+    printf("\n");
+    return n_violations == 0;
+}
+
+
+void read_tensor_from_file_f32(std::ifstream & fin, struct ggml_tensor *t) {
+    int32_t n_dims;
+    read_safe(fin, n_dims);
+
+    int32_t ne[3] = { 1, 1, 1 };
+    for (int i = 0; i < n_dims; i++) { read_safe(fin, ne[i]); }
+
+    assert(t->ne[0] == ne[0]);
+    assert(t->ne[1] == ne[1]);
+    assert(t->ne[2] == ne[2]);
+    assert(t->type == GGML_TYPE_F32);
+
+    for (int i = 0; i < ne[2]; i++) {
+        for (int j = 0; j < ne[1]; j++) {
+            int offset = i*t->nb[2] + j*t->nb[1];
+            fin.read(reinterpret_cast<char *>(t->data) + offset, ne[0]*sizeof(float));
+        }
+    }
+}
+
+void read_tensor_from_file_int32(std::ifstream & fin, struct ggml_tensor *t) {
+    int32_t n_dims;
+    read_safe(fin, n_dims);
+
+    int32_t ne[3] = { 1, 1, 1 };
+    for (int i = 0; i < n_dims; i++) { read_safe(fin, ne[i]); }
+
+    assert(t->ne[0] == ne[0]);
+    assert(t->ne[1] == ne[1]);
+    assert(t->ne[2] == ne[2]);
+    assert(t->type == GGML_TYPE_I32);
+
+    for (int i = 0; i < ne[2]; i++) {
+        for (int j = 0; j < ne[1]; j++) {
+            int offset = i*t->nb[2] + j*t->nb[1];
+            fin.read(reinterpret_cast<char *>(t->data) + offset, ne[0]*sizeof(int32_t));
+        }
+    }
+}
+
+void read_tensor_from_file(std::ifstream & fin, struct ggml_tensor * t) {
+    if (t->type == GGML_TYPE_F32) {
+        read_tensor_from_file_f32(fin, t);
+    } else if (t->type == GGML_TYPE_I32) {
+        read_tensor_from_file_int32(fin, t);
+    } else {
+        throw;
+    }
+}
+
+void load_gt_tensor(std::string path, struct ggml_tensor * t) {
+    auto fin = std::ifstream(path, std::ios::binary);
+    if (!fin) {
+        fprintf(stderr, "failed to open.");
+        throw;
+    }
+    read_tensor_from_file(fin, t);
+}
+
+void print_tensor(struct ggml_tensor * a) {
+    for (int i = 0; i < a->ne[3]; i++) {
+        for (int j = 0; j < a->ne[2]; j++) {
+            for (int k = 0; k < a->ne[1]; k++) {
+                for (int l = 0; l < a->ne[0]; l++) {
+                    if (a->type == GGML_TYPE_F32) {
+                        float * aval = (float *) (
+                            (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
+                        printf("%.4f ", *aval);
+                    } else if (a->type == GGML_TYPE_I32) {
+                        int32_t * aval = (int32_t *) (
+                            (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
+                        printf("%d ", *aval);
+                    } else {
+                        throw;
+                    }
+                }
+                printf("\n");
+            }
+            printf("\n\n");
+        }
+    }
+}
+
 bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expected_size) {
     auto fin = std::ifstream(fname, std::ios::binary);
     if (!fin) {
@@ -557,7 +714,7 @@ bool fine_gpt_eval(
 
     struct ggml_tensor * input = ggml_new_tensor_2d(ctx0, GGML_TYPE_I32, N, n_codes);
     for (int c = 0; c < n_codes; c++) {
-        int offset = ggml_element_size(input)*c*N;
+        int offset = c*input->nb[1];
         memcpy((void *) ((char *) input->data + offset), embd_inp[c].data(), N*ggml_element_size(input));
     }
 
@@ -580,193 +737,162 @@ bool fine_gpt_eval(
     // wte + wpe
     struct ggml_tensor * inpL = ggml_add(ctx0, tok_emb, pos_emb);
 
-    for (int il = 0; il < n_layer; ++il) {
-        struct ggml_tensor * cur;
-
-        // norm
-        {
-            cur = ggml_norm(ctx0, inpL);
-
-            // cur = ln_1_g*cur + ln_1_b
-            cur = ggml_add(ctx0,
-                    ggml_mul(ctx0,
-                        ggml_repeat(ctx0, model.layers[il].ln_1_g, cur),
-                        cur),
-                    ggml_repeat(ctx0, model.layers[il].ln_1_b, cur));
-        }
-
-        // cur = attn_w*cur + attn_b
-        {
-            cur = ggml_mul_mat(ctx0,
-                    model.layers[il].c_attn_attn_w,
-                    cur);
-
-            cur = ggml_add(ctx0,
-                    ggml_repeat(ctx0, model.layers[il].c_attn_attn_b, cur),
-                    cur);
-        }
-
-        // self-attention (no causal attention for fine model)
-        {
-            struct ggml_tensor * Qcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 0*sizeof(float)*n_embd);
-            struct ggml_tensor * Kcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 1*sizeof(float)*n_embd);
-            struct ggml_tensor * Vcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 2*sizeof(float)*n_embd);
-
-            // [n_embd/n_head, N, n_head]
-            struct ggml_tensor * Q =
-                ggml_permute(ctx0,
-                        ggml_cpy(ctx0,
-                            Qcur,
-                            ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
-                        0, 2, 1, 3);
-
-            // [n_embd/n_head, N, n_head]
-            struct ggml_tensor * K =
-                ggml_permute(ctx0,
-                        ggml_cpy(ctx0,
-                            Kcur,
-                            ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
-                        0, 2, 1, 3);
-
-            // [N, N, n_head]
-            struct ggml_tensor * KQ = ggml_mul_mat(ctx0, K, Q);
-
-            // [N, N, n_head]
-            struct ggml_tensor * KQ_scaled =
-                ggml_scale_inplace(ctx0,
-                        KQ,
-                        ggml_new_f32(ctx0, 1.0f/sqrt(float(n_embd)/n_head)));
-
-            // [N, N, n_head]
-            struct ggml_tensor * KQ_soft_max = ggml_soft_max_inplace(ctx0, KQ_scaled);
-
-            // [N, n_embd/n_head, n_head]
-            struct ggml_tensor * V_trans =
-                ggml_cont(ctx0,
-                    ggml_permute(ctx0,
-                            ggml_cpy(ctx0,
-                                Vcur,
-                                ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
-                            1, 2, 0, 3));
-
-            // [n_embd/n_head, N, n_head]
-            struct ggml_tensor * KQV = ggml_mul_mat(ctx0, V_trans, KQ_soft_max);
-
-            struct ggml_tensor * KQV_merged = ggml_permute(ctx0, KQV, 0, 2, 1, 3);
-
-            cur = ggml_cpy(ctx0,
-                    KQV_merged,
-                    ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N));
-        }
-
-        // cur = proj_w*cur + proj_b
-        // [768, N]
-        {
-            cur = ggml_mul_mat(ctx0,
-                    model.layers[il].c_attn_proj_w,
-                    cur);
-
-            cur = ggml_add(ctx0,
-                    ggml_repeat(ctx0, model.layers[il].c_attn_proj_b, cur),
-                    cur);
-        }
-
-        // add the input
-        cur = ggml_add(ctx0, cur, inpL);
-
-        struct ggml_tensor * inpFF = cur;
-
-        // feed-forward network
-        {
-            // norm
-            {
-                cur = ggml_norm(ctx0, inpFF);
-
-                // cur = ln_2_g*cur + ln_2_b
-                // [ 768, N]
-                cur = ggml_add(ctx0,
-                        ggml_mul(ctx0,
-                            ggml_repeat(ctx0, model.layers[il].ln_2_g, cur),
-                            cur),
-                        ggml_repeat(ctx0, model.layers[il].ln_2_b, cur));
-            }
-
-            // fully connected
-            // [3072, 768] - model.layers[il].c_mlp_fc_w
-            // [3072,   1] - model.layers[il].c_mlp_fc_b
-            // [ 768,   N] - cur (in)
-            // [3072,   N] - cur (out)
-            //
-            // cur = fc_w*cur + fc_b
-            // [3072, N]
-            cur = ggml_mul_mat(ctx0,
-                    model.layers[il].c_mlp_fc_w,
-                    cur);
-
-            cur = ggml_add(ctx0,
-                    ggml_repeat(ctx0, model.layers[il].c_mlp_fc_b, cur),
-                    cur);
-
-            // GELU activation
-            // [3072, N]
-            cur = ggml_gelu(ctx0, cur);
-
-            // projection
-            // [ 768, 3072] - model.layers[il].c_mlp_proj_w
-            // [ 768,    1] - model.layers[il].c_mlp_proj_b
-            // [3072,    N] - cur (in)
-            // [ 768,    N] - cur (out)
-            //
-            // cur = proj_w*cur + proj_b
-            // [768, N]
-            cur = ggml_mul_mat(ctx0,
-                    model.layers[il].c_mlp_proj_w,
-                    cur);
-
-            cur = ggml_add(ctx0,
-                    ggml_repeat(ctx0, model.layers[il].c_mlp_proj_b, cur),
-                    cur);
-        }
-
-        // input for next layer
-        inpL = ggml_add(ctx0, cur, inpFF);
-    }
+    int il = 0;
 
     // norm
-    {
-        // [ 768, N]
-        inpL = ggml_norm(ctx0, inpL);
+    struct ggml_tensor * cur = ggml_norm(ctx0, inpL);
 
-        // inpL = ln_f_g*inpL + ln_f_b
-        // [ 768, N]
-        inpL = ggml_add(ctx0,
-                ggml_mul(ctx0,
-                    ggml_repeat(ctx0, model.ln_f_g, inpL),
-                    inpL),
-                ggml_repeat(ctx0, model.ln_f_b, inpL));
-    }
+    // cur = ln_1_g*cur + ln_1_b
+    cur = ggml_add(ctx0,
+            ggml_mul(ctx0,
+                ggml_repeat(ctx0, model.layers[il].ln_1_g, cur),
+                cur),
+            ggml_repeat(ctx0, model.layers[il].ln_1_b, cur));
 
-    // inpL = WTE * inpL
-    inpL = ggml_mul_mat(ctx0, model.lm_heads[codebook_ix - n_codes_given], inpL);
+    // cur = attn_w*cur + attn_b
+    cur = ggml_mul_mat(ctx0, model.layers[il].c_attn_attn_w, cur);
+
+    struct ggml_tensor * Qcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 0*sizeof(float)*n_embd);
+    struct ggml_tensor * Kcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 1*sizeof(float)*n_embd);
+    struct ggml_tensor * Vcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 2*sizeof(float)*n_embd);
+
+    // [n_embd/n_head, N, n_head]
+    struct ggml_tensor * Q =
+        ggml_permute(ctx0,
+                ggml_cpy(ctx0,
+                    Qcur,
+                    ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
+                0, 2, 1, 3);
+
+    // [n_embd/n_head, N, n_head]
+    struct ggml_tensor * K =
+        ggml_permute(ctx0,
+                ggml_cpy(ctx0,
+                    Kcur,
+                    ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
+                0, 2, 1, 3);
+
+    // [N, N, n_head]
+    struct ggml_tensor * KQ = ggml_mul_mat(ctx0, K, Q);
+
+    // [N, N, n_head]
+    struct ggml_tensor * KQ_scaled =
+        ggml_scale(ctx0,
+                KQ,
+                ggml_new_f32(ctx0, 1.0f/sqrt(float(n_embd)/n_head)));
+
+    // [N, N, n_head]
+    struct ggml_tensor * KQ_soft_max = ggml_soft_max_inplace(ctx0, KQ_scaled);
+
+    // [N, n_embd/n_head, n_head]
+    struct ggml_tensor * V_trans =
+        ggml_cont(ctx0,
+            ggml_permute(ctx0,
+                    ggml_cpy(ctx0,
+                        Vcur,
+                        ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, n_embd/n_head, n_head, N)),
+                    1, 2, 0, 3));
+
+    // [n_embd/n_head, N, n_head]
+    struct ggml_tensor * KQV = ggml_mul_mat(ctx0, V_trans, KQ_soft_max);
+
+    struct ggml_tensor * KQV_merged = ggml_permute(ctx0, KQV, 0, 2, 1, 3);
+
+    cur = ggml_cpy(ctx0,
+            KQV_merged,
+            ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N));
+
+    struct ggml_tensor * kqv_toy = cur;
+
+    // cur = proj_w*cur 
+    cur = ggml_mul_mat(ctx0,
+            model.layers[il].c_attn_proj_w,
+            cur);
+
+    // residual connection
+    cur = ggml_add(ctx0, cur, inpL);
+
+    struct ggml_tensor * inpFF = cur;
+
+    // norm
+    cur = ggml_norm(ctx0, inpFF);
+
+    // cur = ln_2_g*cur + ln_2_b
+    cur = ggml_add(ctx0,
+            ggml_mul(ctx0,
+                ggml_repeat(ctx0, model.layers[il].ln_2_g, cur),
+                cur),
+            ggml_repeat(ctx0, model.layers[il].ln_2_b, cur));
+
+    struct ggml_tensor * outLN2 = cur;
+
+    // cur = fc_w*cur
+    // no bias for proj in fine model
+    cur = ggml_mul_mat(ctx0,
+            model.layers[il].c_mlp_fc_w,
+            cur);
+
+    struct ggml_tensor * outPROJ1 = cur;
+
+    // GELU activation
+    cur = ggml_gelu(ctx0, cur);
+
+    struct ggml_tensor * outGELU = cur;
+
+    // cur = proj_w*cur
+    // is there a bug here? weights are correctly loaded but the error grows here
+    cur = ggml_mul_mat(ctx0, model.layers[il].c_mlp_proj_w, cur);
+
+    struct ggml_tensor * outPROJ2 = cur;
+
+    // // input for next layer
+    inpL = ggml_add(ctx0, cur, inpFF);
 
     // run the computation
     ggml_build_forward_expand(&gf, inpL);
     ggml_graph_compute_with_ctx(ctx0, &gf, n_threads);
 
-    // [seq_length, n_vocab]
-    // [1024, 1056]
-    logits.resize(N);
+    if (mem_per_token > 0) {
+        struct ggml_tensor * gt_kqv = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N);
+        load_gt_tensor("./data/debug_kqv.bin", gt_kqv);
 
-    for (int i = 0; i < N; i++) {
-        std::vector<float> tmp(n_vocab);
-        memcpy(tmp.data(), (float *) ggml_get_data(inpL) + (i*n_vocab), sizeof(float)*n_vocab);
-        logits[i] = tmp;
+        struct ggml_tensor * gt_inpL = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N);
+        load_gt_tensor("./data/test_out_block_1.bin", gt_inpL);
+
+        struct ggml_tensor * gt_inpFF = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N);
+        load_gt_tensor("./data/debug_inpFF.bin", gt_inpFF);
+
+        struct ggml_tensor * gt_outLN2 = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N);
+        load_gt_tensor("./data/debug_ln2.bin", gt_outLN2);
+
+        struct ggml_tensor * gt_outPROJ1 = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, 4*n_embd, N);
+        load_gt_tensor("./data/debug_outPROJ1.bin", gt_outPROJ1);
+
+        struct ggml_tensor * gt_outGELU = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, 4*n_embd, N);
+        load_gt_tensor("./data/debug_outGELU.bin", gt_outGELU);
+
+        struct ggml_tensor * gt_outPROJ2 = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N);
+        load_gt_tensor("./data/debug_outPROJ2.bin", gt_outPROJ2);
+
+        struct ggml_tensor * gt_PROJ2w = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, 4*n_embd, n_embd);
+        load_gt_tensor("./data/debug_weight_PROJ2.bin", gt_PROJ2w);
+
+        printf("\n");
+
+        float tol = 0.001;
+
+        allclose(gt_kqv     , kqv_toy , tol, "KQV"     );
+        allclose(gt_inpFF   , inpFF   , tol, "inpFF"   );
+        allclose(gt_outLN2  , outLN2  , tol, "outLN2"  );
+        allclose(gt_outPROJ1, outPROJ1, tol, "outPROJ1");
+        allclose(gt_outGELU , outGELU , tol, "outGELU" );
+        allclose(gt_outPROJ2, outPROJ2, tol, "outPROJ2");
+        allclose(gt_PROJ2w  , model.layers[0].c_mlp_proj_w, tol, "PROJ2_w");
     }
 
     if (mem_per_token == 0) {
         mem_per_token = ggml_used_mem(ctx0)/N;
     }
-    //printf("used_mem = %zu\n", ggml_used_mem(ctx0));
 
     ggml_free(ctx0);
 
