@@ -16,9 +16,7 @@ toy
 
 !ggml_weights/ggml_vocab.bin
 
-tests/test-text-encoder
-tests/test-coarse-encoder
-tests/test-fine-encoder
+tests/test-gpt-eval
 
 tests/test-forward-coarse
 tests/test-forward-semantic
