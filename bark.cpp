@@ -257,6 +257,7 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
         read_safe(fin, hparams.n_out_vocab);
         read_safe(fin, hparams.n_lm_heads);
         read_safe(fin, hparams.n_wtes);
+        read_safe(fin, hparams.ftype);
 
         printf("%s: n_in_vocab  = %d\n", __func__, hparams.n_in_vocab);
         printf("%s: n_out_vocab = %d\n", __func__, hparams.n_out_vocab);
@@ -266,17 +267,17 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
         printf("%s: n_layer     = %d\n", __func__, hparams.n_layer);
         printf("%s: n_lm_heads  = %d\n", __func__, hparams.n_lm_heads);
         printf("%s: n_wtes      = %d\n", __func__, hparams.n_wtes);
+        printf("%s: ftype       = %d\n", __func__, hparams.ftype);
     }
 
     // for the big tensors, we have the option to store the data in 16-bit floats or quantized
     // in order to save memory and also to speed up the computation
-    // ggml_type wtype = ggml_ftype_to_ggml_type((ggml_ftype) (model.hparams.ftype));
-    // if (wtype == GGML_TYPE_COUNT) {
-    //     fprintf(stderr, "%s: invalid model file '%s' (bad ftype value %d)\n",
-    //             __func__, fname.c_str(), model.hparams.ftype);
-    //     return false;
-    // }
-    ggml_type wtype = GGML_TYPE_F32;
+    ggml_type wtype = ggml_ftype_to_ggml_type((ggml_ftype) (model.hparams.ftype));
+    if (wtype == GGML_TYPE_COUNT) {
+        fprintf(stderr, "%s: invalid model file '%s' (bad ftype value %d)\n",
+                __func__, fname.c_str(), model.hparams.ftype);
+        return false;
+    }
 
     auto & ctx = model.ctx;
 
