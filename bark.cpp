@@ -21,6 +21,8 @@ Author: Pierre-Antoine Bannier <pierreantoine.bannier@gmail.com>
 #include <regex>
 #include <string>
 
+#define BARK_DEBUG 0
+
 bool allequal(struct ggml_tensor * a, struct ggml_tensor * b, std::string test_name) {
     assert(a->ne[0] == b->ne[0]);
     assert(a->ne[1] == b->ne[1]);
@@ -983,6 +985,11 @@ bool gpt_eval(
             tok_emb = ggml_get_rows(ctx0, model.wtes[0], input);
         }
     }
+
+#if (BARK_DEBUG == 1)
+    struct ggml_tensor * gt_tok_emb = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, tok_emb->ne[0], tok_emb->ne[1]);
+    load_gt_tensor("./data/", gt_tok_emb);
+#endif
 
     struct ggml_tensor * position = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
     for (int i = 0; i < N; ++i) {
