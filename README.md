@@ -176,11 +176,11 @@ In order to build bark.cpp you have two different options. We recommend using `C
 ### Prepare data & Run
 
 ```bash
-# obtain the original bark and encodec weights and place them in ./models
-python3 download_weights.py --download-dir ./models
-
 # install Python dependencies
 python3 -m pip install -r requirements.txt
+
+# obtain the original bark and encodec weights and place them in ./models
+python3 download_weights.py --download-dir ./models
 
 # convert the model to ggml format
 python3 convert.py \
