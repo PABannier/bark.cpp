@@ -10,20 +10,21 @@ static const std::vector<std::tuple<std::string, bool>> test_args = {
     // { "./data/test_gpt_eval_2_no_merge.bin", false },  // prompt: Buenos días Miguel. Tu colega piensa que tu alemán es extremadamente malo. But I suppose your english isn't terrible.
     // { "./data/test_gpt_eval_3_no_merge.bin", false },  // prompt: ♪ In the jungle, the mighty jungle, the lion barks tonight ♪
 
-    { "./data/test_gpt_eval_1_merge.bin", false },     // prompt: I have a silky smooth voice, and today I will tell you about the exercise regimen of the common sloth.
-    { "./data/test_gpt_eval_2_merge.bin", false },     // prompt: You cannot, my good sir, take that away from me without having me retaliate in the most ferocious way.
-    { "./data/test_gpt_eval_3_merge.bin", false },     // prompt: Ceci est un texte en français pour tester le bon fonctionnement de bark.
-}
+    { "./data/gpt_eval/test_gpt_eval_1_merge.bin", true },     // prompt: I have a silky smooth voice, and today I will tell you about the exercise regimen of the common sloth.
+    { "./data/gpt_eval/test_gpt_eval_2_merge.bin", true },     // prompt: You cannot, my good sir, take that away from me without having me retaliate in the most ferocious way.
+    { "./data/gpt_eval/test_gpt_eval_3_merge.bin", true },     // prompt: Ceci est un texte en français pour tester le bon fonctionnement de bark.
+};
 
 static const int n_threads = 4;
 
 int main(int argc, char** argv) {
-    if (argc < 2) {
-        fprintf(stderr, "Usage: %s <model-file>\n", argv[0]);
-        return 1;
-    }
+    // if (argc < 2) {
+    //     fprintf(stderr, "Usage: %s <model-file>\n", argv[0]);
+    //     return 1;
+    // }
 
-    const std::string fname = argv[1];
+    // const std::string fname = argv[1];
+    const std::string fname = "../ggml_weights/ggml_weights_text.bin";
 
     gpt_model model;
     if(!gpt_model_load(fname, model)) {
@@ -41,7 +42,7 @@ int main(int argc, char** argv) {
         gpt_eval(model, n_threads, &n_past, false, { 0, 1, 2, 3 }, logits, mem_per_token);
     }
 
-    for (int i = 0; i < (int) test_args.size(), i++) {
+    for (int i = 0; i < (int) test_args.size(); i++) {
         tokens.clear();
         gt_logits.clear();
         logits.clear();
@@ -54,11 +55,12 @@ int main(int argc, char** argv) {
         int n_past = 0;
         gpt_eval(model, n_threads, &n_past, merge_ctx, tokens, logits, mem_per_token);
 
+        printf("\n\n");
         printf("%s: %s\n", __func__, path.c_str());
         if (!run_test(gt_logits, logits)) {
-            printf("%s:     test %d failed.\n", i+1);
+            printf("%s:     test %d failed.\n", __func__, i+1);
         } else {
-            printf("%s:     test %d passed.\n", i+1);
+            printf("%s:     test %d passed.\n", __func__, i+1);
         }
     }
 
