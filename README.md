@@ -21,7 +21,7 @@ The main goal of `bark.cpp` is to synthesize audio from a textual input with the
 - [X] AVX, AVX2 and AVX512 for x86 architectures
 - [ ] Optimized via ARM NEON, Accelerate and Metal frameworks
 - [ ] iOS on-device deployment using CoreML
-- [ ] Mixed F16 / F32 precision
+- [X] Mixed F16 / F32 precision
 - [ ] 4-bit, 5-bit and 8-bit integer quantization
 
 The original implementation of `bark.cpp` is the bark's 24Khz English model. We expect to support multiple languages in the future, as well as other vocoders (see [this](https://github.com/PABannier/bark.cpp/issues/36) and [this](https://github.com/PABannier/bark.cpp/issues/6)).
