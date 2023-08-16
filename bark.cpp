@@ -749,7 +749,7 @@ bool fine_gpt_eval(
                     cur),
                 ggml_repeat(ctx0, model.layers[il].ln_1_b, cur));
 
-        // cur = attn_w*cur + attn_b
+        // cur = attn_w*cur
         cur = ggml_mul_mat(ctx0, model.layers[il].c_attn_attn_w, cur);
 
         struct ggml_tensor * Qcur = ggml_view_2d(ctx0, cur, n_embd, N, cur->nb[1], 0*sizeof(float)*n_embd);
@@ -802,8 +802,6 @@ bool fine_gpt_eval(
                 KQV_merged,
                 ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N));
 
-        // struct ggml_tensor * kqv_toy = cur;
-
         // cur = proj_w*cur
         cur = ggml_mul_mat(ctx0,
                 model.layers[il].c_attn_proj_w,
@@ -824,26 +822,14 @@ bool fine_gpt_eval(
                     cur),
                 ggml_repeat(ctx0, model.layers[il].ln_2_b, cur));
 
-        // struct ggml_tensor * outLN2 = cur;
-
         // cur = fc_w*cur
-        // no bias for proj in fine model
-        cur = ggml_mul_mat(ctx0,
-                model.layers[il].c_mlp_fc_w,
-                cur);
-
-        // struct ggml_tensor * outPROJ1 = cur;
+        cur = ggml_mul_mat(ctx0, model.layers[il].c_mlp_fc_w, cur);
 
         // GELU activation
         cur = ggml_gelu(ctx0, cur);
 
-        // struct ggml_tensor * outGELU = cur;
-
         // cur = proj_w*cur
-        // is there a bug here? weights are correctly loaded but the error grows here
         cur = ggml_mul_mat(ctx0, model.layers[il].c_mlp_proj_w, cur);
-
-        // struct ggml_tensor * outPROJ2 = cur;
 
         // input for next layer
         inpL = ggml_add(ctx0, cur, inpFF);
