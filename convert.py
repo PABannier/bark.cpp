@@ -136,11 +136,11 @@ def parse_text_models(checkpoint, outfile):
 
         n_dims = len(var_data.shape)
 
-        ftype_cur = 0
-        if var_data.dtype != np.float32:
-            print("  Converting to float32")
-            var_data = var_data.astype(np.float32)
-            ftype_cur = 0
+        # ftype_cur = 0
+        # if var_data.dtype != np.float32:
+        #     print("  Converting to float32")
+        #     var_data = var_data.astype(np.float32)
+        #     ftype_cur = 0
 
         # strip `_orig_mod.transformer.` prefix
         if name == "_orig_mod.lm_head.weight":
@@ -205,6 +205,15 @@ def parse_text_models(checkpoint, outfile):
             name = f"model/lm_head/{i}"
         else:
             print(f"Unrecognized variable name: {name}")
+
+        if name[-2:] == "/w" and n_dims == 2:
+            print("  Converting to float16")
+            var_data = var_data.astype(np.float16)
+            ftype_cur = 1
+        else:
+            print("  Converting to float32")
+            var_data = var_data.astype(np.float32)
+            ftype_cur = 0
 
         encoded_name = name.encode("utf-8")
 
