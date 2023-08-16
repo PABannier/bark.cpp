@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
         int n_past = 0;
         gpt_eval(model, n_threads, &n_past, merge_ctx, tokens, logits, mem_per_token);
 
-        printf("\n\n");
+        printf("\n");
         printf("%s: %s\n", __func__, path.c_str());
         if (!run_test(gt_logits, logits)) {
             printf("%s:     test %d failed.\n", __func__, i+1);

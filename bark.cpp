@@ -986,11 +986,6 @@ bool gpt_eval(
         }
     }
 
-#if (BARK_DEBUG == 1)
-    struct ggml_tensor * gt_tok_emb = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, tok_emb->ne[0], tok_emb->ne[1]);
-    load_gt_tensor("./data/", gt_tok_emb);
-#endif
-
     struct ggml_tensor * position = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
     for (int i = 0; i < N; ++i) {
         ((int32_t *) position->data)[i] = *n_past + i;
@@ -1178,7 +1173,7 @@ bool gpt_eval(
             cur = ggml_add(ctx0,
                     ggml_repeat(ctx0, model.layers[il].c_mlp_fc_b, cur),
                     cur);
-
+            
             // GELU activation
             // [3072, N]
             cur = ggml_gelu(ctx0, cur);
