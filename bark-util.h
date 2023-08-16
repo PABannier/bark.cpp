@@ -13,9 +13,15 @@
 static const size_t MB = 4*1024*1024;
 
 template<typename T>
-static void read_safe(std::ifstream& infile, T& dest) {
-    infile.read((char*)& dest, sizeof(T));
+static void read_safe(std::ifstream& fin, T& dest) {
+    fin.read((char*)& dest, sizeof(T));
 }
+
+template<typename T>
+static void write_safe(std::ofstream& fout, T& dest) {
+    fout.write((char*)& dest, sizeof(T));
+}
+
 
 static size_t utf8_len(char src) {
     const size_t lookup[] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 3, 4};
