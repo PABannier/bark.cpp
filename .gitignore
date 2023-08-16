@@ -15,6 +15,7 @@ toy
 .DS_Store
 
 !ggml_weights/ggml_vocab.bin
+!vocab.txt
 
 tests/test-text-encoder
 tests/test-coarse-encoder
