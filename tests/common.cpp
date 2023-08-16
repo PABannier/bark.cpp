@@ -189,7 +189,10 @@ void load_test_data(std::string fname, std::vector<T>& input, std::vector<U>& ou
         fin.read(reinterpret_cast<char *>(output.data()), nelements*sizeof(U));
     }
 
-    assert(fin.eof());
+    if (!fin.eof()) {
+        fprintf(stderr, "%s\n", fname.c_str());
+        throw std::runtime_error("EOF not reached");
+    }
 }
 
 template void load_test_data(
@@ -244,7 +247,10 @@ void load_test_data(
         }
     }
 
-    assert(fin.eof());
+    if (!fin.eof()) {
+        fprintf(stderr, "%s\n", fname.c_str());
+        throw std::runtime_error("EOF not reached");
+    }
 }
 
 template void load_test_data(std::string fname, std::vector<int32_t>& input, std::vector<std::vector<int32_t>>& output);
@@ -287,7 +293,10 @@ void load_test_data(std::string fname, std::vector<std::vector<int32_t>>& input,
         fin.read(reinterpret_cast<char *>(output.data()), nelements*sizeof(float));
     }
 
-    assert(fin.eof());
+    if (!fin.eof()) {
+        fprintf(stderr, "%s\n", fname.c_str());
+        throw std::runtime_error("EOF not reached");
+    }
 }
 
 template <typename T>
@@ -331,7 +340,10 @@ void load_test_data(
         }
     }
 
-    // assert(fin.eof());
+    if (!fin.eof()) {
+        fprintf(stderr, "%s\n", fname.c_str());
+        throw std::runtime_error("EOF not reached");
+    }
 }
 
 template void load_test_data(
