@@ -27,7 +27,8 @@ Example
         --dir-model ~/.cache/suno/bark_v0 \
         --codec-path ~/Documents/encodec.cpp/ggml_weights \
         --vocab-path ./ggml_weights/ \
-        --out-dir ./ggml_weights/
+        --out-dir ./ggml_weights/ \
+        --use-f16
 ```
 """
 import argparse
@@ -44,6 +45,7 @@ parser.add_argument("--dir-model", type=str, required=True)
 parser.add_argument("--codec-path", type=str, required=True)
 parser.add_argument("--vocab-path", type=str, required=True)
 parser.add_argument("--out-dir", type=str, required=True)
+parser.add_argument("--use-f16", action="store_true")
 
 
 def parse_codec_model(checkpoint, out_dir):
@@ -104,7 +106,7 @@ def parse_codec_model(checkpoint, out_dir):
 
     outfile.close()
 
-def parse_hparams(hparams, outfile):
+def parse_hparams(hparams, outfile, use_f16):
     """Parse GPT hyperparameters."""
     outfile.write(struct.pack("i", hparams["n_layer"]))
     outfile.write(struct.pack("i", hparams["n_head"]))
@@ -125,10 +127,12 @@ def parse_hparams(hparams, outfile):
         n_wtes = hparams["n_codes_total"]
     except KeyError:
         n_lm_heads, n_wtes = 1, 1
+    
+    ftype = int(use_f16)
 
-    outfile.write(struct.pack("ii", n_lm_heads, n_wtes))
+    outfile.write(struct.pack("iii", n_lm_heads, n_wtes, ftype))
 
-def parse_text_models(checkpoint, outfile):
+def parse_text_models(checkpoint, outfile, use_f16):
     """Load GPT model checkpoint (text, fine, coarse)."""
     for name in checkpoint.keys():
         var_data = checkpoint[name].squeeze().numpy()
@@ -206,14 +210,19 @@ def parse_text_models(checkpoint, outfile):
         else:
             print(f"Unrecognized variable name: {name}")
 
-        if name[-2:] == "/w" and n_dims == 2:
-            print("  Converting to float16")
-            var_data = var_data.astype(np.float16)
-            ftype_cur = 1
+        if use_f16:
+            if name[-2:] == "/w" and n_dims == 2:
+                print("  Converting to float16")
+                var_data = var_data.astype(np.float16)
+                ftype_cur = 1
+            else:
+                print("  Converting to float32")
+                var_data = var_data.astype(np.float32)
+                ftype_cur = 0
         else:
-            print("  Converting to float32")
-            var_data = var_data.astype(np.float32)
-            ftype_cur = 0
+                print("  Converting to float32")
+                var_data = var_data.astype(np.float32)
+                ftype_cur = 0
 
         encoded_name = name.encode("utf-8")
 
@@ -224,13 +233,13 @@ def parse_text_models(checkpoint, outfile):
 
         var_data.tofile(outfile)
 
-def generate_file(in_file, out_dir):
+def generate_file(in_file, out_dir, use_f16):
     with open(out_dir, "wb") as fout:
         fout.write(struct.pack("i", 0x67676d6c))  # ggml magic
 
         checkpoint = torch.load(in_file, map_location="cpu")
-        parse_hparams(checkpoint["model_args"], fout)
-        parse_text_models(checkpoint["model"], fout)
+        parse_hparams(checkpoint["model_args"], fout, use_f16)
+        parse_text_models(checkpoint["model"], fout, use_f16)
 
 def generate_vocab_file(dir_model, out_dir):
     """Parse vocabulary."""
@@ -262,13 +271,13 @@ if __name__ == "__main__":
     generate_vocab_file(vocab_path, out_dir / "ggml_vocab.bin")
     print(" Vocab loaded.")
 
-    generate_file(dir_model / "text_2.pt", out_dir / "ggml_weights_text.bin")
+    generate_file(dir_model / "text_2.pt", out_dir / "ggml_weights_text.bin", args.use_f16)
     print(" Text model loaded.")
 
-    generate_file(dir_model / "coarse_2.pt", out_dir / "ggml_weights_coarse.bin")
+    generate_file(dir_model / "coarse_2.pt", out_dir / "ggml_weights_coarse.bin", args.use_f16)
     print(" Coarse model loaded.")
 
-    generate_file(dir_model / "fine_2.pt", out_dir / "ggml_weights_fine.bin")
+    generate_file(dir_model / "fine_2.pt", out_dir / "ggml_weights_fine.bin", args.use_f16)
     print(" Fine model loaded.")
 
     codec_chkpt = torch.load(codec_path / "encodec_24khz-d7cc33bc.th", map_location="cpu")
