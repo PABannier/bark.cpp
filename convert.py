@@ -211,7 +211,7 @@ def parse_text_models(checkpoint, outfile, use_f16):
             print(f"Unrecognized variable name: {name}")
 
         if use_f16:
-            if name[-2:] == "/w" and n_dims == 2:
+            if (name[-2:] == "/w" or "wte" in name or "lm_head" in name) and n_dims == 2:
                 print("  Converting to float16")
                 var_data = var_data.astype(np.float16)
                 ftype_cur = 1
