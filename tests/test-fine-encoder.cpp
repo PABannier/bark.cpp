@@ -13,9 +13,10 @@ of tokens.
 #include "common.h"
 
 static const std::vector<std::string> test_data = {
-    // "./data/fine/test_fine_1.bin",
-    // "./data/fine/test_fine_2.bin"
-    "./data/fine/test_fine_3.bin"
+    "./data/fine/test_fine_1.bin",
+    "./data/fine/test_fine_2.bin",
+    "./data/debug_test.bin",
+    "./data/fine/long_prompt_nn_2.bin"
 };
 
 int main(int argc, char** argv) {
