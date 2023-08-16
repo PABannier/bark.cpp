@@ -4,8 +4,7 @@
 #include <tuple>
 #include <vector>
 
-#define ABS_TOL 0.01f
-#define REL_TOL 0.01f
+#define ABS_TOL 0.001f
 
 typedef std::vector<float> logit_sequence;
 typedef std::vector<std::vector<float>> logit_matrix;
