@@ -977,7 +977,7 @@ bool gpt_eval(
 
             struct ggml_tensor * cat_emb = ggml_add(ctx0, seq_embd, ctx_embd);
 
-            tok_emb = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, cat_emb->ne[0], cat_emb->ne[1]+rem_embd->ne[1]);
+            tok_emb = ggml_new_tensor_2d(ctx0, cat_emb->type, cat_emb->ne[0], cat_emb->ne[1]+rem_embd->ne[1]);
             tok_emb = ggml_set_1d(ctx0, tok_emb, cat_emb, 0);
             tok_emb = ggml_set_1d(ctx0, tok_emb, rem_embd, cat_emb->ne[0]*cat_emb->ne[1]*ggml_element_size(cat_emb));
         } else {
