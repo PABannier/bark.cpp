@@ -9,6 +9,10 @@
 
 Inference of [SunoAI's bark model](https://github.com/suno-ai/bark) in pure C/C++.
 
+**Disclaimer: there remains bug in the inference code, bark is able to generate audio for some prompts or some seeds,
+but it does not work for most prompts. The current effort of the community is to fix those bugs, in order to release
+v0.0.2**.
+
 ## Description
 
 The main goal of `bark.cpp` is to synthesize audio from a textual input with the [Bark](https://github.com/suno-ai/bark) model in efficiently using only CPU.

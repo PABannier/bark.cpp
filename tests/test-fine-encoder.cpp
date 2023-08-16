@@ -14,7 +14,9 @@ of tokens.
 
 static const std::vector<std::string> test_data = {
     "./data/fine/test_fine_1.bin",
-    // "./data/fine/test_fine_2.bin"
+    "./data/fine/test_fine_2.bin",
+    "./data/debug_test.bin",
+    "./data/fine/long_prompt_nn_2.bin"
 };
 
 int main(int argc, char** argv) {
@@ -53,12 +55,12 @@ int main(int argc, char** argv) {
         bark_codes input_t = transpose(input);
         fine_gpt_eval(model, n_threads, 2, input_t, logits, mem_per_token);
 
-        fprintf(stderr, "truth : ");
-        for (int i = 0; i < 8; i++) { fprintf(stderr, "%.4f ", truth[0][i]); }
-        fprintf(stderr, "\n");
-        fprintf(stderr, "logits: ");
-        for (int i = 0; i < 8; i++) { fprintf(stderr, "%.4f ", logits[0][i]); }
-        fprintf(stderr, "\n");
+        // fprintf(stderr, "truth : ");
+        // for (int i = 0; i < 8; i++) { fprintf(stderr, "%.4f ", truth[0][i]); }
+        // fprintf(stderr, "\n");
+        // fprintf(stderr, "logits: ");
+        // for (int i = 0; i < 8; i++) { fprintf(stderr, "%.4f ", logits[0][i]); }
+        // fprintf(stderr, "\n");
 
         fprintf(stderr, "%s", path.c_str());
         if (!run_test_on_codes(truth, logits)) {

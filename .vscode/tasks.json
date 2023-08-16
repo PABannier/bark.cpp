@@ -1,10 +1,30 @@
 {
+    "options": {
+        "env": {
+          "BARK_DEBUG": "1",
+        }
+    },
     "tasks": [
         {
             "type": "shell",
-            "label": "run makefile",
-            "command": "make",
-            "args": ["tests/test-text-encoder"],
+            "label": "build test qkv",
+            "options": {
+                "env": {
+                    "BARK_DEBUG": "1",
+                }
+            },
+            "command": "make tests/test-qkv",
+            "problemMatcher": [],
+        },
+        {
+            "type": "shell",
+            "label": "build test fine encoder",
+            "options": {
+                "env": {
+                    "BARK_DEBUG": "1",
+                }
+            },
+            "command": "make tests/test-fine-encoder",
             "problemMatcher": [],
         },
     ],

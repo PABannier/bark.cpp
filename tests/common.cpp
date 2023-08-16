@@ -25,7 +25,7 @@ inline bool all_close(
     for (int i = 0; i < (int) s1.size(); i++) {
         float violation = fabs(s1[i] - s2[i]);
         *max_violation = std::max(*max_violation, violation);
-        if (*max_violation > ABS_TOL + REL_TOL * fabs(s2[i]))
+        if (violation > ABS_TOL)
             *n_violations += 1;
     }
     return *n_violations == 0;
@@ -43,7 +43,7 @@ inline bool all_close_nested(
         for (int j = 0; j < (int) s1[i].size(); j++) {
             float violation = fabs(s1[i][j] - s2[i][j]);
             *max_violation = std::max(*max_violation, violation);
-            if (*max_violation > ABS_TOL + REL_TOL * fabs(s2[i][j]))
+            if (violation > ABS_TOL)
                 *n_violations += 1;
         }
     }
@@ -75,7 +75,7 @@ bool run_test_on_sequence(std::vector<float> truth, std::vector<float> result) {
             fprintf(stderr, "%s : wrong shape (%zu != %zu).\n", __func__, truth.size(), result.size());
         } else {
             fprintf(stderr, "\n");
-            fprintf(stderr, "       abs_tol=%.4f, rel_tol=%.4f, abs max viol=%.4f, viol=%.1f%%", ABS_TOL, REL_TOL, max_violation, (float)n_violations/truth.size()*100);
+            fprintf(stderr, "       abs_tol=%.4f, abs max viol=%.4f, viol=%.1f%%", ABS_TOL, max_violation, (float)n_violations/truth.size()*100);
             fprintf(stderr, "\n");
         }
         return false;
@@ -107,7 +107,7 @@ bool run_test_on_codes(logit_matrix truth, logit_matrix result) {
         if (n_violations == 0) {
             fprintf(stderr, "%s : wrong shape (%zu != %zu).\n", __func__, truth.size(), result.size());
         } else {
-            fprintf(stderr, "       abs_tol=%.4f, rel_tol=%.4f, abs max viol=%.4f, viol=%.1f%%", ABS_TOL, REL_TOL, max_violation, (float)n_violations/(truth.size()*truth[0].size())*100);
+            fprintf(stderr, "       abs_tol=%.4f, abs max viol=%.4f, viol=%.1f%%", ABS_TOL, max_violation, (float)n_violations/(truth.size()*truth[0].size())*100);
             fprintf(stderr, "\n");
         }
         return false;
@@ -303,7 +303,7 @@ void load_nested_test_data(
         }
     }
 
-    assert(fin.eof());
+    // assert(fin.eof());
 }
 
 template void load_nested_test_data(
