@@ -63,6 +63,7 @@ struct bark_params {
     int32_t seed = 0;
 
     std::string prompt;  // user prompt
+    std::string voice;   // custom voice (history prompts)
 
     std::string dest_wav_path = "./output.wav";
 };

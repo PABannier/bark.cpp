@@ -17,16 +17,21 @@ int main(int argc, char **argv) {
 
     bark_model model;
     std::string fname = "./ggml_weights";
+    bool load_history_prompts = false;
 
     if (!params.model.empty()) {
         fname = params.model;
+    }
+
+    if (!params.voice.empty()) {
+        load_history_prompts = true;
     }
 
     // load the model
     {
         const int64_t t_start_us = ggml_time_us();
 
-        if(!bark_model_load(fname, model, false)) {
+        if(!bark_model_load(fname, model, load_history_prompts)) {
             fprintf(stderr, "%s: failed to load model from '%s'\n", __func__, fname.c_str());
             return 1;
         }

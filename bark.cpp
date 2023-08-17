@@ -1959,6 +1959,8 @@ bool bark_params_parse(int argc, char ** argv, bark_params & params) {
             params.seed = std::stoi(argv[++i]);
         } else if (arg == "-o" || arg == "--outwav") {
             params.dest_wav_path = argv[++i];
+        } else if (arg == "-v" || arg == "--voice") {
+            params.voice = argv[++i];
         } else if (arg == "-h" || arg == "--help") {
             bark_print_usage(argv, params);
             exit(0);
@@ -1981,9 +1983,11 @@ void bark_print_usage(char ** argv, const bark_params & params) {
     fprintf(stderr, "  -s N, --seed N        seed for random number generator (default: %d)\n", params.seed);
     fprintf(stderr, "  -p PROMPT, --prompt PROMPT\n");
     fprintf(stderr, "                        prompt to start generation with (default: random)\n");
-    fprintf(stderr, "  -m FNAME, --model FNAME\n");
+    fprintf(stderr, "  -m FNAME,  --model  FNAME\n");
     fprintf(stderr, "                        model path (default: %s)\n", params.model.c_str());
-    fprintf(stderr, "  -o FNAME, --outwav FNAME\n");
+    fprintf(stderr, "  -o FNAME,  --outwav FNAME\n");
     fprintf(stderr, "                        output generated wav (default: %s)\n", params.dest_wav_path.c_str());
+    fprintf(stderr, "  -v VOICE,  --voice  VOICE\n");
+    fprintf(stderr, "                        custom voice (default: none)\n", params.voice.c_str());
     fprintf(stderr, "\n");
 }
