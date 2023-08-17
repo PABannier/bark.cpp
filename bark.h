@@ -1,3 +1,15 @@
+/* Bark is a text-to-speech model for realistic speech generation.
+The model supports 13 languages that can be found in `bark_languages`.
+Multiple preset voices (history prompts) are shipped with Bark, allowing the user to
+generate the same speech with multiple different voices.
+
+You can try any combination of voices by using the following pattern:
+    <PREFIX><LANG>_speaker_<N>
+
+where <PREFIX> can be either "" or "v2"
+      <LANG> can be the last two letters of any languages supported by bark
+      <N> is an integer between 0 and 9 (inclusive).
+*/
 #pragma once
 #include "encodec.h"
 
@@ -26,6 +38,22 @@
 #define COARSE_RATE_HZ 75
 #define COARSE_SEMANTIC_PAD_TOKEN 12048
 #define COARSE_INFER_TOKEN 12050
+
+enum bark_languages {
+    BARK_LANG_EN = 0,   // English
+    BARK_LANG_DE = 1,   // German
+    BARK_LANG_ES = 2,   // Spanish
+    BARK_LANG_FR = 3,   // French
+    BARK_LANG_HI = 4,   // Hindi
+    BARK_LANG_IT = 5,   // Italian
+    BARK_LANG_JA = 6,   // Japanese
+    BARK_LANG_KO = 7,   // Korean
+    BARK_LANG_PL = 8,   // Polish
+    BARK_LANG_PT = 9,   // Portuguese
+    BARK_LANG_RU = 10,  // Russian
+    BARK_LANG_TR = 11,  // Turkish
+    BARK_LANG_ZH = 12,  // Chinese
+};
 
 struct bark_params {
     int32_t n_threads = std::min(4, (int32_t) std::thread::hardware_concurrency());
