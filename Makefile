@@ -1,5 +1,5 @@
 # Define the default target now so that it is always the first target
-BUILD_TARGETS = main
+BUILD_TARGETS = main quantize
 
 # Binaries only useful for tests
 TEST_TARGETS = tests/test-tokenizer tests/test-text-encoder tests/test-coarse-encoder tests/test-fine-encoder
@@ -304,6 +304,9 @@ clean:
 	rm -vf *.o *.so *.dll encodec bark $(TEST_TARGETS) $(BUILD_TARGETS)
 
 bark: bark.cpp         encodec.o ggml.o $(OBJS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
+
+quantize: quantize.cpp ggml.o bark.o encodec.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
 main: examples/main.cpp  ggml.o bark.o encodec.o $(OBJS)
