@@ -1,4 +1,7 @@
 ggml_weights/*
+ggml_weights_q4/*
+ggml_weights_q5/*
+ggml_weights_q8/*
 *.dSYM/
 build/
 models/
@@ -16,7 +19,7 @@ quantize
 .DS_Store
 
 !ggml_weights/ggml_vocab.bin
-!vocab.txt
+!ggml_weights/vocab.txt
 
 tests/test-text-encoder
 tests/test-coarse-encoder
