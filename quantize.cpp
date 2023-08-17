@@ -328,7 +328,10 @@ bool bark_model_quantize(
         printf("%s: n_layer     = %d\n", __func__, hparams.n_layer);
         printf("%s: n_lm_heads  = %d\n", __func__, hparams.n_lm_heads);
         printf("%s: n_wtes      = %d\n", __func__, hparams.n_wtes);
-        printf("%s: ftype       = %d\n", __func__, hparams.ftype);
+        printf("%s: ftype (src) = %d\n", __func__, hparams.ftype);
+        printf("%s: qntvr (src) = %d\n", __func__, qntvr_src);
+        printf("%s: ftype (dst) = %d\n", __func__, ftype_dst);
+        printf("%s: qntvr (dst) = %d\n", __func__, GGML_QNT_VERSION);
 
         write_safe(fout, hparams.n_layer);
         write_safe(fout, hparams.n_head);

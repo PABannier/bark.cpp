@@ -259,6 +259,8 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
         read_safe(fin, hparams.n_wtes);
         read_safe(fin, hparams.ftype);
 
+        const int32_t qntvr = hparams.ftype / GGML_QNT_VERSION_FACTOR;
+
         printf("%s: n_in_vocab  = %d\n", __func__, hparams.n_in_vocab);
         printf("%s: n_out_vocab = %d\n", __func__, hparams.n_out_vocab);
         printf("%s: block_size  = %d\n", __func__, hparams.block_size);
@@ -268,6 +270,9 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
         printf("%s: n_lm_heads  = %d\n", __func__, hparams.n_lm_heads);
         printf("%s: n_wtes      = %d\n", __func__, hparams.n_wtes);
         printf("%s: ftype       = %d\n", __func__, hparams.ftype);
+        printf("%s: qntvr   = %d\n", __func__, qntvr);
+
+        hparams.ftype %= GGML_QNT_VERSION_FACTOR;
     }
 
     // for the big tensors, we have the option to store the data in 16-bit floats or quantized
