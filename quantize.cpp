@@ -346,8 +346,8 @@ bool bark_model_quantize(
 
     // regexes of tensor names to be quantized
     const std::vector<std::string> to_quant = {
-        "model/wte/*",
-        "model/lm_head/*",
+        "model/wte/.*",
+        "model/lm_head/.*",
         "model/h.*/attn/c_attn/w",
         "model/h.*/attn/c_proj/w",
         "model/h.*/mlp/c_fc/w",
