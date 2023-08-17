@@ -28,6 +28,7 @@ Example
         --codec-path ~/Documents/encodec.cpp/ggml_weights \
         --vocab-path ./ggml_weights/ \
         --out-dir ./ggml_weights/ \
+        --prompts-path ~/Documents/bark/bark/assets/prompts/ \
         --use-f16
 ```
 """
@@ -45,10 +46,11 @@ parser.add_argument("--dir-model", type=str, required=True)
 parser.add_argument("--codec-path", type=str, required=True)
 parser.add_argument("--vocab-path", type=str, required=True)
 parser.add_argument("--out-dir", type=str, required=True)
+parser.add_argument("--prompts-path", type=str, required=False)
 parser.add_argument("--use-f16", action="store_true")
 
 
-def parse_codec_model(checkpoint, out_dir):
+def parse_codec_model(checkpoint: dict, out_dir: Path):
     """Load encodec model checkpoint."""
     outfile = open(out_dir, "wb")
     outfile.write(struct.pack("i", 0x67676d6c))  # ggml magic
@@ -106,7 +108,7 @@ def parse_codec_model(checkpoint, out_dir):
 
     outfile.close()
 
-def parse_hparams(hparams, outfile, use_f16):
+def parse_hparams(hparams: dict[str, any], outfile: Path, use_f16: bool):
     """Parse GPT hyperparameters."""
     outfile.write(struct.pack("i", hparams["n_layer"]))
     outfile.write(struct.pack("i", hparams["n_head"]))
@@ -127,12 +129,12 @@ def parse_hparams(hparams, outfile, use_f16):
         n_wtes = hparams["n_codes_total"]
     except KeyError:
         n_lm_heads, n_wtes = 1, 1
-    
+
     ftype = int(use_f16)
 
     outfile.write(struct.pack("iii", n_lm_heads, n_wtes, ftype))
 
-def parse_text_models(checkpoint, outfile, use_f16):
+def parse_text_models(checkpoint: dict, outfile: Path, use_f16: bool):
     """Load GPT model checkpoint (text, fine, coarse)."""
     for name in checkpoint.keys():
         var_data = checkpoint[name].squeeze().numpy()
@@ -233,7 +235,7 @@ def parse_text_models(checkpoint, outfile, use_f16):
 
         var_data.tofile(outfile)
 
-def generate_file(in_file, out_dir, use_f16):
+def generate_file(in_file: Path, out_dir: Path, use_f16: bool):
     with open(out_dir, "wb") as fout:
         fout.write(struct.pack("i", 0x67676d6c))  # ggml magic
 
@@ -241,7 +243,7 @@ def generate_file(in_file, out_dir, use_f16):
         parse_hparams(checkpoint["model_args"], fout, use_f16)
         parse_text_models(checkpoint["model"], fout, use_f16)
 
-def generate_vocab_file(dir_model, out_dir):
+def generate_vocab_file(dir_model: Path, out_dir: Path):
     """Parse vocabulary."""
     # Even if bark relies on GPT to encode text, it uses BertTokenizer (WordPiece)
     with open(dir_model / "vocab.txt", "r", encoding="utf-8") as fin:
@@ -256,6 +258,36 @@ def generate_vocab_file(dir_model, out_dir):
             data = bytearray(token[:-1], "utf-8")  # strip newline at the end
             fout.write(struct.pack("i", len(data)))
             fout.write(data)
+
+def generate_prompts_file(dir_model: Path, out_dir: Path):
+    """Parse history prompts (custom voices)."""
+    all_prompts_path = list(dir_model.glob("**/*_speaker_*.npz"))
+
+    with open(out_dir, "wb") as fout:
+        fout.write(struct.pack("i", 0x67676d6c))  # ggml magic
+        fout.write(struct.pack("i", len(all_prompts_path)))
+        print("Number of prompts detected:", len(all_prompts_path))
+
+        for path in all_prompts_path:
+            print(f" {path.stem} loaded.")
+            prompt_name = path.stem.encode("utf-8")
+            history_prompt = np.load(path)
+
+            fout.write(struct.pack("i", len(prompt_name)))
+            fout.write(prompt_name)
+
+            for k in history_prompt.keys():
+                arr = history_prompt[k]
+                n_dims = len(arr.shape)
+                encoded_k = k.encode("utf-8")
+
+                fout.write(struct.pack("ii", n_dims, len(encoded_k)))
+                for i in range(n_dims):
+                    fout.write(struct.pack("i", arr.shape[n_dims - 1 - i]))
+                fout.write(encoded_k)
+
+                arr.tofile(fout)
+                print(f"  {k} loaded.")
 
 
 if __name__ == "__main__":
@@ -283,5 +315,10 @@ if __name__ == "__main__":
     codec_chkpt = torch.load(codec_path / "encodec_24khz-d7cc33bc.th", map_location="cpu")
     parse_codec_model(codec_chkpt, out_dir / "ggml_weights_codec.bin")
     print(" Codec model loaded.")
+
+    if args.prompts_path:
+        prompts_path = Path(args.prompts_path)
+        generate_prompts_file(prompts_path, out_dir / "ggml_prompts.bin")
+    print("  Prompts loaded.")
 
     print("Done.")
