@@ -457,7 +457,7 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
             read_safe(fin, n_dims);
             read_safe(fin, length);
             read_safe(fin, ttype);
-            
+
             if (fin.eof()) {
                 break;
             }
@@ -519,7 +519,7 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
     // text
     {
         printf("%s: reading bark text model\n", __func__);
-        const std::string fname = dirname + "/ggml_weights_text_quant.bin";
+        const std::string fname = dirname + "/ggml_weights_text.bin";
         if(!gpt_model_load(fname, model.text_model)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
             return false;
@@ -542,7 +542,7 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
     // coarse
     {
         printf("\n%s: reading bark coarse model\n", __func__);
-        const std::string fname = dirname + "/ggml_weights_coarse_quant.bin";
+        const std::string fname = dirname + "/ggml_weights_coarse.bin";
         if(!gpt_model_load(fname, model.coarse_model)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad coarse)\n", __func__, fname.c_str());
             return false;
@@ -553,7 +553,7 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
     // fine
     {
         printf("\n%s: reading bark fine model\n", __func__);
-        const std::string fname = dirname + "/ggml_weights_fine_quant.bin";
+        const std::string fname = dirname + "/ggml_weights_fine.bin";
         if(!gpt_model_load(fname, model.fine_model)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad fine)\n", __func__, fname.c_str());
             return false;
