@@ -47,7 +47,9 @@ int main(int argc, char **argv) {
     }
 
     const int64_t t_eval_us_start = ggml_time_us();
-    bark_generate_audio(model, model.vocab, prompt.data(), params.n_threads, params.seed, params.dest_wav_path);
+    bark_generate_audio(
+            model, model.vocab, prompt.data(), params.n_threads, params.seed, 
+            params.dest_wav_path, params.voice);
     t_eval_us = ggml_time_us() - t_eval_us_start;
 
     // report timing

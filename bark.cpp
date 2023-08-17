@@ -1481,6 +1481,7 @@ bark_sequence bark_tokenize_input(const char * text, const bark_vocab & vocab, i
 bark_sequence bark_forward_text_encoder(
     const bark_sequence & tokens,
     const gpt_model model,
+    const std::string & voice,
     std::mt19937 & rng,
     const int n_threads,
     const float temp,
@@ -1547,6 +1548,7 @@ bark_sequence bark_forward_text_encoder(
 bark_codes bark_forward_coarse_encoder(
     const bark_sequence & tokens,
     const gpt_model model,
+    const std::string & voice,
     std::mt19937 & rng,
     const int n_threads,
     const float temp,
@@ -1670,6 +1672,7 @@ bark_codes bark_forward_coarse_encoder(
 bark_codes bark_forward_fine_encoder(
     const bark_codes & tokens,
     const gpt_model model,
+    const std::string & voice,
     std::mt19937 & rng,
     const int n_threads,
     const float temp) {
@@ -1891,16 +1894,12 @@ int write_wav_on_disk(audio_arr_t& audio_arr, std::string dest_path) {
 
 bool bark_generate_audio(
         bark_model model,
-        const bark_vocab& vocab,
+        const bark_vocab & vocab,
         const char * text,
         const int n_threads,
         const int32_t seed,
-        const std::string& dest_wav_path) {
-    // TODO move into params
-    // const int top_k = 10;
-    // const int seed  = 0;
-
-    // const float top_p     = 0.2;
+        const std::string & dest_wav_path,
+        const std::string & voice) {
     const float temp      = 0.7;
     const float fine_temp = 0.5;
 
@@ -1912,7 +1911,7 @@ bool bark_generate_audio(
     std::mt19937 rng(seed);
 
     // tokenize input (bert tokenizer)
-    int32_t block_size = model.text_model.hparams.block_size;
+    int32_t block_size   = model.text_model.hparams.block_size;
     bark_sequence tokens = bark_tokenize_input(text, vocab, block_size);
 
     printf("%s: prompt: '%s'\n", __func__, text);
@@ -1924,15 +1923,15 @@ bool bark_generate_audio(
     printf("\n");
 
     bark_sequence semantic_tokens = bark_forward_text_encoder(
-            tokens, model.text_model, rng, n_threads, temp, min_eos_p);
+            tokens, model.text_model, voice, rng, n_threads, temp, min_eos_p);
     printf("\n");
 
     bark_codes coarse_tokens = bark_forward_coarse_encoder(
-            semantic_tokens, model.coarse_model, rng, n_threads, temp, max_coarse_history, sliding_window_size);
+            semantic_tokens, model.coarse_model, voice, rng, n_threads, temp, max_coarse_history, sliding_window_size);
     printf("\n");
 
     bark_codes fine_tokens = bark_forward_fine_encoder(
-            coarse_tokens, model.fine_model, rng, n_threads, fine_temp);
+            coarse_tokens, model.fine_model, voice, rng, n_threads, fine_temp);
     printf("\n");
 
     audio_arr_t audio_arr = bark_forward_encodec(fine_tokens, model.codec_model);

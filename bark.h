@@ -228,15 +228,17 @@ void bert_tokenize(
 
 bool bark_generate_audio(
         bark_model model,
-        const bark_vocab& vocab,
+        const bark_vocab & vocab,
         const char * text,
         const int n_threads,
         const int32_t seed,
-        const std::string& dest_wav_path);
+        const std::string & dest_wav_path,
+        const std::string & voice);
 
 bark_sequence bark_forward_text_encoder(
     const bark_sequence & tokens,
     const gpt_model model,
+    const std::string & voice,
     std::mt19937 & rng,
     const int n_threads,
     const float temp,
@@ -245,6 +247,7 @@ bark_sequence bark_forward_text_encoder(
 bark_codes bark_forward_coarse_encoder(
     const bark_sequence & tokens,
     const gpt_model model,
+    const std::string & voice,
     std::mt19937 & rng,
     const int n_threads,
     const float temp,
@@ -254,6 +257,7 @@ bark_codes bark_forward_coarse_encoder(
 bark_codes bark_forward_fine_encoder(
     const bark_codes & tokens,
     const gpt_model model,
+    const std::string & voice,
     std::mt19937 & rng,
     const int n_threads,
     const float temp);
