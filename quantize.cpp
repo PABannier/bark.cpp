@@ -9,7 +9,7 @@ available:
 Usage:
     ./quantize \
         ./ggml_weights/ggml_weights_text.bin \
-        ./ggml_weights/ggml_weights_text_quant.bin \
+        ./ggml_weights_q4/ggml_weights_text_quant.bin \
         type
 */
 #include "ggml.h"
