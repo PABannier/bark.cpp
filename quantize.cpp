@@ -318,7 +318,7 @@ bool bark_model_quantize(
         read_safe(fin, hparams.ftype);
 
         const int32_t qntvr_src =    hparams.ftype / GGML_QNT_VERSION_FACTOR;
-        const int32_t ftype_dst = GGML_QNT_VERSION * GGML_QNT_VERSION_FACTOR + ftype;
+        int32_t ftype_dst = GGML_QNT_VERSION * GGML_QNT_VERSION_FACTOR + ftype;
 
         printf("%s: n_in_vocab  = %d\n", __func__, hparams.n_in_vocab);
         printf("%s: n_out_vocab = %d\n", __func__, hparams.n_out_vocab);
