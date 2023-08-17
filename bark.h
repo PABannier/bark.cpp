@@ -81,6 +81,24 @@ struct gpt_hparams {
     int32_t n_codes_given = 1;
 };
 
+struct bark_voice {
+    std::string name;
+
+    struct ggml_tensor * semantic_prompt;
+    struct ggml_tensor * coarse_prompt;
+    struct ggml_tensor * fine_prompt;
+
+    int64_t memsize;
+};
+
+struct bark_history_prompts {
+    struct ggml_context * ctx;
+
+    std::map<std::string, struct bark_voice *> voices;
+
+    int64_t memsize;
+};
+
 struct bark_vocab {
     using id    = int32_t;
     using token = std::string;
@@ -158,6 +176,9 @@ struct bark_model {
 
     // vocab
     bark_vocab vocab;
+
+    // history prompts
+    bark_history_prompts history_prompts;
 
     int64_t memsize = 0;
 };
