@@ -638,14 +638,14 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
     return true;
 }
 
-bool bark_model_load(const std::string & dirname, bark_model & model) {
+bool bark_model_load(const std::string & dirname, bark_model & model, bool load_history_prompts) {
     printf("%s: loading model from '%s'\n", __func__, dirname.c_str());
 
     // text
     {
         printf("%s: reading bark text model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_text.bin";
-        if(!gpt_model_load(fname, model.text_model)) {
+        if (!gpt_model_load(fname, model.text_model)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
             return false;
         }
@@ -658,7 +658,7 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
         const std::string fname     = dirname + "/ggml_vocab.bin";
         const gpt_hparams hparams   = model.text_model.hparams;
         const int32_t expected_size = hparams.n_in_vocab - hparams.n_out_vocab - 5;
-        if(!bark_vocab_load(fname, model.vocab, expected_size)) {
+        if (!bark_vocab_load(fname, model.vocab, expected_size)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
             return false;
         }
@@ -668,7 +668,7 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
     {
         printf("\n%s: reading bark coarse model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_coarse.bin";
-        if(!gpt_model_load(fname, model.coarse_model)) {
+        if (!gpt_model_load(fname, model.coarse_model)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad coarse)\n", __func__, fname.c_str());
             return false;
         }
@@ -679,7 +679,7 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
     {
         printf("\n%s: reading bark fine model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_fine.bin";
-        if(!gpt_model_load(fname, model.fine_model)) {
+        if (!gpt_model_load(fname, model.fine_model)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad fine)\n", __func__, fname.c_str());
             return false;
         }
@@ -690,11 +690,22 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
     {
         printf("\n%s: reading bark codec model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_codec.bin";
-        if(!encodec_model_load(fname, model.codec_model)) {
+        if (!encodec_model_load(fname, model.codec_model)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad codec)\n", __func__, fname.c_str());
             return false;
         }
         model.memsize += model.codec_model.memsize;
+    }
+
+    // history prompts
+    if (load_history_prompts) {
+        printf("\n%s: reading history prompts\n", __func__);
+        const std::string fname = dirname + "/ggml_prompts.bin";
+        if (!bark_prompt_load(fname, model.history_prompts)) {
+            fprintf(stderr, "%s: invalid prompt file '%s'\n", __func__, fname.c_str());
+            return false;
+        }
+        model.memsize += model.history_prompts.memsize;
     }
 
     printf("\n%s: total model size  = %8.2f MB\n", __func__, model.memsize/1024.0/1024.0);

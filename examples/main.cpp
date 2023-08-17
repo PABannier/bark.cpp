@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
     {
         const int64_t t_start_us = ggml_time_us();
 
-        if(!bark_model_load(fname, model)) {
+        if(!bark_model_load(fname, model, false)) {
             fprintf(stderr, "%s: failed to load model from '%s'\n", __func__, fname.c_str());
             return 1;
         }

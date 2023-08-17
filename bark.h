@@ -208,9 +208,15 @@ bark_vocab::id gpt_sample(
               float temp,
               float * eos_p);
 
-bool bark_model_load(const std::string & dirname, bark_model & model);
+bool bark_model_load(
+        const std::string & dirname,
+               bark_model & model,
+                     bool   load_history_prompts);
 
-bool bark_vocab_load(const std::string & fname, bark_vocab& vocab, int32_t expected_size);
+bool bark_vocab_load(
+        const std::string & fname,
+               bark_vocab & vocab,
+                  int32_t   expected_size);
 
 void bert_tokenize(
         const bark_vocab & vocab,
