@@ -6,9 +6,9 @@
 
 
 static const std::vector<std::tuple<std::string, bool>> test_args = {
-    // { "./data/test_gpt_eval_1_no_merge.bin", false },  // prompt: Hello, my name is Suno. And, uh - and I like pizza. [laughs] But I also have other interests such as playing tic tac toe.
-    // { "./data/test_gpt_eval_2_no_merge.bin", false },  // prompt: Buenos días Miguel. Tu colega piensa que tu alemán es extremadamente malo. But I suppose your english isn't terrible.
-    // { "./data/test_gpt_eval_3_no_merge.bin", false },  // prompt: ♪ In the jungle, the mighty jungle, the lion barks tonight ♪
+    { "./data/test_gpt_eval_1_no_merge.bin", false },  // prompt: Hello, my name is Suno. And, uh - and I like pizza. [laughs] But I also have other interests such as playing tic tac toe.
+    { "./data/test_gpt_eval_2_no_merge.bin", false },  // prompt: Buenos días Miguel. Tu colega piensa que tu alemán es extremadamente malo. But I suppose your english isn't terrible.
+    { "./data/test_gpt_eval_3_no_merge.bin", false },  // prompt: ♪ In the jungle, the mighty jungle, the lion barks tonight ♪
 
     { "./data/gpt_eval/test_gpt_eval_1_merge.bin", true },     // prompt: I have a silky smooth voice, and today I will tell you about the exercise regimen of the common sloth.
     { "./data/gpt_eval/test_gpt_eval_2_merge.bin", true },     // prompt: You cannot, my good sir, take that away from me without having me retaliate in the most ferocious way.
@@ -17,13 +17,7 @@ static const std::vector<std::tuple<std::string, bool>> test_args = {
 
 static const int n_threads = 4;
 
-int main(int argc, char** argv) {
-    // if (argc < 2) {
-    //     fprintf(stderr, "Usage: %s <model-file>\n", argv[0]);
-    //     return 1;
-    // }
-
-    // const std::string fname = argv[1];
+int main() {
     const std::string fname = "../ggml_weights/ggml_weights_text.bin";
 
     gpt_model model;
