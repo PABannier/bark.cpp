@@ -7,9 +7,9 @@
 #include "common.h"
 
 static const std::vector<std::string> test_data = {
-    "./data/semantic/test_pass_semantic_1.bin",   // prompt:
-    "./data/semantic/test_pass_semantic_2.bin",   // prompt:
-    "./data/semantic/test_pass_semantic_3.bin",   // prompt:
+    "./data/semantic/test_pass_semantic_1.bin",   // prompt: Ceci est un texte en français pour tester le bon fonctionnement de bark.
+    "./data/semantic/test_pass_semantic_2.bin",   // prompt: Sometimes the heart sees what is invisible to the eye
+    "./data/semantic/test_pass_semantic_3.bin",   // prompt: El Arte de Vencer se Aprende en las Derrotas
 };
 
 static const int n_threads   = 4;
