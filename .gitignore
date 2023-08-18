@@ -1,10 +1,25 @@
-ggml_weights/*
-ggml_weights_q4/*
-ggml_weights_q5/*
-ggml_weights_q8/*
-*.dSYM/
+*.o
+*.a
+*.so
+.DS_Store
+*.swp
+.build/
 build/
+.cache/
+*.dSYM/
+.direnv/
+.envrc
+.swiftpm
+.venv
+.clang-tidy
+.vs/
+.vscode/
+
+ggml_weights/*
+ggml_weights_*/*
 models/
+
+build-info.h
 
 bark
 encodec
@@ -12,11 +27,8 @@ main
 toy
 quantize
 
-*.o
 *.plist
 *.wav
-
-.DS_Store
 
 !ggml_weights/ggml_vocab.bin
 !ggml_weights/vocab.txt
