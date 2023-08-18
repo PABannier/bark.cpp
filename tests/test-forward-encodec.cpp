@@ -7,15 +7,13 @@
 #include "common.h"
 
 static const std::vector<std::string> test_data = {
-    "./data/encodec/test_pass_encodec_1.bin",   // prompt:
-    "./data/encodec/test_pass_encodec_2.bin",   // prompt:
-    "./data/encodec/test_pass_encodec_3.bin",   // prompt:
+    "./data/encodec/test_pass_encodec_1.bin",   // prompt: El hombre que se levanta es aún más grande que el que no ha caído.
+    "./data/encodec/test_pass_encodec_2.bin",   // prompt: ♪ Heal the world, Make it a better place, For you and for me, and the entire human race ♪
+    "./data/encodec/test_pass_encodec_3.bin",   // prompt: En été, mieux vaut suer que trembler.
 };
 
-static const int n_threads = 1;
-
 int main() {
-    const std::string fname = "../ggml_weights/ggml_weights_encodec.bin";
+    const std::string fname = "../ggml_weights/ggml_weights_codec.bin";
 
     encodec_model model;
     if(!encodec_model_load(fname, model)) {
@@ -23,17 +21,18 @@ int main() {
         return 1;
     }
 
-    bark_codes input;
-    audio_arr_t gt_audio_arr;
+    bark_codes tokens;
+    audio_arr_t gt_audio_arr, audio_arr;
 
     for (int i = 0; i < (int) test_data.size(); i++) {
-        input.clear();
+        tokens.clear();
         gt_audio_arr.clear();
+        audio_arr.clear();
 
         std::string path = test_data[i];
-        load_test_data(path, input, gt_audio_arr);
+        load_test_data(path, tokens, gt_audio_arr);
 
-        audio_arr_t audio_arr = bark_forward_encodec(transpose(input), model, n_threads);
+        audio_arr_t audio_arr = bark_forward_encodec(transpose(tokens), model);
 
         printf("\n");
         printf("%s: %s\n", __func__, path.c_str());
