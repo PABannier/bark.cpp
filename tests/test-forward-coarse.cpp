@@ -7,9 +7,9 @@
 #include "common.h"
 
 static const std::vector<std::string> test_data = {
-    "./data/coarse/test_pass_coarse_1.bin",   // prompt:
-    "./data/coarse/test_pass_coarse_2.bin",   // prompt:
-    "./data/coarse/test_pass_coarse_3.bin",   // prompt:
+    "./data/coarse/test_pass_coarse_1.bin",   // prompt: The amount of random conversations that lead to culture-shifting ideas is insane.
+    "./data/coarse/test_pass_coarse_2.bin",   // prompt: Des Teufels liebstes Möbelstück ist die lange Bank
+    "./data/coarse/test_pass_coarse_3.bin",   // prompt: खुदा ने बहुत सी अच्छी चीज बनाई है उस में एक हमारा दिमाग भी है बस उसे Use करने के लिए बता देता तो हम भी करोड़पति बन जाते I
 };
 
 static const int n_threads = 4;
@@ -18,7 +18,7 @@ static const int max_coarse_history  = 630;
 static const float temp = 0.0f;
 
 int main() {
-    const std::string fname = "../ggml_weights/ggml_weights_fine.bin";
+    const std::string fname = "../ggml_weights/ggml_weights_coarse.bin";
 
     std::mt19937 rng(0);
 
