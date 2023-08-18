@@ -1,9 +1,3 @@
-/* This test checks that the forward pass as defined in `bark_forward_coarse_encoder`
-yields the same output as the original Bark implementation when using a deterministic
-sampling: the argmax sampling.
-Note that this sampling does not yield good quality audio, and is used solely for testing
-purposes to remove the stochasticity from sampling.
-*/
 #include <cstdio>
 #include <string>
 #include <random>
