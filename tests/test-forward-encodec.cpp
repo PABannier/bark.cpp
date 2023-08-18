@@ -22,12 +22,11 @@ int main() {
     }
 
     bark_codes tokens;
-    audio_arr_t gt_audio_arr, audio_arr;
+    audio_arr_t gt_audio_arr;
 
     for (int i = 0; i < (int) test_data.size(); i++) {
         tokens.clear();
         gt_audio_arr.clear();
-        audio_arr.clear();
 
         std::string path = test_data[i];
         load_test_data(path, tokens, gt_audio_arr);

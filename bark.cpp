@@ -1179,7 +1179,7 @@ bool gpt_eval(
             cur = ggml_add(ctx0,
                     ggml_repeat(ctx0, model.layers[il].c_mlp_fc_b, cur),
                     cur);
-            
+
             // GELU activation
             // [3072, N]
             cur = ggml_gelu(ctx0, cur);
@@ -1657,7 +1657,7 @@ bool encodec_eval(
     static void * buf = malloc(buf_size);
 
     if (mem_per_token > 0 && mem_per_token*N*n_codes > buf_size) {
-        const size_t buf_size_new = 1.1*(mem_per_token*N*n_codes);  // add 10% to account for ggml object overhead
+        const size_t buf_size_new = 1.2*(mem_per_token*N*n_codes);  // add 10% to account for ggml object overhead
 
         // reallocate
         buf_size = buf_size_new;
@@ -1730,8 +1730,8 @@ audio_arr_t bark_forward_encodec(const bark_codes & tokens, const encodec_model 
     const int64_t t_main_end_us = ggml_time_us();
 
     printf("\n\n");
-    printf("%s: mem per token = %zu bytes\n", __func__, mem_per_token);
-    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, t_predict_us/1000.0f, t_predict_us/1000.0f);
+    printf("%s: mem per token = %8.2f MB\n", __func__, mem_per_token);
+    printf("%s:  predict time = %8.2f ms\n", __func__, t_predict_us/1000.0f);
     printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us)/1000.0f);
 
     return audio_arr;
