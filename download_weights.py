@@ -5,7 +5,7 @@ from huggingface_hub import hf_hub_download
 import torch
 
 
-ENCODEC_PATH = Path("https://dl.fbaipublicfiles.com/encodec/v0/encodec_24khz-d7cc33bc.th")
+ENCODEC_PATH = "https://dl.fbaipublicfiles.com/encodec/v0/encodec_24khz-d7cc33bc.th"
 
 REMOTE_MODEL_PATHS = {
     "text": {
@@ -39,11 +39,11 @@ if __name__ == "__main__":
 
     print(" ### Downloading EnCodec weights...")
     state_dict = torch.hub.load_state_dict_from_url(
-        str(ENCODEC_PATH),
+        ENCODEC_PATH,
         map_location="cpu",
         check_hash=True
     )
-    with open(out_dir / ENCODEC_PATH.name, "wb") as fout:
+    with open(out_dir / Path(ENCODEC_PATH).name, "wb") as fout:
         torch.save(state_dict, fout)
 
     print("Done.")

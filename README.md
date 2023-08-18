@@ -19,13 +19,12 @@ The main goal of `bark.cpp` is to synthesize audio from a textual input with the
 
 - [X] Plain C/C++ implementation without dependencies
 - [X] AVX, AVX2 and AVX512 for x86 architectures
+- [X] Mixed F16 / F32 precision
+- [X] 4-bit, 5-bit and 8-bit integer quantization
 - [ ] Optimized via ARM NEON, Accelerate and Metal frameworks
 - [ ] iOS on-device deployment using CoreML
-- [ ] Mixed F16 / F32 precision
-- [ ] 4-bit, 5-bit and 8-bit integer quantization
 
-The original implementation of `bark.cpp` is the bark's 24Khz English model. We expect to support multiple languages in the future, as well as other vocoders (see [this](https://github.com/PABannier/bark.cpp/issues/36) and [this](https://github.com/PABannier/bark.cpp/issues/6)).
-This project is for educational purposes.
+The original implementation of `bark.cpp` is the bark's 24Khz English model. We expect to support multiple encoders in the future (see [this](https://github.com/PABannier/bark.cpp/issues/36) and [this](https://github.com/PABannier/bark.cpp/issues/6)), as well as music generation model (see [this](https://github.com/PABannier/bark.cpp/issues/62)). This project is for educational purposes.
 
 **Supported platforms:**
 
@@ -35,9 +34,9 @@ This project is for educational purposes.
 
 **Supported models:**
 
-- [X] Bark's 24Khz model
-- [ ] Bark's 48Khz model
-- [ ] Multiple voices
+- [X] Bark
+- [ ] Vocos
+- [ ] AudioCraft
 
 ---
 
@@ -176,11 +175,11 @@ In order to build bark.cpp you have two different options. We recommend using `C
 ### Prepare data & Run
 
 ```bash
-# obtain the original bark and encodec weights and place them in ./models
-python3 download_weights.py --download-dir ./models
-
 # install Python dependencies
 python3 -m pip install -r requirements.txt
+
+# obtain the original bark and encodec weights and place them in ./models
+python3 download_weights.py --download-dir ./models
 
 # convert the model to ggml format
 python3 convert.py \

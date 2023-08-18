@@ -48,6 +48,7 @@ struct gpt_hparams {
     int32_t block_size;
     int32_t n_lm_heads;
     int32_t n_wtes;
+    int32_t ftype;
 
     int32_t n_codes_given = 1;
 };

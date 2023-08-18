@@ -1,4 +1,7 @@
 ggml_weights/*
+ggml_weights_q4/*
+ggml_weights_q5/*
+ggml_weights_q8/*
 *.dSYM/
 build/
 models/
@@ -7,6 +10,7 @@ bark
 encodec
 main
 toy
+quantize
 
 *.o
 *.plist
@@ -15,6 +19,7 @@ toy
 .DS_Store
 
 !ggml_weights/ggml_vocab.bin
+!ggml_weights/vocab.txt
 
 tests/test-gpt-eval
 
