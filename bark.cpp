@@ -21,6 +21,8 @@ Author: Pierre-Antoine Bannier <pierreantoine.bannier@gmail.com>
 #include <regex>
 #include <string>
 
+#define BARK_DEBUG 0
+
 bool allequal(struct ggml_tensor * a, struct ggml_tensor * b, std::string test_name) {
     assert(a->ne[0] == b->ne[0]);
     assert(a->ne[1] == b->ne[1]);
@@ -1177,7 +1179,7 @@ bool gpt_eval(
             cur = ggml_add(ctx0,
                     ggml_repeat(ctx0, model.layers[il].c_mlp_fc_b, cur),
                     cur);
-
+            
             // GELU activation
             // [3072, N]
             cur = ggml_gelu(ctx0, cur);

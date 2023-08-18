@@ -68,6 +68,9 @@
         "typeinfo": "cpp",
         "unordered_map": "cpp",
         "variant": "cpp",
-        "algorithm": "cpp"
+        "algorithm": "cpp",
+        "bit": "cpp",
+        "cinttypes": "cpp",
+        "codecvt": "cpp"
     }
 }

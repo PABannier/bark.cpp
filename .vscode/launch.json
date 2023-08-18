@@ -11,13 +11,13 @@
             "preLaunchTask": "build test fine encoder",
         },
         {
-            "name": "Debug qkv",
+            "name": "Debug gpt-eval",
             "type": "lldb",
             "request": "launch",
-            "program": "./tests/test-qkv",
+            "program": "./tests/test-gpt-eval",
             "args": [],
             "cwd": "${fileDirname}",
-            "preLaunchTask": "build test qkv",
+            "preLaunchTask": "build test gpt eval",
         }
     ]
 }

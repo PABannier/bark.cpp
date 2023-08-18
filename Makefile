@@ -2,7 +2,7 @@
 BUILD_TARGETS = main quantize
 
 # Binaries only useful for tests
-TEST_TARGETS = tests/test-tokenizer tests/test-text-encoder tests/test-coarse-encoder tests/test-fine-encoder
+TEST_TARGETS = tests/test-tokenizer tests/test-gpt-eval tests/test-fine-gpt-eval
 TEST_TARGETS += tests/test-forward-semantic tests/test-forward-coarse tests/test-forward-fine
 TEST_TARGETS += tests/test-forward-encodec
 
@@ -324,13 +324,10 @@ common.o: tests/common.cpp
 tests/test-tokenizer: tests/test-tokenizer.cpp ggml.o bark.o encodec.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
 
-tests/test-text-encoder: tests/test-text-encoder.cpp ggml.o bark.o encodec.o common.o $(OBJS)
+tests/test-gpt-eval: tests/test-gpt-eval.cpp ggml.o bark.o encodec.o common.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
 
-tests/test-coarse-encoder: tests/test-coarse-encoder.cpp ggml.o bark.o encodec.o common.o $(OBJS)
-	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
-
-tests/test-fine-encoder: tests/test-fine-encoder.cpp ggml.o bark.o encodec.o common.o $(OBJS)
+tests/test-fine-gpt-eval: tests/test-fine-gpt-eval.cpp ggml.o bark.o encodec.o common.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
 
 tests/test-forward-semantic: tests/test-forward-semantic.cpp ggml.o bark.o encodec.o common.o $(OBJS)

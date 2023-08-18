@@ -7,13 +7,13 @@
     "tasks": [
         {
             "type": "shell",
-            "label": "build test qkv",
+            "label": "build test gpt eval",
             "options": {
                 "env": {
                     "BARK_DEBUG": "1",
                 }
             },
-            "command": "make tests/test-qkv",
+            "command": "make tests/test-gpt-eval",
             "problemMatcher": [],
         },
         {

@@ -1,9 +1,3 @@
-/* This test checks that the forward pass as defined in `bark_forward_fine_encoder`
-yields the same output as the original Bark implementation when using a deterministic
-sampling: the argmax sampling.
-Note that this sampling does not yield good quality audio, and is used solely for testing
-purposes to remove the stochasticity from sampling.
-*/
 #include <cstdio>
 #include <string>
 #include <random>
@@ -13,50 +7,47 @@ purposes to remove the stochasticity from sampling.
 #include "common.h"
 
 static const std::vector<std::string> test_data = {
-    "./data/fine/test_pass_fine_1.bin",
-    "./data/fine/test_pass_fine_2.bin",
+    "./data/fine/test_pass_fine_1.bin",   // prompt: Peut-on savoir où s'arrête le normal, où commence l'anormal ? Vous pouvez définir ces notions, vous, normalité, anormalité ?
+    "./data/fine/test_pass_fine_2.bin",   // prompt: Brevity is the soul of wit.
+    "./data/fine/test_pass_fine_3.bin",   // prompt: El hombre que se levanta es aún más grande que el que no ha caído.
 };
 
-int main(int argc, char** argv) {
-    if (argc < 2) {
-        fprintf(stderr, "Usage: %s <model-file>\n", argv[0]);
-        return 1;
-    }
+static const int n_threads = 4;
+static const float temp = 0.0f;
 
-    const std::string fname = argv[1];
+int main() {
+    const std::string fname = "../ggml_weights/ggml_weights_fine.bin";
+
+    std::mt19937 rng(0);
 
     gpt_model model;
-    std::mt19937 rng(0);
-    const int n_threads = 4;
-
-    bool success = true;
-
-    printf("%s: reading bark fine model\n", __func__);
     if(!gpt_model_load(fname, model)) {
         fprintf(stderr, "%s: invalid model file '%s'\n", __func__, fname.c_str());
         return 1;
     }
 
+    bark_codes input, gt_tokens, tokens;
+
     for (int i = 0; i < (int) test_data.size(); i++) {
-        std::vector<std::vector<int32_t>> input, truth;
+        input.clear();
+        gt_tokens.clear();
+        tokens.clear();
+
         std::string path = test_data[i];
+        load_test_data(path, input, gt_tokens);
 
-        load_nested_test_data(path, input, truth);
+        // TODO: need to remove transpose
         bark_codes input_t = transpose(input);
-        bark_codes output  = bark_forward_fine_encoder(input_t, model, rng, n_threads, 0.0f);
-        bark_codes output_t = transpose(output);
+        bark_codes tokens  = transpose(bark_forward_fine_encoder(input_t, model, rng, n_threads, temp));
 
-        fprintf(stderr, "%s", path.c_str());
-        if (!run_test_on_codes(truth, output_t)) {
-            success = false;
-            fprintf(stderr, "   TEST %d FAILED.\n", i+1);
+        printf("\n");
+        printf("%s: %s\n", __func__, path.c_str());
+        if (!run_test(gt_tokens, tokens)) {
+            printf("%s:     test %d failed.\n", __func__, i+1);
         } else {
-            fprintf(stderr, "   TEST %d PASSED.\n", i+1);
+            printf("%s:     test %d passed.\n", __func__, i+1);
         }
     }
-
-    if (success)
-        fprintf(stderr, "%s : tests passed successfully.\n", __func__);
 
     return 0;
 }

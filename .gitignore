@@ -21,9 +21,8 @@ quantize
 !ggml_weights/ggml_vocab.bin
 !ggml_weights/vocab.txt
 
-tests/test-text-encoder
-tests/test-coarse-encoder
-tests/test-fine-encoder
+tests/test-gpt-eval
+tests/test-fine-gpt-eval
 
 tests/test-forward-coarse
 tests/test-forward-semantic

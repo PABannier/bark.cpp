@@ -1,6 +1,3 @@
-/* This test checks that the forward pass as defined in `bark_forward_encodec`
-yields the same output as the original bark implementation.
-*/
 #include <cstdio>
 #include <string>
 #include <random>
@@ -10,52 +7,41 @@ yields the same output as the original bark implementation.
 #include "common.h"
 
 static const std::vector<std::string> test_data = {
-    "./data/encodec/test_pass_encodec_1.bin",
+    "./data/encodec/test_pass_encodec_1.bin",   // prompt: El hombre que se levanta es aún más grande que el que no ha caído.
+    "./data/encodec/test_pass_encodec_2.bin",   // prompt: ♪ Heal the world, Make it a better place, For you and for me, and the entire human race ♪
+    "./data/encodec/test_pass_encodec_3.bin",   // prompt: En été, mieux vaut suer que trembler.
 };
 
-int main(int argc, char** argv) {
-    if (argc < 2) {
-        fprintf(stderr, "Usage: %s <model-file>\n", argv[0]);
-        return 1;
-    }
-
-    const std::string fname = argv[1];
+int main() {
+    const std::string fname = "../ggml_weights/ggml_weights_codec.bin";
 
     encodec_model model;
-    const int n_threads = 1;  // TODO: should be 4
-
-    bool success = true;
-
     if(!encodec_model_load(fname, model)) {
         fprintf(stderr, "%s: invalid model file '%s'\n", __func__, fname.c_str());
         return 1;
     }
 
+    bark_codes tokens;
+    audio_arr_t gt_audio_arr, audio_arr;
+
     for (int i = 0; i < (int) test_data.size(); i++) {
-        bark_codes input;
-        audio_arr_t truth;
+        tokens.clear();
+        gt_audio_arr.clear();
+        audio_arr.clear();
+
         std::string path = test_data[i];
+        load_test_data(path, tokens, gt_audio_arr);
 
-        load_test_data(path, input, truth);
-        bark_codes input_t = transpose(input);
+        audio_arr_t audio_arr = bark_forward_encodec(transpose(tokens), model);
 
-        audio_arr_t output = bark_forward_encodec(input_t, model, n_threads);
-
-        fprintf(stderr, "input_t = [%zu, %zu]\n", input_t.size(), input_t[0].size());
-        fprintf(stderr, "output  = [%zu,]\n", output.size());
-        fprintf(stderr, "truth   = [%zu,]\n", truth.size());
-
-        fprintf(stderr, "%s", path.c_str());
-        if (!run_test_on_sequence(truth, output)) {
-            success = false;
-            fprintf(stderr, "   TEST %d FAILED.\n", i+1);
+        printf("\n");
+        printf("%s: %s\n", __func__, path.c_str());
+        if (!run_test(gt_audio_arr, audio_arr)) {
+            printf("%s:     test %d failed.\n", __func__, i+1);
         } else {
-            fprintf(stderr, "   TEST %d PASSED.\n", i+1);
+            printf("%s:     test %d passed.\n", __func__, i+1);
         }
     }
-
-    if (success)
-        fprintf(stderr, "%s : tests passed successfully.\n", __func__);
 
     return 0;
 }

@@ -9,12 +9,31 @@
 typedef std::vector<float> logit_sequence;
 typedef std::vector<std::vector<float>> logit_matrix;
 
-bool run_test_on_sequence(std::vector<int> truth, std::vector<int> result);
-bool run_test_on_sequence(std::vector<float> truth, std::vector<float> result);
+/* Comparison utils */
+template <typename T, typename U>
+inline bool all_equal(std::vector<T> s1, std::vector<U> s2, int * n_violations);
 
-bool run_test_on_codes(logit_matrix truth, logit_matrix result);
-bool run_test_on_codes(bark_codes truth, bark_codes result);
+template <typename T, typename U>
+inline bool all_equal(
+            std::vector<std::vector<T>>   s1,
+            std::vector<std::vector<U>>   s2,
+                                    int * n_violations);
 
+template <typename T, typename U>
+inline bool all_close(
+            std::vector<T>   s1,
+            std::vector<U>   s2,
+                     float * max_violation,
+                       int * n_violations);
+
+/* Test utils */
+bool run_test(std::vector<int> truth, std::vector<int> result);
+bool run_test(std::vector<float> truth, std::vector<float> result);
+
+bool run_test(logit_matrix truth, logit_matrix result);
+bool run_test(bark_codes truth, bark_codes result);
+
+/* Load utils */
 template <typename T, typename U>
 void load_test_data(std::string fname, std::vector<T>& input, std::vector<U>& output);
 
@@ -24,7 +43,7 @@ void load_test_data(std::string fname, std::vector<T>& input, std::vector<std::v
 void load_test_data(std::string fname, std::vector<std::vector<int32_t>>& input, std::vector<float>& output);
 
 template <typename T>
-void load_nested_test_data(
+void load_test_data(
                 std::string fname,
                 std::vector<std::vector<int32_t>> & input,
                 std::vector<std::vector<T>>       & output);
