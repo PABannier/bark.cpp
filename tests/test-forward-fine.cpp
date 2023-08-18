@@ -7,9 +7,9 @@
 #include "common.h"
 
 static const std::vector<std::string> test_data = {
-    "./data/fine/test_pass_fine_1.bin",   // prompt:
-    "./data/fine/test_pass_fine_2.bin",   // prompt:
-    "./data/fine/test_pass_fine_3.bin",   // prompt:
+    "./data/fine/test_pass_fine_1.bin",   // prompt: Peut-on savoir où s'arrête le normal, où commence l'anormal ? Vous pouvez définir ces notions, vous, normalité, anormalité ?
+    "./data/fine/test_pass_fine_2.bin",   // prompt: Brevity is the soul of wit.
+    "./data/fine/test_pass_fine_3.bin",   // prompt: El hombre que se levanta es aún más grande que el que no ha caído.
 };
 
 static const int n_threads = 4;
