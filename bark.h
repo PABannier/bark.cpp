@@ -236,7 +236,7 @@ bool bark_generate_audio(
         const std::string & voice);
 
 bark_sequence bark_forward_text_encoder(
-    bark_sequence & tokens,
+    const bark_sequence & tokens,
     struct bark_history_prompts * history_prompts,
     const std::string & voice,
     const gpt_model model,
@@ -247,9 +247,9 @@ bark_sequence bark_forward_text_encoder(
 
 bark_codes bark_forward_coarse_encoder(
     const bark_sequence & tokens,
-    struct bark_voice * history_prompt,
-    const gpt_model model,
+    struct bark_history_prompts * history_prompt,
     const std::string & voice,
+    const gpt_model model,
     std::mt19937 & rng,
     const int n_threads,
     const float temp,
