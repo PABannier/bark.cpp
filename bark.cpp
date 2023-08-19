@@ -156,7 +156,7 @@ void load_gt_tensor(std::string path, struct ggml_tensor * t) {
     read_tensor_from_file(fin, t);
 }
 
-void print_tensor(struct ggml_tensor * a, bool print_val, std::string t_name) {
+void dump_tensor(struct ggml_tensor * a, bool print_val, std::string t_name) {
     printf("name=%s\n", t_name.c_str());
     float sum = 0;
     for (int i = 0; i < a->ne[3]; i++) {
@@ -174,7 +174,7 @@ void print_tensor(struct ggml_tensor * a, bool print_val, std::string t_name) {
                             (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
                         sum += *aval;
                         if (print_val)
-                            printf("%.4f ", *aval);
+                            printf("%d ", *aval);
                     } else {
                         throw;
                     }
@@ -1159,9 +1159,6 @@ bool gpt_eval(
 
         struct ggml_tensor * inpFF = cur;
 
-        std::string t2_name = "mid_block" + std::to_string(il);
-        ggml_set_name(inpFF, t2_name.c_str());
-
         // feed-forward network
         {
             // norm
@@ -1193,14 +1190,9 @@ bool gpt_eval(
                     ggml_repeat(ctx0, model.layers[il].c_mlp_fc_b, cur),
                     cur);
 
-            std::string t_name_3 = "out_c_fc" + std::to_string(il);
-            ggml_set_name(cur, t_name_3.c_str());
-
             // GELU activation
             // [3072, N]
             cur = ggml_gelu(ctx0, cur);
-            std::string t_name_4 = "out_gelu" + std::to_string(il);
-            ggml_set_name(cur, t_name_4.c_str());
 
             // projection
             // [ 768, 3072] - model.layers[il].c_mlp_proj_w
@@ -1217,8 +1209,6 @@ bool gpt_eval(
             cur = ggml_add(ctx0,
                     ggml_repeat(ctx0, model.layers[il].c_mlp_proj_b, cur),
                     cur);
-            std::string t_name_5 = "out_c_proj" + std::to_string(il);
-            ggml_set_name(cur, t_name_5.c_str());
         }
 
         // input for next layer
@@ -1251,16 +1241,6 @@ bool gpt_eval(
     ggml_build_forward_expand(&gf, inpL);
     ggml_graph_compute_with_ctx(ctx0, &gf, n_threads);
 
-    // check tensor
-    std::vector<std::string> t_interest = { "mid_block", "out_c_fc", "out_gelu", "out_c_proj", "end_block" };
-    for (int il = 0; il < 3; il++) {
-        for (auto t_name : t_interest) {
-            t_name += std::to_string(il);
-            auto * t = ggml_get_tensor(ctx0, t_name.c_str());
-            print_tensor(t, false, t_name);
-            printf("\n");
-        }
-    }
 
     // return result just for the last token
     embd_w.resize(n_vocab);
@@ -1445,16 +1425,13 @@ bark_sequence bark_forward_text_encoder(
 }
 
 bark_codes bark_forward_coarse_encoder(
-    const bark_sequence & tokens,
-    const gpt_model model,
-    std::mt19937 & rng,
-    const int n_threads,
-    const float temp,
-    const int max_coarse_history,
-    const int sliding_window_size) {
-    bark_codes out_coarse;
-    bark_sequence out;
-
+        const bark_sequence & semantic_tokens,
+        const gpt_model model,
+        std::mt19937 & rng,
+        const int n_threads,
+        const float temp,
+        const int max_coarse_history,
+        const int sliding_window_size) {
     bark_progress progress;
     progress.func = __func__;
 
@@ -1466,15 +1443,12 @@ bark_codes bark_forward_coarse_encoder(
     float semantic_to_coarse_ratio = COARSE_RATE_HZ / SEMANTIC_RATE_HZ * N_COARSE_CODEBOOKS;
     int max_semantic_history = floorf(max_coarse_history / semantic_to_coarse_ratio);
 
-    int n_steps = floorf(tokens.size() * semantic_to_coarse_ratio / N_COARSE_CODEBOOKS) * N_COARSE_CODEBOOKS;
-    int step_ix = 0;
+    int n_steps = floorf(semantic_tokens.size() * semantic_to_coarse_ratio / N_COARSE_CODEBOOKS) * N_COARSE_CODEBOOKS;
+    int n_step = 0;
 
     BARK_ASSERT(n_steps > 0);
     BARK_ASSERT(n_steps % N_COARSE_CODEBOOKS == 0);
 
-    int n_window_steps = ceilf(static_cast<float>(n_steps) / sliding_window_size);
-
-    bark_sequence input = tokens;
     std::vector<float> logits;
 
     // dry run to estimate mem_per_token
@@ -1484,27 +1458,34 @@ bark_codes bark_forward_coarse_encoder(
         gpt_eval(model, n_threads, &n_past, false, { 0, 1, 2, 3 }, logits, mem_per_token);
     }
 
-    for (int i = 0; i < n_window_steps; i++) {
-        int semantic_ix = roundf(n_steps / semantic_to_coarse_ratio);
+    bark_sequence x_semantic = semantic_tokens;
+    bark_sequence   x_coarse = {};
 
-        bark_sequence input_in(
-            input.begin() + std::max(semantic_ix-max_semantic_history, 0),
-            input.end()
+    bark_sequence x_semantic_in = x_semantic;
+    bark_sequence x_coarse_in   = x_coarse;
+    int n_window_steps = ceilf(static_cast<float>(n_steps) / sliding_window_size);
+
+    for (int i = 0; i < n_window_steps; i++) {
+        int semantic_idx = roundf(n_step / semantic_to_coarse_ratio);
+
+        bark_sequence x_in(
+            x_semantic_in.begin() + std::max(semantic_idx - max_semantic_history, 0),
+            x_semantic_in.end()
         );
-        size_t original_size = input_in.size();
-        input_in.resize(256);
+        size_t original_size = x_in.size();
+        x_in.resize(256);
 
         // padding from the right side
-        for (int ix = original_size; ix < 256; ix++)
-            input_in[ix] = COARSE_SEMANTIC_PAD_TOKEN;
+        for (int i = original_size; i < 256; i++)
+            x_in[i] = COARSE_SEMANTIC_PAD_TOKEN;
 
-        input_in.push_back(COARSE_INFER_TOKEN);
+        x_in.push_back(COARSE_INFER_TOKEN);
 
         // concatenate input_in and input_coarse
-        input_in.insert(
-            input_in.end(),
-            std::make_move_iterator(out.end() - std::min(max_coarse_history, (int) out.size())),
-            std::make_move_iterator(out.end())
+        x_in.insert(
+            x_in.end(),
+            std::make_move_iterator(x_coarse_in.end() - std::min(max_coarse_history, (int) x_coarse_in.size())),
+            std::make_move_iterator(x_coarse_in.end())
         );
 
         int n_past = 0;
@@ -1514,46 +1495,48 @@ bark_codes bark_forward_coarse_encoder(
         mem_per_token *= 1.1;  // context length is growing, mem_per_token must grow as well
 
         for (int j = 0; j < sliding_window_size; j++) {
-            if (step_ix >= n_steps)
+            if (n_step >= n_steps)
                 continue;
+            bool is_major = n_step % N_COARSE_CODEBOOKS == 0;
 
             int64_t t_predict_start_us = ggml_time_us();
-            gpt_eval(model, n_threads, &n_past, false, input_in, logits, mem_per_token);
+            gpt_eval(model, n_threads, &n_past, false, x_in, logits, mem_per_token);
             t_predict_us += (ggml_time_us() - t_predict_start_us);
 
-            input_in.clear();
+            x_in.clear();
+            logits.clear();
 
-            bool is_major = step_ix % N_COARSE_CODEBOOKS == 0;
-            int start_ix  = SEMANTIC_VOCAB_SIZE + (1 - is_major) * CODEBOOK_SIZE;
-            int end_ix    = SEMANTIC_VOCAB_SIZE + (2 - is_major) * CODEBOOK_SIZE;
-            std::vector<float> relevant_logits(logits.begin() + start_ix, logits.begin() + end_ix);
+            int logit_start_idx = SEMANTIC_VOCAB_SIZE + (1 - is_major) * CODEBOOK_SIZE;
+            int logit_end_idx   = SEMANTIC_VOCAB_SIZE + (2 - is_major) * CODEBOOK_SIZE;
+            std::vector<float> relevant_logits(logits.begin() + logit_start_idx, logits.begin() + logit_end_idx);
 
             int64_t t_sample_start_us = ggml_time_us();
-            bark_vocab::id next = gpt_sample(relevant_logits, rng, temp, NULL);
+            bark_vocab::id item_next = gpt_sample(relevant_logits, rng, temp, NULL);
             t_sample_us += (ggml_time_us() - t_sample_start_us);
 
-            next += start_ix;
+            item_next += logit_start_idx;
 
-            input_in.push_back(next);
-            out.push_back(next);
+            x_coarse_in.push_back(item_next);
+            x_in.push_back(item_next);
 
-            step_ix += 1;
-
+            n_step += 1;
             progress.callback((float) (i*sliding_window_size+j)/n_steps);
         }
     }
 
-    BARK_ASSERT((int) out.size() == n_steps);
-    BARK_ASSERT(out.size() % N_COARSE_CODEBOOKS == 0);
+    BARK_ASSERT((int) x_coarse_in.size() == n_steps);
+    BARK_ASSERT(x_coarse_in.size() % N_COARSE_CODEBOOKS == 0);
 
     // out_coarse: [seq_length, n_codes]
-    for (int i = 0; i < (int) out.size(); i += N_COARSE_CODEBOOKS) {
+    bark_codes coarse_audio_arr;
+
+    for (int i = 0; i < (int) x_coarse_in.size(); i += N_COARSE_CODEBOOKS) {
         // this assumes N_COARSE_CODEBOOKS = 2
         bark_sequence _tmp = {
-            out[i] - SEMANTIC_VOCAB_SIZE,
-            out[i+1] - SEMANTIC_VOCAB_SIZE - CODEBOOK_SIZE
+            x_coarse_in[i]   - SEMANTIC_VOCAB_SIZE,
+            x_coarse_in[i+1] - SEMANTIC_VOCAB_SIZE - CODEBOOK_SIZE
         };
-        out_coarse.push_back(_tmp);
+        coarse_audio_arr.push_back(_tmp);
     }
 
     const int64_t t_main_end_us = ggml_time_us();
@@ -1561,10 +1544,10 @@ bark_codes bark_forward_coarse_encoder(
     printf("\n\n");
     printf("%s: mem per token = %8.2f MB\n", __func__, mem_per_token/1000.0f/1000.0f);
     printf("%s:   sample time = %8.2f ms\n", __func__, t_sample_us/1000.0f);
-    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, t_predict_us/1000.0f, t_predict_us/1000.0f/step_ix);
+    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, t_predict_us/1000.0f, t_predict_us/1000.0f/n_step);
     printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us)/1000.0f);
 
-    return out_coarse;
+    return coarse_audio_arr;
 }
 
 bark_codes bark_forward_fine_encoder(

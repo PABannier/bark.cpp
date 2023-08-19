@@ -8,8 +8,8 @@
 
 static const std::vector<std::string> test_data = {
     "./data/coarse/test_pass_coarse_1.bin",   // prompt: The amount of random conversations that lead to culture-shifting ideas is insane.
-    // "./data/coarse/test_pass_coarse_2.bin",   // prompt: Des Teufels liebstes Möbelstück ist die lange Bank
-    // "./data/coarse/test_pass_coarse_3.bin",   // prompt: खुदा ने बहुत सी अच्छी चीज बनाई है उस में एक हमारा दिमाग भी है बस उसे Use करने के लिए बता देता तो हम भी करोड़पति बन जाते I
+    "./data/coarse/test_pass_coarse_2.bin",   // prompt: Des Teufels liebstes Möbelstück ist die lange Bank
+    "./data/coarse/test_pass_coarse_3.bin",   // prompt: खुदा ने बहुत सी अच्छी चीज बनाई है उस में एक हमारा दिमाग भी है बस उसे करने के लिए बता देता तो हम भी करोड़पति बन जाते I
 };
 
 static const int n_threads = 4;
