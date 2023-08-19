@@ -1213,9 +1213,6 @@ bool gpt_eval(
 
         // input for next layer
         inpL = ggml_add(ctx0, cur, inpFF);
-
-        std::string t_name = "end_block" + std::to_string(il);
-        ggml_set_name(inpL, t_name.c_str());
     }
 
     // norm
@@ -1240,7 +1237,6 @@ bool gpt_eval(
     // run the computation
     ggml_build_forward_expand(&gf, inpL);
     ggml_graph_compute_with_ctx(ctx0, &gf, n_threads);
-
 
     // return result just for the last token
     embd_w.resize(n_vocab);
