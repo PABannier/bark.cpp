@@ -185,7 +185,7 @@ python3 download_weights.py --download-dir ./models
 python3 convert.py \
         --dir-model ./models \
         --codec-path ./models \
-        --vocab-path ./models \
+        --vocab-path ./ggml_weights/ \
         --out-dir ./ggml_weights/
 
 # run the inference
