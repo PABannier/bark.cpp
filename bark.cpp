@@ -156,7 +156,9 @@ void load_gt_tensor(std::string path, struct ggml_tensor * t) {
     read_tensor_from_file(fin, t);
 }
 
-void print_tensor(struct ggml_tensor * a) {
+void print_tensor(struct ggml_tensor * a, bool print_val, std::string t_name) {
+    printf("name=%s\n", t_name.c_str());
+    float sum = 0;
     for (int i = 0; i < a->ne[3]; i++) {
         for (int j = 0; j < a->ne[2]; j++) {
             for (int k = 0; k < a->ne[1]; k++) {
@@ -164,20 +166,28 @@ void print_tensor(struct ggml_tensor * a) {
                     if (a->type == GGML_TYPE_F32) {
                         float * aval = (float *) (
                             (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
-                        printf("%.4f ", *aval);
+                        sum += *aval;
+                        if (print_val)
+                            printf("%.4f ", *aval);
                     } else if (a->type == GGML_TYPE_I32) {
                         int32_t * aval = (int32_t *) (
                             (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
-                        printf("%d ", *aval);
+                        sum += *aval;
+                        if (print_val)
+                            printf("%.4f ", *aval);
                     } else {
                         throw;
                     }
                 }
-                printf("\n");
+                if (print_val)
+                    printf("\n");
             }
-            printf("\n\n");
+            if (print_val)
+                printf("\n\n");
         }
     }
+    printf("sum=%.4f\n", sum);
+    printf("shape=[%lld, %lld, %lld]\n", a->ne[0], a->ne[1], a->ne[2]);
 }
 
 bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expected_size) {
@@ -1149,6 +1159,9 @@ bool gpt_eval(
 
         struct ggml_tensor * inpFF = cur;
 
+        std::string t2_name = "mid_block" + std::to_string(il);
+        ggml_set_name(inpFF, t2_name.c_str());
+
         // feed-forward network
         {
             // norm
@@ -1179,10 +1192,15 @@ bool gpt_eval(
             cur = ggml_add(ctx0,
                     ggml_repeat(ctx0, model.layers[il].c_mlp_fc_b, cur),
                     cur);
-            
+
+            std::string t_name_3 = "out_c_fc" + std::to_string(il);
+            ggml_set_name(cur, t_name_3.c_str());
+
             // GELU activation
             // [3072, N]
             cur = ggml_gelu(ctx0, cur);
+            std::string t_name_4 = "out_gelu" + std::to_string(il);
+            ggml_set_name(cur, t_name_4.c_str());
 
             // projection
             // [ 768, 3072] - model.layers[il].c_mlp_proj_w
@@ -1199,10 +1217,15 @@ bool gpt_eval(
             cur = ggml_add(ctx0,
                     ggml_repeat(ctx0, model.layers[il].c_mlp_proj_b, cur),
                     cur);
+            std::string t_name_5 = "out_c_proj" + std::to_string(il);
+            ggml_set_name(cur, t_name_5.c_str());
         }
 
         // input for next layer
         inpL = ggml_add(ctx0, cur, inpFF);
+
+        std::string t_name = "end_block" + std::to_string(il);
+        ggml_set_name(inpL, t_name.c_str());
     }
 
     // norm
@@ -1227,6 +1250,17 @@ bool gpt_eval(
     // run the computation
     ggml_build_forward_expand(&gf, inpL);
     ggml_graph_compute_with_ctx(ctx0, &gf, n_threads);
+
+    // check tensor
+    std::vector<std::string> t_interest = { "mid_block", "out_c_fc", "out_gelu", "out_c_proj", "end_block" };
+    for (int il = 0; il < 3; il++) {
+        for (auto t_name : t_interest) {
+            t_name += std::to_string(il);
+            auto * t = ggml_get_tensor(ctx0, t_name.c_str());
+            print_tensor(t, false, t_name);
+            printf("\n");
+        }
+    }
 
     // return result just for the last token
     embd_w.resize(n_vocab);
@@ -1474,6 +1508,9 @@ bark_codes bark_forward_coarse_encoder(
         );
 
         int n_past = 0;
+        // TODO: this is dangerous, mem_per_token grows exponentially with n_window_steps
+        // Instead, we should estimate an upper bound on mem_per_token, instead of relying
+        // on this gross growing strategy
         mem_per_token *= 1.1;  // context length is growing, mem_per_token must grow as well
 
         for (int j = 0; j < sliding_window_size; j++) {
@@ -1499,9 +1536,6 @@ bark_codes bark_forward_coarse_encoder(
 
             input_in.push_back(next);
             out.push_back(next);
-
-            // printf("%d ", next);
-            // fflush(stdout);
 
             step_ix += 1;
 

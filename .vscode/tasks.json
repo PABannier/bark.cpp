@@ -18,13 +18,35 @@
         },
         {
             "type": "shell",
-            "label": "build test fine encoder",
+            "label": "build test fine gpt eval",
             "options": {
                 "env": {
                     "BARK_DEBUG": "1",
                 }
             },
-            "command": "make tests/test-fine-encoder",
+            "command": "make tests/test-fine-gpt-eval",
+            "problemMatcher": [],
+        },
+        {
+            "type": "shell",
+            "label": "build test forward encodec",
+            "options": {
+                "env": {
+                    "BARK_DEBUG": "1",
+                }
+            },
+            "command": "make tests/test-forward-encodec",
+            "problemMatcher": [],
+        },
+        {
+            "type": "shell",
+            "label": "build test forward coarse",
+            "options": {
+                "env": {
+                    "BARK_DEBUG": "1",
+                }
+            },
+            "command": "make tests/test-forward-coarse",
             "problemMatcher": [],
         },
     ],

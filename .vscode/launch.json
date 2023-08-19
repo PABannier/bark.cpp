@@ -2,15 +2,6 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug fine encoder",
-            "type": "lldb",
-            "request": "launch",
-            "program": "./tests/test-fine-encoder",
-            "args": [],
-            "cwd": "${fileDirname}",
-            "preLaunchTask": "build test fine encoder",
-        },
-        {
             "name": "Debug gpt-eval",
             "type": "lldb",
             "request": "launch",
@@ -18,6 +9,33 @@
             "args": [],
             "cwd": "${fileDirname}",
             "preLaunchTask": "build test gpt eval",
+        },
+        {
+            "name": "Debug fine-gpt-eval",
+            "type": "lldb",
+            "request": "launch",
+            "program": "./tests/test-fine-gpt-eval",
+            "args": [],
+            "cwd": "${fileDirname}",
+            "preLaunchTask": "build test fine gpt eval",
+        },
+        {
+            "name": "Debug encodec",
+            "type": "lldb",
+            "request": "launch",
+            "program": "./tests/test-forward-encodec",
+            "args": [],
+            "cwd": "${fileDirname}",
+            "preLaunchTask": "build test forward encodec",
+        },
+        {
+            "name": "Debug coarse encoder",
+            "type": "lldb",
+            "request": "launch",
+            "program": "./tests/test-forward-coarse",
+            "args": [],
+            "cwd": "${fileDirname}",
+            "preLaunchTask": "build test forward coarse",
         }
     ]
 }
