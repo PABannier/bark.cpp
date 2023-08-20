@@ -7,9 +7,10 @@
 #include "common.h"
 
 static const std::vector<std::string> test_data = {
-    "./data/encodec/test_pass_encodec_1.bin",   // prompt: El hombre que se levanta es aún más grande que el que no ha caído.
-    "./data/encodec/test_pass_encodec_2.bin",   // prompt: ♪ Heal the world, Make it a better place, For you and for me, and the entire human race ♪
-    "./data/encodec/test_pass_encodec_3.bin",   // prompt: En été, mieux vaut suer que trembler.
+    // "./data/encodec/test_pass_encodec_1.bin",   // prompt: El hombre que se levanta es aún más grande que el que no ha caído.
+    // "./data/encodec/test_pass_encodec_2.bin",   // prompt: ♪ Heal the world, Make it a better place, For you and for me, and the entire human race ♪
+    // "./data/encodec/test_pass_encodec_3.bin",   // prompt: En été, mieux vaut suer que trembler.
+    "./data/encodec/test_pass_encodec_4.bin",   // prompt: we are living on earth
 };
 
 int main() {

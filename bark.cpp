@@ -156,7 +156,8 @@ void load_gt_tensor(std::string path, struct ggml_tensor * t) {
     read_tensor_from_file(fin, t);
 }
 
-void print_tensor(struct ggml_tensor * a) {
+void dump_tensor(struct ggml_tensor * a, bool print_val) {
+    float sum = 0;
     for (int i = 0; i < a->ne[3]; i++) {
         for (int j = 0; j < a->ne[2]; j++) {
             for (int k = 0; k < a->ne[1]; k++) {
@@ -164,20 +165,27 @@ void print_tensor(struct ggml_tensor * a) {
                     if (a->type == GGML_TYPE_F32) {
                         float * aval = (float *) (
                             (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
-                        printf("%.4f ", *aval);
+                        sum += *aval;
+                        if (print_val)
+                            printf("%.4f ", *aval);
                     } else if (a->type == GGML_TYPE_I32) {
                         int32_t * aval = (int32_t *) (
                             (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
-                        printf("%d ", *aval);
+                        sum += *aval;
+                        if (print_val)
+                            printf("%d ", *aval);
                     } else {
                         throw;
                     }
                 }
-                printf("\n");
+                if (print_val)
+                    printf("\n");
             }
-            printf("\n\n");
+            if (print_val)
+                printf("\n\n");
         }
     }
+    printf("sum=%.4f\n", sum);
 }
 
 bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expected_size) {
@@ -1686,13 +1694,19 @@ bool encodec_eval(
         memcpy((void *) ((char *) codes->data + offset), _tmp.data(), N*ggml_element_size(codes));
     }
 
+    struct ggml_tensor * toy;
+
     struct ggml_tensor * quantized_out = encodec_quantizer_decode_eval(ctx0, model, codes);
-    struct ggml_tensor * output        = encodec_decoder_eval(ctx0, model, quantized_out);
+    struct ggml_tensor * output        = encodec_decoder_eval(ctx0, model, quantized_out, &toy);
 
     ggml_build_forward_expand(&gf, output);
     // TODO: adapt ggml_conv_1d and ggml_conv_trans_1d implementation to use multiple
     // threads.
     ggml_graph_compute_with_ctx(ctx0, &gf, 1);
+
+    if (toy) {
+        dump_tensor(toy, false);
+    }
 
     int out_seq_length = output->ne[0];
     audio_arr.resize(out_seq_length);

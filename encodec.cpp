@@ -446,7 +446,8 @@ struct ggml_tensor * encodec_quantizer_decode_eval(
 struct ggml_tensor * encodec_decoder_eval(
                     struct ggml_context * ctx0,
                     const encodec_model & model,
-                    struct ggml_tensor  * quantized_out) {
+                    struct ggml_tensor  * quantized_out,
+                    struct ggml_tensor  ** toy) {
     const auto & hparams = model.hparams;
     const int * ratios   = hparams.ratios;
     const int stride     = hparams.stride;
@@ -479,6 +480,9 @@ struct ggml_tensor * encodec_decoder_eval(
 
         inpL = strided_conv_transpose_1d(
             ctx0, inpL, block.us_conv_w, block.us_conv_b, ratios[layer_ix]);
+
+        if (layer_ix == 0)
+            *toy = inpL;
 
         struct ggml_tensor * current = inpL;
 
