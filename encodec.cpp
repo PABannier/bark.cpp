@@ -9,6 +9,44 @@
 #include <string>
 #include <vector>
 
+// Implementation of the 1d transposed convolution by applying a 1d convolution on a
+// reshaped input.
+// Source: https://arxiv.org/pdf/1603.07285
+// Source: https://leimao.github.io/blog/Transposed-Convolution-As-Convolution/
+static struct ggml_tensor * transpose_conv_1d(
+        struct ggml_context * ctx,
+        struct ggml_tensor  * inp,
+        struct ggml_tensor  * ker,
+                       int    stride) {
+    int seq_length  = inp->ne[0];
+    int kernel_size = ker->ne[0];
+
+    // compute reshape statistics
+    int s_prime = 1;
+    int p_prime = kernel_size - 1;
+
+    int out_seq_length = (seq_length - 1) * stride + (kernel_size - 1) + 1;
+
+    int a = (out_seq_length - kernel_size) % stride;
+
+    // the input and output channel need to be permuted
+    // the spatial dimension need to be flipped
+    ker = ggml_cont(ctx, ggml_permute(ctx, ker, 0, 2, 1, 3));
+    ker = ggml_flip(ctx, ker);
+
+    // interspersing input with "stride" 0s along the spatial dimension
+
+    // padding the spatial dimension with "a" 0s
+    struct ggml_tensor * padded_inp = ggml_new_tensor_2d(ctx, inp->type, seq_length+a, inp->ne[1]);
+    padded_inp = ggml_set_zero(padded_inp);
+    padded_inp = ggml_set_2d(ctx, padded_inp, inp, padded_inp->nb[1], 0);
+
+    // perform convolution
+    struct ggml_tensor * out = ggml_conv_1d(ctx, padded_inp, ker, s_prime, p_prime, 1);
+
+    return out;
+}
+
 static int get_extra_padding_for_conv_1d(ggml_tensor * inp, float kernel_size, float stride, float padding_total) {
     float length = inp->ne[0];
     float n_frames = (length - kernel_size + padding_total) / stride + 1.0f;
@@ -28,7 +66,7 @@ static struct ggml_tensor * pad_1d(ggml_context * ctx0, ggml_tensor * inp, int p
 
         // constant padding
         struct ggml_tensor * out = ggml_new_tensor_2d(ctx0, inp->type, length+extra_pad, dim);
-        ggml_set_zero(out);
+        out = ggml_set_zero(out);
         out = ggml_set_2d(ctx0, out, inp, out->nb[1], 0);
     }
 
