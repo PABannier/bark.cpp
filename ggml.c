@@ -3794,7 +3794,6 @@ static const char * GGML_OP_NAME[GGML_OP_COUNT] = {
     "POOL_1D",
     "POOL_2D",
     "PAD_REFLEC_1D",
-    "CONV_TRANS_1D",
 
     "FLASH_ATTN",
     "FLASH_FF",
@@ -3869,7 +3868,6 @@ static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "pool_1d(x)",
     "pool_2d(x)",
     "pad_reflec_1d(x)",
-    "conv_trans_1d(x)",
 
     "flash_attn(x)",
     "flash_ff(x)",
@@ -3919,7 +3917,6 @@ static void ggml_setup_op_has_task_pass(void) {
         p[GGML_OP_DIAG_MASK_INF          ] = true;
         p[GGML_OP_DIAG_MASK_ZERO         ] = true;
         p[GGML_OP_CONV_1D                ] = true;
-        p[GGML_OP_TRANS_CONV_1D          ] = true;
         p[GGML_OP_CONV_2D                ] = true;
         p[GGML_OP_FLASH_ATTN_BACK        ] = true;
         p[GGML_OP_CROSS_ENTROPY_LOSS     ] = true;
@@ -7104,47 +7101,6 @@ struct ggml_tensor * ggml_pad_reflec_1d(
 
     return result;
 }
-
-// ggml_transpose_conv_1d
-
-static int64_t ggml_calc_trans_conv_output_size(int64_t ins, int64_t ks, int s, int p, int d) {
-    return (ins - 1) * s - 2 * p + d * (ks - 1) + 1;
-}
-
-GGML_API struct ggml_tensor * ggml_transpose_conv_1d(
-        struct ggml_context * ctx,
-        struct ggml_tensor  * a,
-        struct ggml_tensor  * b,
-        int                   s0,
-        int                   p0,
-        int                   d0) {
-    GGML_ASSERT(ggml_is_matrix(b));
-    GGML_ASSERT(a->ne[2] == b->ne[1]);
-    GGML_ASSERT(a->ne[3] == 1);
-    bool is_node = false;
-
-    if (a->grad || b->grad) {
-        GGML_ASSERT(false); // TODO: implement backward
-        is_node = true;
-    }
-
-    const int64_t ne[4] = {
-        ggml_calc_trans_conv_output_size(b->ne[0], a->ne[0], s0, p0, d0),
-        a->ne[1], 1, 1,
-    };
-    struct ggml_tensor * result = ggml_new_tensor(ctx, GGML_TYPE_F32, 2, ne);
-
-    int32_t params[] = { s0, p0, d0 };
-    ggml_set_op_params(result, params, sizeof(params));
-
-    result->op = GGML_OP_TRANS_CONV_1D;
-    result->grad = is_node ? ggml_dup_tensor(ctx, result) : NULL;
-    result->src[0] = a;
-    result->src[1] = b;
-
-    return result;
-}
-
 
 // ggml_flash_attn
 
@@ -15434,10 +15390,6 @@ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggm
             {
                 ggml_compute_forward_pad_reflec_1d(params, tensor->src[0], tensor);
             } break;
-        case GGML_OP_TRANS_CONV_1D:
-            {
-                ggml_compute_forward_trans_conv_1d(params, tensor->src[0], tensor->src[1], tensor);
-            } break;
         case GGML_OP_FLASH_ATTN:
             {
                 const int32_t t = ggml_get_op_params_i32(tensor, 0);
@@ -16085,10 +16037,6 @@ static void ggml_compute_backward(struct ggml_context * ctx, struct ggml_tensor 
                 GGML_ASSERT(false); // TODO: not implemented
             } break;
         case GGML_OP_PAD_REFLEC_1D:
-            {
-                GGML_ASSERT(false); // TODO: not implemented
-            } break;
-        case GGML_OP_TRANS_CONV_1D:
             {
                 GGML_ASSERT(false); // TODO: not implemented
             } break;
@@ -16997,7 +16945,6 @@ struct ggml_cplan ggml_graph_plan(struct ggml_cgraph * cgraph, int n_threads) {
                     n_tasks = 1; //TODO
                 } break;
             case GGML_OP_CONV_1D:
-            case GGML_OP_TRANS_CONV_1D:
                 {
                     n_tasks = n_threads;
 
