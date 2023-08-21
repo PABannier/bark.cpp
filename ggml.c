@@ -12883,11 +12883,7 @@ static void ggml_compute_forward_conv_1d_f32(
                 const float * const src = (float *)((char *) src1->data + i11*nb11);
                 float * dst_data = wdata;
                 for (int64_t i10 = 0; i10 < ne10 + 2*p0; i10++) {
-                    if ((i10 < p0) || (i10 >= ne10 + p0)) {
-                        dst_data[i10*ew0 + i11] = 0.f;  // padding
-                    } else {
-                        dst_data[i10*ew0 + i11] = src[i10];
-                    }
+                    dst_data[i10*ew0 + i11] = src[i10];
                 }
             }
         }
@@ -12915,9 +12911,12 @@ static void ggml_compute_forward_conv_1d_f32(
             dst_data[i0/s0] = 0;
             for (int k = 0; k < nk; k++) {
                 float v = 0.0f;
-                ggml_vec_dot_f32(ew0, &v,
-                        (float *) params->wdata +   i1*ew0*ne00 +      (k)*ew0,
-                        (float *) params->wdata + ne02*ew0*ne00 + (i0 + k)*ew0);
+                if ((i0 + k >= p0) && (i0 + k < p0 + ne10)) {
+                    ggml_vec_dot_f32(ew0, &v,
+                            (float *) params->wdata +   i1*ew0*ne00 +      (k)*ew0,
+                            (float *) params->wdata + ne02*ew0*ne00 + (i0 + k)*ew0);
+                }
+                printf("%.4f\n", v);
                 dst_data[i0/s0] += v;
             }
         }
