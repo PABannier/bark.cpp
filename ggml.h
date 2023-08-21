@@ -356,7 +356,6 @@ extern "C" {
         GGML_OP_VIEW,
         GGML_OP_PERMUTE,
         GGML_OP_TRANSPOSE,
-        GGML_OP_FLIP,
         GGML_OP_GET_ROWS,
         GGML_OP_GET_ROWS_BACK,
         GGML_OP_DIAG,
@@ -411,6 +410,7 @@ extern "C" {
         GGML_UNARY_OP_GELU,
         GGML_UNARY_OP_GELU_QUICK,
         GGML_UNARY_OP_SILU,
+        GGML_UNARY_OP_FLIP
     };
 
     enum ggml_object_type {

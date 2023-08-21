@@ -3777,7 +3777,6 @@ static const char * GGML_OP_NAME[GGML_OP_COUNT] = {
     "VIEW",
     "PERMUTE",
     "TRANSPOSE",
-    "FLIP",
     "GET_ROWS",
     "GET_ROWS_BACK",
     "DIAG",
@@ -3814,7 +3813,7 @@ static const char * GGML_OP_NAME[GGML_OP_COUNT] = {
     "CROSS_ENTROPY_LOSS_BACK",
 };
 
-static_assert(GGML_OP_COUNT == 65, "GGML_OP_COUNT != 65");
+static_assert(GGML_OP_COUNT == 63, "GGML_OP_COUNT != 63");
 
 static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "none",
@@ -3851,7 +3850,6 @@ static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "view(x)",
     "permute(x)",
     "transpose(x)",
-    "flip(x)",
     "get_rows(x)",
     "get_rows_back(x)",
     "diag(x)",
@@ -3888,7 +3886,7 @@ static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "cross_entropy_loss_back(x,y)",
 };
 
-static_assert(GGML_OP_COUNT == 65, "GGML_OP_COUNT != 65");
+static_assert(GGML_OP_COUNT == 63, "GGML_OP_COUNT != 63");
 
 static_assert(GGML_OP_POOL_COUNT == 2, "GGML_OP_POOL_COUNT != 2");
 
@@ -6497,19 +6495,13 @@ struct ggml_tensor * ggml_transpose(
 struct ggml_tensor * ggml_flip(
         struct ggml_context * ctx,
         struct ggml_tensor  * a) {
-    bool is_node = false;
+    return ggml_unary(ctx, a, GGML_UNARY_OP_FLIP);
+}
 
-    if (a->grad) {
-        is_node = true;
-    }
-
-    struct ggml_tensor * result = ggml_new_tensor(ctx, a->type, 4, a->ne);
-
-    result->op     = GGML_OP_FLIP;
-    result->grad   = is_node ? ggml_dup_tensor(ctx, result) : NULL;
-    result->src[0] = a;
-
-    return result;
+struct ggml_tensor * ggml_flip_inplace(
+        struct ggml_context * ctx,
+        struct ggml_tensor  * a) {
+    return ggml_unary_inplace(ctx, a, GGML_UNARY_OP_FLIP);
 }
 
 
@@ -11301,8 +11293,10 @@ static void ggml_compute_forward_transpose(
 
 static void ggml_compute_forward_flip_f32(
         const struct ggml_compute_params * params,
-        const struct ggml_tensor * src0) {
+        const struct ggml_tensor * src0,
+              struct ggml_tensor * dst) {
     assert(params->ith == 0);
+    assert(ggml_are_same_shape(src0, dst));
 
     if (params->type == GGML_TASK_INIT || params->type == GGML_TASK_FINALIZE) {
         return;
@@ -11316,11 +11310,9 @@ static void ggml_compute_forward_flip_f32(
         for (int i02 = 0; i02 < ne02; i02++) {
             for (int i01 = 0; i01 < ne01; i01++) {
                 float * left  = (float *)((char *) src0->data + i03*nb03 + i02*nb02 + i01*nb01 +          0*nb00);
-                float * right = (float *)((char *) src0->data + i03*nb03 + i02*nb02 + i01*nb01 + (ne00 - 1)*nb00);
-                for (int i00 = 0; i00 < ne00/2; i00++) {
-                    float tmp  = left[i00];
-                    left[i00]  = right[-i00];
-                    right[-i00] = tmp;
+                float * right = (float *)((char *)  dst->data + i03*nb03 + i02*nb02 + i01*nb01 + (ne00 - 1)*nb00);
+                for (int i00 = 0; i00 < ne00; i00++) {
+                    right[-i00] = left[i00];
                 }
             }
         }
@@ -11329,11 +11321,12 @@ static void ggml_compute_forward_flip_f32(
 
 static void ggml_compute_forward_flip(
         const struct ggml_compute_params * params,
-        const struct ggml_tensor * src0) {
+        const struct ggml_tensor * src0,
+              struct ggml_tensor * dst) {
     switch (src0->type) {
         case GGML_TYPE_F32:
             {
-                ggml_compute_forward_flip_f32(params, src0);
+                ggml_compute_forward_flip_f32(params, src0, dst);
             } break;
         default:
             {
@@ -12841,7 +12834,8 @@ static void ggml_compute_forward_conv_1d_f32(
         const struct ggml_tensor * src0,
         const struct ggml_tensor * src1,
               struct ggml_tensor * dst,
-                         size_t    s0) {
+                         size_t    s0,
+                         size_t    p0) {
     GGML_ASSERT(src0->type == GGML_TYPE_F32);
     GGML_ASSERT(src1->type == GGML_TYPE_F32);
     GGML_ASSERT( dst->type == GGML_TYPE_F32);
@@ -12863,6 +12857,7 @@ static void ggml_compute_forward_conv_1d_f32(
 
     if (params->type == GGML_TASK_INIT) {
         // TODO: fix this memset (wsize is overestimated)
+        // TODO: buffer must take into account padding, otherwise buffer overflow
         memset(params->wdata, 0, params->wsize);
 
         // prepare kernel data (src0)
@@ -12887,8 +12882,12 @@ static void ggml_compute_forward_conv_1d_f32(
             for (int64_t i11 = 0; i11 < ne11; i11++) {
                 const float * const src = (float *)((char *) src1->data + i11*nb11);
                 float * dst_data = wdata;
-                for (int64_t i10 = 0; i10 < ne10; i10++) {
-                    dst_data[i10*ew0 + i11] = src[i10];
+                for (int64_t i10 = 0; i10 < ne10 + 2*p0; i10++) {
+                    if ((i10 < p0) || (i10 >= ne10 + p0)) {
+                        dst_data[i10*ew0 + i11] = 0.f;  // padding
+                    } else {
+                        dst_data[i10*ew0 + i11] = src[i10];
+                    }
                 }
             }
         }
@@ -12912,7 +12911,7 @@ static void ggml_compute_forward_conv_1d_f32(
 
     for (int i1 = ir0; i1 < ir1; i1++) {
         float * dst_data = (float *)((char *) dst->data + i1*nb1);
-        for (int64_t i0 = 0; i0 < ne10; i0 += s0) {
+        for (int64_t i0 = 0; i0 < ne10 + 2*p0; i0 += s0) {
             dst_data[i0/s0] = 0;
             for (int k = 0; k < nk; k++) {
                 float v = 0.0f;
@@ -13157,11 +13156,11 @@ static void ggml_compute_forward_conv_1d(
         const struct ggml_tensor * src1,
               struct ggml_tensor * dst) {
     const int32_t s0 = ((const int32_t*)(dst->op_params))[0];
-    // const int32_t p0 = ((const int32_t*)(dst->op_params))[1];
+    const int32_t p0 = ((const int32_t*)(dst->op_params))[1];
     // const int32_t d0 = ((const int32_t*)(dst->op_params))[2];
     // GGML_ASSERT(d0 == 1); // dilation not supported
     // GGML_ASSERT(p0 == src0->ne[0]/2); // only half padding supported
-    ggml_compute_forward_conv_1d_f32(params, src0, src1, dst, s0);
+    ggml_compute_forward_conv_1d_f32(params, src0, src1, dst, s0, p0);
     // if (s0 == 1) {
     //     ggml_compute_forward_conv_1d_s1_ph(params, src0, src1, dst);
     // } else if (s0 == 2) {
@@ -14707,6 +14706,10 @@ static void ggml_compute_forward_unary(
             {
                 ggml_compute_forward_silu(params, src0, dst);
             } break;
+        case GGML_UNARY_OP_FLIP:
+            {
+                ggml_compute_forward_flip(params, src0, dst);
+            } break;
         default:
             {
                 GGML_ASSERT(false);
@@ -15322,10 +15325,6 @@ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggm
             {
                 ggml_compute_forward_transpose(params, tensor->src[0]);
             } break;
-        case GGML_OP_FLIP:
-            {
-                ggml_compute_forward_flip(params, tensor->src[0]);
-            } break;
         case GGML_OP_GET_ROWS:
             {
                 ggml_compute_forward_get_rows(params, tensor->src[0], tensor->src[1], tensor);
@@ -15913,10 +15912,6 @@ static void ggml_compute_backward(struct ggml_context * ctx, struct ggml_tensor 
                         inplace);
                 }
             } break;
-        case GGML_OP_FLIP:
-            {
-                GGML_ASSERT(false); // TODO: not implemented
-            } break;
         case GGML_OP_GET_ROWS:
             {
                 // necessary for llama (only for tokenizer)
@@ -16280,6 +16275,10 @@ static void ggml_compute_backward(struct ggml_context * ctx, struct ggml_tensor 
                                         ggml_silu_back(ctx, src0, tensor->grad),
                                         inplace);
                             }
+                        } break;
+                    case GGML_UNARY_OP_FLIP:
+                        {
+                            GGML_ASSERT(false);
                         } break;
                     default:
                         GGML_ASSERT(false);
@@ -16845,6 +16844,7 @@ struct ggml_cplan ggml_graph_plan(struct ggml_cgraph * cgraph, int n_threads) {
                         case GGML_UNARY_OP_TANH:
                         case GGML_UNARY_OP_ELU:
                         case GGML_UNARY_OP_RELU:
+                        case GGML_UNARY_OP_FLIP:
                             {
                                 n_tasks = 1;
                             } break;
@@ -16920,7 +16920,6 @@ struct ggml_cplan ggml_graph_plan(struct ggml_cgraph * cgraph, int n_threads) {
             case GGML_OP_VIEW:
             case GGML_OP_PERMUTE:
             case GGML_OP_TRANSPOSE:
-            case GGML_OP_FLIP:
             case GGML_OP_GET_ROWS:
             case GGML_OP_GET_ROWS_BACK:
             case GGML_OP_DIAG:
