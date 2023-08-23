@@ -356,6 +356,7 @@ extern "C" {
         GGML_OP_VIEW,
         GGML_OP_PERMUTE,
         GGML_OP_TRANSPOSE,
+        GGML_OP_INTERLEAVE,
         GGML_OP_GET_ROWS,
         GGML_OP_GET_ROWS_BACK,
         GGML_OP_DIAG,
@@ -1115,7 +1116,13 @@ extern "C" {
     GGML_API struct ggml_tensor * ggml_transpose(
             struct ggml_context * ctx,
             struct ggml_tensor  * a);
-    
+
+    GGML_API struct ggml_tensor * ggml_interleave(
+            struct ggml_context * ctx,
+            struct ggml_tensor  * a,
+            int                   n_repeat,
+            float                 value);
+
     GGML_API struct ggml_tensor * ggml_flip(
             struct ggml_context * ctx,
             struct ggml_tensor  * a);

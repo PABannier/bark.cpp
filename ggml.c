@@ -3777,6 +3777,7 @@ static const char * GGML_OP_NAME[GGML_OP_COUNT] = {
     "VIEW",
     "PERMUTE",
     "TRANSPOSE",
+    "INTERLEAVE",
     "GET_ROWS",
     "GET_ROWS_BACK",
     "DIAG",
@@ -3813,7 +3814,7 @@ static const char * GGML_OP_NAME[GGML_OP_COUNT] = {
     "CROSS_ENTROPY_LOSS_BACK",
 };
 
-static_assert(GGML_OP_COUNT == 63, "GGML_OP_COUNT != 63");
+static_assert(GGML_OP_COUNT == 64, "GGML_OP_COUNT != 64");
 
 static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "none",
@@ -3850,6 +3851,7 @@ static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "view(x)",
     "permute(x)",
     "transpose(x)",
+    "interleave(x)",
     "get_rows(x)",
     "get_rows_back(x)",
     "diag(x)",
@@ -3886,7 +3888,7 @@ static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
     "cross_entropy_loss_back(x,y)",
 };
 
-static_assert(GGML_OP_COUNT == 63, "GGML_OP_COUNT != 63");
+static_assert(GGML_OP_COUNT == 64, "GGML_OP_COUNT != 64");
 
 static_assert(GGML_OP_POOL_COUNT == 2, "GGML_OP_POOL_COUNT != 2");
 
@@ -6484,6 +6486,35 @@ struct ggml_tensor * ggml_transpose(
     result->nb[1] = a->nb[0];
 
     result->op   = GGML_OP_TRANSPOSE;
+    result->grad = is_node ? ggml_dup_tensor(ctx, result) : NULL;
+    result->src[0] = a;
+
+    return result;
+}
+
+// ggml_interleave
+
+struct ggml_tensor * ggml_interleave(
+        struct ggml_context * ctx,
+        struct ggml_tensor  * a,
+        int                   n_repeat,
+        float                 value) {
+    bool is_node = false;
+
+    if (a->grad) {
+        GGML_ASSERT(false);
+        is_node = true;
+    }
+
+    int64_t ne0 = (a->ne[0] - 1) * n_repeat + 1;
+    const int64_t ne[4] = {ne0, a->ne[1], a->ne[2], a->ne[3]};
+    struct ggml_tensor * result = ggml_new_tensor(ctx, GGML_TYPE_F32, 4, ne);
+
+    int32_t params[2] = { n_repeat };
+    memcpy(params + 1, &value, sizeof(float));
+    ggml_set_op_params(result, params, sizeof(params));
+
+    result->op = GGML_OP_INTERLEAVE;
     result->grad = is_node ? ggml_dup_tensor(ctx, result) : NULL;
     result->src[0] = a;
 
@@ -11289,6 +11320,41 @@ static void ggml_compute_forward_transpose(
     UNUSED(src0);
 }
 
+// ggml_compute_forward_interleave
+
+static void ggml_compute_forward_interleave(
+        const struct ggml_compute_params * params,
+        const struct ggml_tensor * src0,
+        const struct ggml_tensor * dst) {
+    assert(params->ith == 0);
+
+    if (params->type == GGML_TASK_INIT || params->type == GGML_TASK_FINALIZE) {
+        return;
+    }
+
+    const int32_t n_repeat = ((const int32_t*)(dst->op_params))[0];
+    const float value = ((const float*)(dst->op_params))[1];
+
+    GGML_TENSOR_LOCALS(int64_t, ne0, src0, ne);
+    GGML_TENSOR_LOCALS(size_t,  nb0, src0, nb);
+
+    for (int i03 = 0; i03 < ne03; i03++) {
+        for (int i02 = 0; i02 < ne02; i02++) {
+            for (int i01 = 0; i01 < ne01; i01++) {
+                float * src_data = (float *)((char *) src0->data + i03*nb03       + i02*nb02       + i01*nb01);
+                float * dst_data = (float *)((char *)  dst->data + i03*dst->nb[3] + i02*dst->nb[2] + i01*dst->nb[1]);
+                for (int i00 = 0; i00 < dst->ne[0]; i00++) {
+                    if (i00 % n_repeat == 0) {
+                        dst_data[i00] = src_data[i00/n_repeat];
+                    } else {
+                        dst_data[i00] = value;
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ggml_compute_forward_flip
 
 static void ggml_compute_forward_flip_f32(
@@ -15323,6 +15389,10 @@ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggm
             {
                 ggml_compute_forward_transpose(params, tensor->src[0]);
             } break;
+        case GGML_OP_INTERLEAVE:
+            {
+                ggml_compute_forward_interleave(params, tensor->src[0], tensor);
+            } break;
         case GGML_OP_GET_ROWS:
             {
                 ggml_compute_forward_get_rows(params, tensor->src[0], tensor->src[1], tensor);
@@ -15909,6 +15979,10 @@ static void ggml_compute_backward(struct ggml_context * ctx, struct ggml_tensor 
                             ggml_transpose(ctx, tensor->grad),
                         inplace);
                 }
+            } break;
+        case GGML_OP_INTERLEAVE:
+            {
+                GGML_ASSERT(false);
             } break;
         case GGML_OP_GET_ROWS:
             {
@@ -16918,6 +16992,7 @@ struct ggml_cplan ggml_graph_plan(struct ggml_cgraph * cgraph, int n_threads) {
             case GGML_OP_VIEW:
             case GGML_OP_PERMUTE:
             case GGML_OP_TRANSPOSE:
+            case GGML_OP_INTERLEAVE:
             case GGML_OP_GET_ROWS:
             case GGML_OP_GET_ROWS_BACK:
             case GGML_OP_DIAG:
