@@ -186,6 +186,8 @@ void dump_tensor(struct ggml_tensor * a, bool print_val) {
         }
     }
     printf("sum=%.4f\n", sum);
+    printf("ne=[%lld, %lld, %lld, %lld]\n", a->ne[0], a->ne[1], a->ne[2], a->ne[3]);
+    printf("nb=[%zu, %zu, %zu, %zu]\n", a->nb[0], a->nb[1], a->nb[2], a->nb[3]);
 }
 
 bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expected_size) {
@@ -1665,7 +1667,7 @@ bool encodec_eval(
     static void * buf = malloc(buf_size);
 
     if (mem_per_token > 0 && mem_per_token*N*n_codes > buf_size) {
-        const size_t buf_size_new = 1.2*(mem_per_token*N*n_codes);  // add 10% to account for ggml object overhead
+        const size_t buf_size_new = 1.1*(mem_per_token*N*n_codes);  // add 10% to account for ggml object overhead
 
         // reallocate
         buf_size = buf_size_new;
@@ -1701,13 +1703,15 @@ bool encodec_eval(
     // TODO: adapt ggml_conv_1d implementation to use multiple threads.
     ggml_graph_compute_with_ctx(ctx0, &gf, 1);
 
-    int out_seq_length = output->ne[0];
-    audio_arr.resize(out_seq_length);
-    memcpy(audio_arr.data(), (float *) ggml_get_data(output), sizeof(float)*out_seq_length);
+    dump_tensor(output, true);
 
-    if (mem_per_token == 0) {
-        mem_per_token = ggml_used_mem(ctx0)/N/n_codes;
-    }
+    // int out_seq_length = output->ne[0];
+    // audio_arr.resize(out_seq_length);
+    // memcpy(audio_arr.data(), (float *) ggml_get_data(output), sizeof(float)*out_seq_length);
+
+    // if (mem_per_token == 0) {
+    //     mem_per_token = ggml_used_mem(ctx0)/N/n_codes;
+    // }
 
     ggml_free(ctx0);
 
@@ -1737,7 +1741,7 @@ audio_arr_t bark_forward_encodec(const bark_codes & tokens, const encodec_model 
     const int64_t t_main_end_us = ggml_time_us();
 
     printf("\n\n");
-    printf("%s: mem per token = %8.2f MB\n", __func__, mem_per_token);
+    printf("%s: mem per token = %8.2zu MB\n", __func__, mem_per_token);
     printf("%s:  predict time = %8.2f ms\n", __func__, t_predict_us/1000.0f);
     printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us)/1000.0f);
 

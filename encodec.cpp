@@ -21,6 +21,9 @@ static struct ggml_tensor * transpose_conv_1d(
     int seq_length  = inp->ne[0];
     int kernel_size = ker->ne[0];
 
+    BARK_ASSERT(kernel_size >= 1);
+    BARK_ASSERT(stride > 0);
+
     // compute reshape statistics
     int s_prime = 1;
     int p_prime = kernel_size - 1;
@@ -28,6 +31,11 @@ static struct ggml_tensor * transpose_conv_1d(
     int out_seq_length = (seq_length - 1) * stride + (kernel_size - 1) + 1;
 
     int a = (out_seq_length - kernel_size) % stride;
+
+    BARK_ASSERT(s_prime >= 0);
+    BARK_ASSERT(p_prime >= 0);
+    BARK_ASSERT(out_seq_length > 0);
+    BARK_ASSERT(a >= 0);
 
     // the input and output channel need to be permuted
     // the spatial dimension need to be flipped
@@ -38,16 +46,14 @@ static struct ggml_tensor * transpose_conv_1d(
     inp = ggml_interleave(ctx, inp, stride, 0.f);
 
     // padding the spatial dimension with "a" 0s
-    struct ggml_tensor * padded_inp;
-    if (a > 0) {
-        padded_inp = ggml_new_tensor_2d(ctx, inp->type, seq_length+a, inp->ne[1]);
-        padded_inp = ggml_set_zero(padded_inp);
-        padded_inp = ggml_set_2d(ctx, padded_inp, inp, padded_inp->nb[1], 0);
-    } else {
-        padded_inp = inp; 
-    }
+    struct ggml_tensor * padded_inp = ggml_new_tensor_2d(ctx, inp->type, inp->ne[0]+a, inp->ne[1]);
+    padded_inp = ggml_set_zero(padded_inp);
+    padded_inp = ggml_set_2d(ctx, padded_inp, inp, padded_inp->nb[1], 0);
 
     // perform convolution
+    printf("s_prime=%d / p_prime=%d \n", s_prime, p_prime);
+    printf("ker / ne = [%lld, %lld, %lld, %lld] / nb = [%zu, %zu, %zu, %zu]\n", ker->ne[0], ker->ne[1], ker->ne[2], ker->ne[3], ker->nb[0], ker->nb[1], ker->nb[2], ker->nb[3]);
+    printf("inp / ne = [%lld, %lld, %lld, %lld] / nb = [%zu, %zu, %zu, %zu]\n", padded_inp->ne[0], padded_inp->ne[1], padded_inp->ne[2], padded_inp->ne[3], padded_inp->nb[0], padded_inp->nb[1], padded_inp->nb[2], padded_inp->nb[3]);
     struct ggml_tensor * out = ggml_conv_1d(ctx, ker, padded_inp, s_prime, p_prime, 1);
 
     return out;
@@ -180,9 +186,7 @@ static struct ggml_tensor * strided_conv_transpose_1d(
     int padding_total = kernel_size - stride;
 
     struct ggml_tensor * dst = transpose_conv_1d(ctx0, inp, conv_w, stride);
-
-    printf("dst=[%lld, %lld]\n", dst->ne[0], dst->ne[1]);
-    printf("conv_b=[%lld, %lld]\n", conv_b->ne[0], conv_b->ne[1]);
+    return ggml_flip(ctx0, dst);
 
     // add bias
     dst = ggml_transpose(ctx0, dst);
@@ -526,6 +530,7 @@ struct ggml_tensor * encodec_decoder_eval(
 
         inpL = strided_conv_transpose_1d(
             ctx0, inpL, block.us_conv_w, block.us_conv_b, ratios[layer_ix]);
+        return inpL;
 
         struct ggml_tensor * current = inpL;
 
