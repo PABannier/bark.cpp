@@ -34,15 +34,21 @@ static struct ggml_tensor * transpose_conv_1d(
     ker = ggml_cont(ctx, ggml_permute(ctx, ker, 0, 2, 1, 3));
     ker = ggml_flip(ctx, ker);
 
-    // interspersing input with "stride" 0s along the spatial dimension
+    // interleaving input with "stride" 0s along the spatial dimension
+    inp = ggml_interleave(ctx, inp, stride, 0.f);
 
     // padding the spatial dimension with "a" 0s
-    struct ggml_tensor * padded_inp = ggml_new_tensor_2d(ctx, inp->type, seq_length+a, inp->ne[1]);
-    padded_inp = ggml_set_zero(padded_inp);
-    padded_inp = ggml_set_2d(ctx, padded_inp, inp, padded_inp->nb[1], 0);
+    struct ggml_tensor * padded_inp;
+    if (a > 0) {
+        padded_inp = ggml_new_tensor_2d(ctx, inp->type, seq_length+a, inp->ne[1]);
+        padded_inp = ggml_set_zero(padded_inp);
+        padded_inp = ggml_set_2d(ctx, padded_inp, inp, padded_inp->nb[1], 0);
+    } else {
+        padded_inp = inp; 
+    }
 
     // perform convolution
-    struct ggml_tensor * out = ggml_conv_1d(ctx, padded_inp, ker, s_prime, p_prime, 1);
+    struct ggml_tensor * out = ggml_conv_1d(ctx, ker, padded_inp, s_prime, p_prime, 1);
 
     return out;
 }
@@ -173,7 +179,7 @@ static struct ggml_tensor * strided_conv_transpose_1d(
     int kernel_size   = conv_w->ne[0];
     int padding_total = kernel_size - stride;
 
-    struct ggml_tensor * dst = ggml_transpose_conv_1d(ctx0, conv_w, inp, stride, 0, 1);
+    struct ggml_tensor * dst = transpose_conv_1d(ctx0, inp, conv_w, stride);
 
     // add bias
     dst = ggml_transpose(ctx0, dst);
