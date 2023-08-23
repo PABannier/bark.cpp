@@ -1694,19 +1694,12 @@ bool encodec_eval(
         memcpy((void *) ((char *) codes->data + offset), _tmp.data(), N*ggml_element_size(codes));
     }
 
-    struct ggml_tensor * toy;
-
     struct ggml_tensor * quantized_out = encodec_quantizer_decode_eval(ctx0, model, codes);
-    struct ggml_tensor * output        = encodec_decoder_eval(ctx0, model, quantized_out, &toy);
+    struct ggml_tensor * output        = encodec_decoder_eval(ctx0, model, quantized_out);
 
     ggml_build_forward_expand(&gf, output);
-    // TODO: adapt ggml_conv_1d and ggml_conv_trans_1d implementation to use multiple
-    // threads.
+    // TODO: adapt ggml_conv_1d implementation to use multiple threads.
     ggml_graph_compute_with_ctx(ctx0, &gf, 1);
-
-    if (toy) {
-        dump_tensor(toy, false);
-    }
 
     int out_seq_length = output->ne[0];
     audio_arr.resize(out_seq_length);

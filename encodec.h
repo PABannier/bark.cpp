@@ -135,5 +135,4 @@ struct ggml_tensor * encodec_quantizer_decode_eval(
 struct ggml_tensor * encodec_decoder_eval(
                         struct ggml_context * ctx0,
                         const encodec_model & model,
-                        struct ggml_tensor  * quantized_out,
-                        struct ggml_tensor  ** toy);
+                        struct ggml_tensor  * quantized_out);
