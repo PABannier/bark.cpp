@@ -17023,7 +17023,6 @@ struct ggml_cplan ggml_graph_plan(struct ggml_cgraph * cgraph, int n_threads) {
                     n_tasks = 1; //TODO
                 } break;
             case GGML_OP_CONV_1D:
-            case GGML_OP_CONV_TRANSPOSE_1D:
                 {
                     n_tasks = n_threads;
 
@@ -17082,6 +17081,33 @@ struct ggml_cplan ggml_graph_plan(struct ggml_cgraph * cgraph, int n_threads) {
                     } else if (node->src[0]->type == GGML_TYPE_F32 &&
                                node->src[1]->type == GGML_TYPE_F32) {
                         cur = sizeof(float)*      (ne10*ne11*ne12);
+                    } else {
+                        GGML_ASSERT(false);
+                    }
+
+                    work_size = MAX(work_size, cur);
+                } break;
+            case GGML_OP_CONV_TRANSPOSE_1D:
+                {
+                    n_tasks = n_threads;
+
+                    const int64_t ne00 = node->src[0]->ne[0];  // K
+                    const int64_t ne01 = node->src[0]->ne[1];  // Cout
+                    const int64_t ne02 = node->src[0]->ne[2];  // Cin
+
+                    const int64_t ne10 = node->src[1]->ne[0];  // K
+                    const int64_t ne11 = node->src[1]->ne[1];  // Cout
+                    const int64_t ne12 = node->src[1]->ne[2];  // Cin
+
+                    size_t cur = 0;
+                    if (node->src[0]->type == GGML_TYPE_F16 &&
+                        node->src[1]->type == GGML_TYPE_F32) {
+                        cur += sizeof(ggml_fp16_t)*ne00*ne01*ne02;
+                        cur += sizeof(ggml_fp16_t)*ne10*ne11*ne12;
+                    } else if (node->src[0]->type == GGML_TYPE_F32 &&
+                               node->src[1]->type == GGML_TYPE_F32) {
+                        cur += sizeof(float)*ne00*ne01*ne02;
+                        cur += sizeof(float)*ne10*ne11*ne12;
                     } else {
                         GGML_ASSERT(false);
                     }
