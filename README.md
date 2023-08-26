@@ -198,7 +198,7 @@ python3 convert.py \
 ./main -m ./ggml_weights/ -p "this is an audio"
 ```
 
-### Optional quantize weights
+### (Optional) Quantize weights
 
 Weights can be quantized using the following strategy: `q4_0`, `q4_1`, `q5_0`, `q5_1`, `q8_0`.
 
