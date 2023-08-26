@@ -372,7 +372,7 @@ extern "C" {
         GGML_OP_POOL_1D,
         GGML_OP_POOL_2D,
         GGML_OP_PAD_REFLEC_1D,
-        GGML_OP_TRANS_CONV_1D,
+        GGML_OP_CONV_TRANPOSE_1D,
 
         GGML_OP_FLASH_ATTN,
         GGML_OP_FLASH_FF,
@@ -1299,7 +1299,7 @@ extern "C" {
             int                   p0,
             int                   p1);
 
-    GGML_API struct ggml_tensor * ggml_transpose_conv_1d(
+    GGML_API struct ggml_tensor * ggml_conv_transpose_1d(
             struct ggml_context * ctx,
             struct ggml_tensor  * a,
             struct ggml_tensor  * b,
