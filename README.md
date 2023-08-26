@@ -201,11 +201,13 @@ python3 convert.py \
 
 Weights can be quantized using the following strategy: `q4_0`, `q4_1`, `q5_0`, `q5_1`, `q8_0`.
 
+Note that to preserve audio quality, we do not quantize the codec model. The bulk of the
+computation is in the forward pass of the GPT models.
+
 ```bash
 ./quantize ./ggml_weights/ggml_weights_text.bin ./ggml_weights_q4/ggml_weights_text.bin q4_0
 ./quantize ./ggml_weights/ggml_weights_coarse.bin ./ggml_weights_q4/ggml_weights_coarse.bin q4_0
 ./quantize ./ggml_weights/ggml_weights_fine.bin ./ggml_weights_q4/ggml_weights_fine.bin q4_0
-./quantize ./ggml_weights/ggml_weights_codec.bin ./ggml_weights_q4/ggml_weights_codec.bin q4_0
 ```
 
 ### Seminal papers and background on models
