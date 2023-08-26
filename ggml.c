@@ -7088,7 +7088,7 @@ static int64_t ggml_calc_conv_transpose_output_size(int64_t ins, int64_t ks, int
     return (ins - 1) * s - 2 * p + d * (ks - 1) + 1;
 }
 
-GGML_API struct ggml_tensor * ggml_transpose_conv_1d(
+GGML_API struct ggml_tensor * ggml_conv_transpose_1d(
         struct ggml_context * ctx,
         struct ggml_tensor  * a,
         struct ggml_tensor  * b,
@@ -7106,7 +7106,7 @@ GGML_API struct ggml_tensor * ggml_transpose_conv_1d(
     }
 
     const int64_t ne[4] = {
-        ggml_calc_trans_conv_output_size(b->ne[0], a->ne[0], s0, 0 /*p0*/, 1 /*d0*/),
+        ggml_calc_conv_transpose_output_size(b->ne[0], a->ne[0], s0, 0 /*p0*/, 1 /*d0*/),
         a->ne[1], 1, 1,
     };
     struct ggml_tensor * result = ggml_new_tensor(ctx, GGML_TYPE_F32, 2, ne);
@@ -13538,8 +13538,8 @@ static void ggml_compute_forward_conv_transpose_1d_f16_f32(
     const int ir0 = dr*ith;
     const int ir1 = MIN(ir0 + dr, nr);
 
-    ggml_fp16_t * const wdata     = (ggml_fp16_t *) params->data + 0;
-    ggml_fp16_t * const wdata_src = (ggml_fp16_t *) params->data + nk;
+    ggml_fp16_t * const wdata     = (ggml_fp16_t *) params->wdata + 0;
+    ggml_fp16_t * const wdata_src = (ggml_fp16_t *) params->wdata + nk;
 
     for (int i1 = ir0; i1 < ir1; i1++) {  // Cout
         float * dst_data = (float *)((char *) dst->data + i1*nb1);
@@ -13627,8 +13627,8 @@ static void ggml_compute_forward_conv_transpose_1d_f32(
     const int ir0 = dr*ith;
     const int ir1 = MIN(ir0 + dr, nr);
 
-    float * const wdata     = (float *) params->data + 0;
-    float * const wdata_src = (float *) params->data + nk;
+    float * const wdata     = (float *) params->wdata + 0;
+    float * const wdata_src = (float *) params->wdata + nk;
 
     for (int i1 = ir0; i1 < ir1; i1++) {  // Cout
         float * dst_data = (float *)((char *) dst->data + i1*nb1);
@@ -15467,7 +15467,7 @@ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggm
             } break;
         case GGML_OP_CONV_TRANSPOSE_1D:
             {
-                ggml_compute_forward_trans_conv_1d(params, tensor->src[0], tensor->src[1], tensor);
+                ggml_compute_forward_conv_transpose_1d(params, tensor->src[0], tensor->src[1], tensor);
             } break;
         case GGML_OP_FLASH_ATTN:
             {
