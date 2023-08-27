@@ -17,16 +17,21 @@ int main(int argc, char **argv) {
 
     bark_model model;
     std::string fname = "./ggml_weights";
+    bool load_history_prompts = false;
 
     if (!params.model.empty()) {
         fname = params.model;
+    }
+
+    if (!params.voice.empty()) {
+        load_history_prompts = true;
     }
 
     // load the model
     {
         const int64_t t_start_us = ggml_time_us();
 
-        if(!bark_model_load(fname, model)) {
+        if(!bark_model_load(fname, model, load_history_prompts)) {
             fprintf(stderr, "%s: failed to load model from '%s'\n", __func__, fname.c_str());
             return 1;
         }
@@ -42,7 +47,9 @@ int main(int argc, char **argv) {
     }
 
     const int64_t t_eval_us_start = ggml_time_us();
-    bark_generate_audio(model, model.vocab, prompt.data(), params.n_threads, params.seed, params.dest_wav_path);
+    bark_generate_audio(
+            model, model.vocab, prompt.data(), params.n_threads, params.seed, 
+            params.dest_wav_path, params.voice);
     t_eval_us = ggml_time_us() - t_eval_us_start;
 
     // report timing

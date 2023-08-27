@@ -230,6 +230,131 @@ bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expect
     return true;
 }
 
+bool bark_prompt_load(const std::string & fname, bark_history_prompts & history_prompts) {
+    auto fin = std::ifstream(fname, std::ios::binary);
+    if (!fin) {
+        fprintf(stderr, "%s: faield to open '%s'\n", __func__, fname.c_str());
+        return false;
+    }
+
+    // verify magic
+    {
+        uint32_t magic;
+        fin.read((char *) &magic, sizeof(magic));
+        if (magic != GGML_FILE_MAGIC) {
+            fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname.c_str());
+            return false;
+        }
+    }
+
+    // upper bound on the ctx size needed to store all prompts (not very large)
+    size_t ctx_size = 10*MB;
+
+    // create the ggml context
+    {
+        struct ggml_init_params params = {
+            /*.mem_size   =*/ ctx_size,
+            /*.mem_buffer =*/ NULL,
+            /*.no_alloc   =*/ false,
+        };
+
+        history_prompts.ctx = ggml_init(params);
+        if (!history_prompts.ctx) {
+            fprintf(stderr, "%s: ggml_init() failed\n", __func__);
+            return false;
+        }
+    }
+
+    auto & ctx = history_prompts.ctx;
+
+    int32_t n_prompts;
+    read_safe(fin, n_prompts);
+
+    std::string prompt_name;
+    std::vector<char> tmp;
+
+    tmp.reserve(128);
+
+    for (int i = 0; i < n_prompts; i++) {
+        uint32_t len;
+        read_safe(fin, len);
+
+        if (len > 0) {
+            tmp.resize(len);
+            fin.read(&tmp[0], tmp.size()); // read to buffer
+            prompt_name.assign(&tmp[0], tmp.size());
+        } else {
+            fprintf(stderr, "%s: invalid prompt name\n", __func__);
+        }
+
+        int64_t memsize = 0;
+
+        struct ggml_tensor * semantic_prompt;
+        struct ggml_tensor * coarse_prompt;
+        struct ggml_tensor * fine_prompt;
+
+        std::map<std::string, struct ggml_tensor *> prompt_tensors = {
+            { "semantic_prompt", semantic_prompt },
+            { "coarse_prompt"  , coarse_prompt   },
+            { "fine_prompt"    , fine_prompt     },
+        };
+
+        int32_t n_keys;
+        read_safe(fin, n_keys);
+
+        for (int k = 0; k < n_keys; k++) {
+            int32_t n_dims;
+            int32_t length;
+
+            read_safe(fin, n_dims);
+            read_safe(fin, length);
+
+            int64_t nelements = 1;
+            int64_t ne[4] = { 1, 1, 1, 1 };
+            for (int i = 0; i < n_dims; ++i) {
+                read_safe(fin, ne[i]);
+                nelements *= ne[i];
+            }
+
+            std::string name(length, 0);
+            fin.read(&name[0], length);
+
+            if ((name != "semantic_prompt") && (name != "coarse_prompt") && (name != "fine_prompt")) {
+                fprintf(stderr, "%s: tensor '%s' has an unknown key: '%s'\n", __func__, prompt_name.c_str(), name.c_str());
+                return false;
+            }
+
+            const size_t bpe = ggml_type_size(GGML_TYPE_I32);
+
+            auto & tensor = prompt_tensors[name];
+            tensor = ggml_new_tensor(ctx, GGML_TYPE_I32, 4, ne);
+
+            if ((nelements*bpe)/ggml_blck_size(tensor->type) != ggml_nbytes(tensor)) {
+                fprintf(stderr, "%s: tensor '%s' has wrong size in model file: got %zu, expected %zu\n",
+                        __func__, name.data(), ggml_nbytes(tensor), nelements*bpe);
+                return false;
+            }
+
+            fin.read(reinterpret_cast<char *>(tensor->data), ggml_nbytes(tensor));
+
+            memsize += ggml_nbytes(tensor);
+        }
+
+        struct bark_voice voice = {
+            /*.name            =*/ prompt_name,
+            /*.semantic_prompt =*/ prompt_tensors["semantic_prompt"],
+            /*.coarse_prompt   =*/ prompt_tensors["coarse_prompt"],
+            /*.fine_prompt     =*/ prompt_tensors["fine_prompt"],
+            /*.memsize         =*/ memsize,
+        };
+
+        history_prompts.voices[prompt_name] = &voice;
+        history_prompts.memsize += memsize;
+    }
+
+    return true;
+}
+
 bool gpt_model_load(const std::string& fname, gpt_model& model) {
     auto fin = std::ifstream(fname, std::ios::binary);
     if (!fin) {
@@ -515,14 +640,14 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
     return true;
 }
 
-bool bark_model_load(const std::string & dirname, bark_model & model) {
+bool bark_model_load(const std::string & dirname, bark_model & model, bool load_history_prompts) {
     printf("%s: loading model from '%s'\n", __func__, dirname.c_str());
 
     // text
     {
         printf("%s: reading bark text model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_text.bin";
-        if(!gpt_model_load(fname, model.text_model)) {
+        if (!gpt_model_load(fname, model.text_model)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
             return false;
         }
@@ -535,7 +660,7 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
         const std::string fname     = dirname + "/ggml_vocab.bin";
         const gpt_hparams hparams   = model.text_model.hparams;
         const int32_t expected_size = hparams.n_in_vocab - hparams.n_out_vocab - 5;
-        if(!bark_vocab_load(fname, model.vocab, expected_size)) {
+        if (!bark_vocab_load(fname, model.vocab, expected_size)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
             return false;
         }
@@ -545,7 +670,7 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
     {
         printf("\n%s: reading bark coarse model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_coarse.bin";
-        if(!gpt_model_load(fname, model.coarse_model)) {
+        if (!gpt_model_load(fname, model.coarse_model)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad coarse)\n", __func__, fname.c_str());
             return false;
         }
@@ -556,7 +681,7 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
     {
         printf("\n%s: reading bark fine model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_fine.bin";
-        if(!gpt_model_load(fname, model.fine_model)) {
+        if (!gpt_model_load(fname, model.fine_model)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad fine)\n", __func__, fname.c_str());
             return false;
         }
@@ -567,11 +692,22 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
     {
         printf("\n%s: reading bark codec model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_codec.bin";
-        if(!encodec_model_load(fname, model.codec_model)) {
+        if (!encodec_model_load(fname, model.codec_model)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad codec)\n", __func__, fname.c_str());
             return false;
         }
         model.memsize += model.codec_model.memsize;
+    }
+
+    // history prompts
+    if (load_history_prompts) {
+        printf("\n%s: reading history prompts\n", __func__);
+        const std::string fname = dirname + "/ggml_prompts.bin";
+        if (!bark_prompt_load(fname, model.history_prompts)) {
+            fprintf(stderr, "%s: invalid prompt file '%s'\n", __func__, fname.c_str());
+            return false;
+        }
+        model.memsize += model.history_prompts.memsize;
     }
 
     printf("\n%s: total model size  = %8.2f MB\n", __func__, model.memsize/1024.0/1024.0);
@@ -1334,18 +1470,68 @@ bark_sequence bark_tokenize_input(const char * text, const bark_vocab & vocab, i
 
     tokens.resize(max_ctx_size);
 
-    // semantic history
-    for (int i = 0; i < 256; i++)
-        tokens.push_back(SEMANTIC_PAD_TOKEN);
-    tokens.push_back(SEMANTIC_INFER_TOKEN);
-
-    assert(tokens.size() == 256 + 256 + 1);
-
     return tokens;
+}
+
+int bark_get_semantic_input_sequence(
+       struct bark_history_prompts * history_prompts,
+               const bark_sequence & semantic_tokens,
+                     bark_sequence & out,
+                 const std::string & voice) {
+    BARK_ASSERT(semantic_tokens.size() == 256);
+
+    out.resize(513);
+
+    struct bark_voice * history_prompt = nullptr;
+    if (!voice.empty()) {
+        if (history_prompts->voices.find(voice) != history_prompts->voices.end()) {
+            history_prompt = history_prompts->voices[voice];
+        } else {
+            fprintf(stderr, "Could not find voice '%s'\n", voice.c_str());
+            return false;
+        }
+    }
+
+    auto & ctx = history_prompts->ctx;
+    struct ggml_cgraph gf = {};
+
+    struct ggml_tensor * semantic_history = nullptr;
+    if (history_prompt) {
+        semantic_history = history_prompt->semantic_prompt;
+        if (semantic_history->ne[0] >= 256) {
+            size_t offset = (semantic_history->ne[0] - 256) * semantic_history->nb[0];
+            semantic_history = ggml_view_1d(ctx, semantic_history, 256, offset);
+        } else {
+            // constant padding
+            struct ggml_tensor * out = ggml_new_tensor_1d(ctx, semantic_history->type, 256);
+            out = ggml_set_f32(out, SEMANTIC_PAD_TOKEN);
+            semantic_history = ggml_set_1d(ctx, out, semantic_history, 0);
+        }
+    } else {
+        semantic_history = ggml_new_tensor_1d(ctx, GGML_TYPE_I32, 256);
+        semantic_history = ggml_set_i32(semantic_history, SEMANTIC_PAD_TOKEN);
+    }
+
+    // concatenate tokens, semantic_history and [SEMANTIC_INFER_TOKEN]
+    struct ggml_tensor * input = ggml_new_tensor_1d(ctx, GGML_TYPE_I32, 513);
+    memcpy(input->data, semantic_tokens.data(), semantic_tokens.size()*sizeof(int32_t));
+    input = ggml_set_1d(ctx, input, semantic_history, semantic_tokens.size()*sizeof(int32_t));
+    *((float *) ((char *) ggml_get_data(input) + 512*input->nb[0])) = SEMANTIC_INFER_TOKEN;
+
+    ggml_build_forward_expand(&gf, input);
+    ggml_graph_compute_with_ctx(ctx, &gf, 1);
+
+    memcpy(out.data(), input->data, 513*sizeof(int32_t));
+
+    ggml_free(ctx);
+
+    return 0;
 }
 
 bark_sequence bark_forward_text_encoder(
     const bark_sequence & tokens,
+    struct bark_history_prompts * history_prompts,
+    const std::string & voice,
     const gpt_model model,
     std::mt19937 & rng,
     const int n_threads,
@@ -1364,7 +1550,10 @@ bark_sequence bark_forward_text_encoder(
 
     float eos_p = 0;
 
-    bark_sequence input = tokens;
+    // build input token sequence
+    bark_sequence input;
+    bark_get_semantic_input_sequence(history_prompts, tokens, input, voice);
+
     std::vector<float> logits;
 
     // dry run to estimate mem_per_token
@@ -1410,16 +1599,79 @@ bark_sequence bark_forward_text_encoder(
     return out;
 }
 
+int bark_get_coarse_input_sequence(
+       struct bark_history_prompts * history_prompts,
+               const bark_sequence & tokens,
+                 const std::string & voice,
+                     bark_sequence & out_semantic,
+                     bark_sequence & out_semantic_history,
+                     bark_sequence & out_coarse_history,
+                               int   max_semantic_history,
+                             float   semantic_to_coarse_ratio) {
+    struct bark_voice * history_prompt = nullptr;
+    if (!voice.empty()) {
+        if (history_prompts->voices.find(voice) != history_prompts->voices.end()) {
+            history_prompt = history_prompts->voices[voice];
+        } else {
+            fprintf(stderr, "Could not find voice '%s'\n", voice.c_str());
+            return 1;
+        }
+    }
+
+    auto & ctx = history_prompts->ctx;
+
+    struct ggml_tensor * x_semantic_history = history_prompt->semantic_prompt;
+    struct ggml_tensor * x_coarse_history   = history_prompt->coarse_prompt;
+
+    // TODO: offset CODEBOOK_SIZE
+
+    struct ggml_tensor * flattened_history = ggml_cpy(ctx,
+        x_coarse_history,
+        ggml_new_tensor_1d(ctx, GGML_TYPE_I32, x_coarse_history->ne[0]*x_coarse_history->ne[1]));
+
+    struct ggml_tensor * offset = ggml_new_i32(ctx, SEMANTIC_VOCAB_SIZE);
+    flattened_history = ggml_add(ctx, flattened_history, ggml_repeat(ctx, offset, flattened_history));
+
+    int n_semantic_hist_provided = std::min(
+        max_semantic_history,
+        std::min(
+            (int) (x_semantic_history->ne[0] - (x_semantic_history->ne[0] % 2)),
+            (int) floorf(flattened_history->ne[0] / semantic_to_coarse_ratio)
+        )
+    );
+    int n_coarse_hist_provided = (int) roundf(n_semantic_hist_provided * semantic_to_coarse_ratio);
+
+    out_semantic_history.resize(n_semantic_hist_provided);
+    int Ns = x_semantic_history->ne[0];
+    memcpy(
+        out_semantic_history.data(),
+        (char *) x_semantic_history + (Ns - n_semantic_hist_provided),
+        n_semantic_hist_provided*sizeof(int32_t));
+
+    out_coarse_history.resize(n_coarse_hist_provided);
+    int Nc = flattened_history->ne[0];
+    memcpy(
+        out_coarse_history.data(),
+        (char *) flattened_history + (Nc - n_coarse_hist_provided),
+        n_coarse_hist_provided*sizeof(int32_t));
+
+    return 0;
+}
+
 bark_codes bark_forward_coarse_encoder(
-    const bark_sequence & tokens,
+    const bark_sequence & semantic_tokens,
+    struct bark_history_prompts * history_prompts,
+    const std::string & voice,
     const gpt_model model,
     std::mt19937 & rng,
     const int n_threads,
     const float temp,
     const int max_coarse_history,
     const int sliding_window_size) {
-    bark_codes out_coarse;
-    bark_sequence out;
+
+    BARK_ASSERT(semantic_tokens.size() > 0);
+    BARK_ASSERT((max_coarse_history >= 60) && (max_coarse_history <= 630));
+    BARK_ASSERT(max_coarse_history + sliding_window_size <= 1024 - 256);
 
     bark_progress progress;
     progress.func = __func__;
@@ -1432,15 +1684,22 @@ bark_codes bark_forward_coarse_encoder(
     float semantic_to_coarse_ratio = COARSE_RATE_HZ / SEMANTIC_RATE_HZ * N_COARSE_CODEBOOKS;
     int max_semantic_history = floorf(max_coarse_history / semantic_to_coarse_ratio);
 
-    int n_steps = floorf(tokens.size() * semantic_to_coarse_ratio / N_COARSE_CODEBOOKS) * N_COARSE_CODEBOOKS;
-    int step_ix = 0;
+    bark_sequence x_semantic;
+    bark_sequence x_semantic_history;
+    bark_sequence x_coarse_history;
 
+    bark_get_coarse_input_sequence(history_prompts, semantic_tokens, voice, x_semantic,
+        x_semantic_history, x_coarse_history);
+
+    int n_steps = floorf(semantic_tokens.size() * semantic_to_coarse_ratio / N_COARSE_CODEBOOKS) * N_COARSE_CODEBOOKS;
     BARK_ASSERT(n_steps > 0);
     BARK_ASSERT(n_steps % N_COARSE_CODEBOOKS == 0);
 
-    int n_window_steps = ceilf(static_cast<float>(n_steps) / sliding_window_size);
+    // concatenate x_semantic_history and x_semantic
+    x_semantic.insert(x_semantic.begin(), x_semantic_history.begin(), x_semantic_history.end());
 
-    bark_sequence input = tokens;
+    bark_sequence x_coarse = x_coarse_history;
+
     std::vector<float> logits;
 
     // dry run to estimate mem_per_token
@@ -1450,76 +1709,89 @@ bark_codes bark_forward_coarse_encoder(
         gpt_eval(model, n_threads, &n_past, false, { 0, 1, 2, 3 }, logits, mem_per_token);
     }
 
-    for (int i = 0; i < n_window_steps; i++) {
-        int semantic_ix = roundf(n_steps / semantic_to_coarse_ratio);
+    int base_semantic_idx = x_semantic_history.size();
 
-        bark_sequence input_in(
-            input.begin() + std::max(semantic_ix-max_semantic_history, 0),
-            input.end()
+    bark_sequence x_semantic_in = x_semantic;
+    bark_sequence x_coarse_in = x_coarse;
+
+    int n_window_steps = ceilf(static_cast<float>(n_steps) / sliding_window_size);
+    int n_step = 0;
+
+    for (int i = 0; i < n_window_steps; i++) {
+        int semantic_idx = base_semantic_idx + roundf(n_steps / semantic_to_coarse_ratio);
+
+        bark_sequence x_in(
+            x_semantic_in.begin() + std::max(semantic_idx - max_semantic_history, 0),
+            x_semantic_in.end()
         );
-        size_t original_size = input_in.size();
-        input_in.resize(256);
+        size_t original_size = x_in.size();
+        x_in.resize(256);
 
         // padding from the right side
-        for (int ix = original_size; ix < 256; ix++)
-            input_in[ix] = COARSE_SEMANTIC_PAD_TOKEN;
+        for (int i = original_size; i < 256; i++)
+            x_in[i] = COARSE_SEMANTIC_PAD_TOKEN;
 
-        input_in.push_back(COARSE_INFER_TOKEN);
+        x_in.push_back(COARSE_INFER_TOKEN);
 
         // concatenate input_in and input_coarse
-        input_in.insert(
-            input_in.end(),
-            std::make_move_iterator(out.end() - std::min(max_coarse_history, (int) out.size())),
-            std::make_move_iterator(out.end())
+        x_in.insert(
+            x_in.end(),
+            x_coarse_in.end() - std::min(max_coarse_history, (int) x_coarse_in.size()),
+            x_coarse_in.end()
         );
 
         int n_past = 0;
         mem_per_token *= 1.1;  // context length is growing, mem_per_token must grow as well
 
         for (int j = 0; j < sliding_window_size; j++) {
-            if (step_ix >= n_steps)
+            if (n_step >= n_steps)
                 continue;
 
+            bool is_major = n_step % N_COARSE_CODEBOOKS == 0;
+
             int64_t t_predict_start_us = ggml_time_us();
-            gpt_eval(model, n_threads, &n_past, false, input_in, logits, mem_per_token);
+            gpt_eval(model, n_threads, &n_past, false, x_in, logits, mem_per_token);
             t_predict_us += (ggml_time_us() - t_predict_start_us);
 
-            input_in.clear();
+            x_in.clear();
 
-            bool is_major = step_ix % N_COARSE_CODEBOOKS == 0;
-            int start_ix  = SEMANTIC_VOCAB_SIZE + (1 - is_major) * CODEBOOK_SIZE;
-            int end_ix    = SEMANTIC_VOCAB_SIZE + (2 - is_major) * CODEBOOK_SIZE;
-            std::vector<float> relevant_logits(logits.begin() + start_ix, logits.begin() + end_ix);
+            int logit_start_ix = SEMANTIC_VOCAB_SIZE + (1 - is_major) * CODEBOOK_SIZE;
+            int logit_end_ix   = SEMANTIC_VOCAB_SIZE + (2 - is_major) * CODEBOOK_SIZE;
+            std::vector<float> relevant_logits(
+                logits.begin() + logit_start_ix,
+                logits.begin() + logit_end_ix
+            );
 
             int64_t t_sample_start_us = ggml_time_us();
-            bark_vocab::id next = gpt_sample(relevant_logits, rng, temp, NULL);
+            bark_vocab::id item_next = gpt_sample(relevant_logits, rng, temp, NULL);
             t_sample_us += (ggml_time_us() - t_sample_start_us);
 
-            next += start_ix;
+            item_next += logit_start_ix;
 
-            input_in.push_back(next);
-            out.push_back(next);
+            x_in.push_back(item_next);
+            x_coarse_in.push_back(item_next);
 
-            // printf("%d ", next);
-            // fflush(stdout);
-
-            step_ix += 1;
-
+            n_step += 1;
             progress.callback((float) (i*sliding_window_size+j)/n_steps);
         }
     }
 
-    BARK_ASSERT((int) out.size() == n_steps);
-    BARK_ASSERT(out.size() % N_COARSE_CODEBOOKS == 0);
+    size_t history_size = x_coarse_history.size();
+    x_coarse_in.erase(x_coarse_in.begin(), x_coarse_in.begin() + history_size);
+
+    BARK_ASSERT((int) x_coarse_in.size() == n_steps);
+    BARK_ASSERT(x_coarse_in.size() % N_COARSE_CODEBOOKS == 0);
 
     // out_coarse: [seq_length, n_codes]
-    for (int i = 0; i < (int) out.size(); i += N_COARSE_CODEBOOKS) {
+    bark_codes coarse_audio_arr;
+
+    for (int i = 0; i < (int) x_coarse_in.size(); i += N_COARSE_CODEBOOKS) {
         // this assumes N_COARSE_CODEBOOKS = 2
         bark_sequence _tmp = {
-            out[i] - SEMANTIC_VOCAB_SIZE,
-            out[i+1] - SEMANTIC_VOCAB_SIZE - CODEBOOK_SIZE
+            x_coarse_in[i] - SEMANTIC_VOCAB_SIZE,
+            x_coarse_in[i+1] - SEMANTIC_VOCAB_SIZE - CODEBOOK_SIZE
         };
-        out_coarse.push_back(_tmp);
+        coarse_audio_arr.push_back(_tmp);
     }
 
     const int64_t t_main_end_us = ggml_time_us();
@@ -1527,15 +1799,16 @@ bark_codes bark_forward_coarse_encoder(
     printf("\n\n");
     printf("%s: mem per token = %8.2f MB\n", __func__, mem_per_token/1000.0f/1000.0f);
     printf("%s:   sample time = %8.2f ms\n", __func__, t_sample_us/1000.0f);
-    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, t_predict_us/1000.0f, t_predict_us/1000.0f/step_ix);
+    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, t_predict_us/1000.0f, t_predict_us/1000.0f/n_step);
     printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us)/1000.0f);
 
-    return out_coarse;
+    return coarse_audio_arr;
 }
 
 bark_codes bark_forward_fine_encoder(
     const bark_codes & tokens,
     const gpt_model model,
+    const std::string & voice,
     std::mt19937 & rng,
     const int n_threads,
     const float temp) {
@@ -1757,16 +2030,12 @@ int write_wav_on_disk(audio_arr_t& audio_arr, std::string dest_path) {
 
 bool bark_generate_audio(
         bark_model model,
-        const bark_vocab& vocab,
+        const bark_vocab & vocab,
         const char * text,
         const int n_threads,
         const int32_t seed,
-        const std::string& dest_wav_path) {
-    // TODO move into params
-    // const int top_k = 10;
-    // const int seed  = 0;
-
-    // const float top_p     = 0.2;
+        const std::string & dest_wav_path,
+        const std::string & voice) {
     const float temp      = 0.7;
     const float fine_temp = 0.5;
 
@@ -1778,7 +2047,7 @@ bool bark_generate_audio(
     std::mt19937 rng(seed);
 
     // tokenize input (bert tokenizer)
-    int32_t block_size = model.text_model.hparams.block_size;
+    int32_t block_size   = model.text_model.hparams.block_size;
     bark_sequence tokens = bark_tokenize_input(text, vocab, block_size);
 
     printf("%s: prompt: '%s'\n", __func__, text);
@@ -1790,15 +2059,16 @@ bool bark_generate_audio(
     printf("\n");
 
     bark_sequence semantic_tokens = bark_forward_text_encoder(
-            tokens, model.text_model, rng, n_threads, temp, min_eos_p);
+        tokens, &model.history_prompts, voice, model.text_model, rng, n_threads, temp, min_eos_p);
     printf("\n");
 
     bark_codes coarse_tokens = bark_forward_coarse_encoder(
-            semantic_tokens, model.coarse_model, rng, n_threads, temp, max_coarse_history, sliding_window_size);
+        semantic_tokens, history_prompt, model.coarse_model, rng, n_threads, temp,
+        max_coarse_history, sliding_window_size);
     printf("\n");
 
     bark_codes fine_tokens = bark_forward_fine_encoder(
-            coarse_tokens, model.fine_model, rng, n_threads, fine_temp);
+        coarse_tokens, history_prompt, model.fine_model, rng, n_threads, fine_temp);
     printf("\n");
 
     audio_arr_t audio_arr = bark_forward_encodec(fine_tokens, model.codec_model);
@@ -1825,6 +2095,8 @@ bool bark_params_parse(int argc, char ** argv, bark_params & params) {
             params.seed = std::stoi(argv[++i]);
         } else if (arg == "-o" || arg == "--outwav") {
             params.dest_wav_path = argv[++i];
+        } else if (arg == "-v" || arg == "--voice") {
+            params.voice = argv[++i];
         } else if (arg == "-h" || arg == "--help") {
             bark_print_usage(argv, params);
             exit(0);
@@ -1847,9 +2119,11 @@ void bark_print_usage(char ** argv, const bark_params & params) {
     fprintf(stderr, "  -s N, --seed N        seed for random number generator (default: %d)\n", params.seed);
     fprintf(stderr, "  -p PROMPT, --prompt PROMPT\n");
     fprintf(stderr, "                        prompt to start generation with (default: random)\n");
-    fprintf(stderr, "  -m FNAME, --model FNAME\n");
+    fprintf(stderr, "  -m FNAME,  --model  FNAME\n");
     fprintf(stderr, "                        model path (default: %s)\n", params.model.c_str());
-    fprintf(stderr, "  -o FNAME, --outwav FNAME\n");
+    fprintf(stderr, "  -o FNAME,  --outwav FNAME\n");
     fprintf(stderr, "                        output generated wav (default: %s)\n", params.dest_wav_path.c_str());
+    fprintf(stderr, "  -v VOICE,  --voice  VOICE\n");
+    fprintf(stderr, "                        custom voice (default: none)\n");
     fprintf(stderr, "\n");
 }

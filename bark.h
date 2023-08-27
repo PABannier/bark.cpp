@@ -1,3 +1,15 @@
+/* Bark is a text-to-speech model for realistic speech generation.
+The model supports 13 languages that can be found in `bark_languages`.
+Multiple preset voices (history prompts) are shipped with Bark, allowing the user to
+generate the same speech with multiple different voices.
+
+You can try any combination of voices by using the following pattern:
+    <PREFIX><LANG>_speaker_<N>
+
+where <PREFIX> can be either "" or "v2"
+      <LANG> can be the last two letters of any languages supported by bark
+      <N> is an integer between 0 and 9 (inclusive).
+*/
 #pragma once
 #include "encodec.h"
 
@@ -27,6 +39,22 @@
 #define COARSE_SEMANTIC_PAD_TOKEN 12048
 #define COARSE_INFER_TOKEN 12050
 
+enum bark_languages {
+    BARK_LANG_EN = 0,   // English
+    BARK_LANG_DE = 1,   // German
+    BARK_LANG_ES = 2,   // Spanish
+    BARK_LANG_FR = 3,   // French
+    BARK_LANG_HI = 4,   // Hindi
+    BARK_LANG_IT = 5,   // Italian
+    BARK_LANG_JA = 6,   // Japanese
+    BARK_LANG_KO = 7,   // Korean
+    BARK_LANG_PL = 8,   // Polish
+    BARK_LANG_PT = 9,   // Portuguese
+    BARK_LANG_RU = 10,  // Russian
+    BARK_LANG_TR = 11,  // Turkish
+    BARK_LANG_ZH = 12,  // Chinese
+};
+
 struct bark_params {
     int32_t n_threads = std::min(4, (int32_t) std::thread::hardware_concurrency());
 
@@ -35,6 +63,7 @@ struct bark_params {
     int32_t seed = 0;
 
     std::string prompt;  // user prompt
+    std::string voice;   // custom voice (history prompts)
 
     std::string dest_wav_path = "./output.wav";
 };
@@ -51,6 +80,24 @@ struct gpt_hparams {
     int32_t ftype;
 
     int32_t n_codes_given = 1;
+};
+
+struct bark_voice {
+    std::string name;
+
+    struct ggml_tensor * semantic_prompt;
+    struct ggml_tensor * coarse_prompt;
+    struct ggml_tensor * fine_prompt;
+
+    int64_t memsize;
+};
+
+struct bark_history_prompts {
+    struct ggml_context * ctx;
+
+    std::map<std::string, struct bark_voice *> voices;
+
+    int64_t memsize;
 };
 
 struct bark_vocab {
@@ -131,6 +178,9 @@ struct bark_model {
     // vocab
     bark_vocab vocab;
 
+    // history prompts
+    bark_history_prompts history_prompts;
+
     int64_t memsize = 0;
 };
 
@@ -159,9 +209,15 @@ bark_vocab::id gpt_sample(
               float temp,
               float * eos_p);
 
-bool bark_model_load(const std::string & dirname, bark_model & model);
+bool bark_model_load(
+        const std::string & dirname,
+               bark_model & model,
+                     bool   load_history_prompts);
 
-bool bark_vocab_load(const std::string & fname, bark_vocab& vocab, int32_t expected_size);
+bool bark_vocab_load(
+        const std::string & fname,
+               bark_vocab & vocab,
+                  int32_t   expected_size);
 
 void bert_tokenize(
         const bark_vocab & vocab,
@@ -172,14 +228,17 @@ void bert_tokenize(
 
 bool bark_generate_audio(
         bark_model model,
-        const bark_vocab& vocab,
+        const bark_vocab & vocab,
         const char * text,
         const int n_threads,
         const int32_t seed,
-        const std::string& dest_wav_path);
+        const std::string & dest_wav_path,
+        const std::string & voice);
 
 bark_sequence bark_forward_text_encoder(
     const bark_sequence & tokens,
+    struct bark_history_prompts * history_prompts,
+    const std::string & voice,
     const gpt_model model,
     std::mt19937 & rng,
     const int n_threads,
@@ -188,6 +247,8 @@ bark_sequence bark_forward_text_encoder(
 
 bark_codes bark_forward_coarse_encoder(
     const bark_sequence & tokens,
+    struct bark_history_prompts * history_prompt,
+    const std::string & voice,
     const gpt_model model,
     std::mt19937 & rng,
     const int n_threads,
@@ -197,7 +258,9 @@ bark_codes bark_forward_coarse_encoder(
 
 bark_codes bark_forward_fine_encoder(
     const bark_codes & tokens,
+    struct bark_voice * history_prompt,
     const gpt_model model,
+    const std::string & voice,
     std::mt19937 & rng,
     const int n_threads,
     const float temp);
