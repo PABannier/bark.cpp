@@ -1774,11 +1774,13 @@ bark_codes bark_forward_fine_encoder(
             fine_gpt_eval(bctx, in_buffer, nullptr, logits, n_threads, nn);
             t_predict_us += (ggml_time_us() - t_predict_start_us);
 
-            for (int i = 0; i < (int) logits.size(); i++) {
-                logits[i].resize(CODEBOOK_SIZE);
+            // logits is of shape [1024, 1056]
+            for (int i = 0; i < 1024; i++) {
+                std::vector<float> cur_logits(logits.begin() + i*1056, logits.begin() + (i+1)*1056);
+                cur_logits.resize(CODEBOOK_SIZE);
 
                 int64_t t_sample_start_us = ggml_time_us();
-                bark_vocab::id next = gpt_sample(logits[i], rng, temp, NULL);
+                bark_vocab::id next = gpt_sample(cur_logits, rng, temp, NULL);
                 t_sample_us += (ggml_time_us() - t_sample_start_us);
 
                 in_buffer[nn][rel_start_fill_ix+i] = next;
