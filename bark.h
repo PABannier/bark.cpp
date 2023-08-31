@@ -27,6 +27,8 @@
 #define COARSE_SEMANTIC_PAD_TOKEN 12048
 #define COARSE_INFER_TOKEN 12050
 
+struct bark_context;
+
 struct bark_params {
     int32_t n_threads = std::min(4, (int32_t) std::thread::hardware_concurrency());
 
