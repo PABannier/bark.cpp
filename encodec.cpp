@@ -105,7 +105,7 @@ static struct ggml_tensor * forward_pass_lstm_unilayer(
     return hs;
 }
 
-static struct ggml_tensor * strided_conv_1d(
+struct ggml_tensor * strided_conv_1d(
             ggml_context * ctx0,
              ggml_tensor * inp,
              ggml_tensor * conv_w,
@@ -126,7 +126,7 @@ static struct ggml_tensor * strided_conv_1d(
     return dst;
 }
 
-static struct ggml_tensor * strided_conv_transpose_1d(
+struct ggml_tensor * strided_conv_transpose_1d(
                 ggml_context * ctx0,
                 ggml_tensor * inp,
                 ggml_tensor * conv_w,
