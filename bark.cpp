@@ -1712,13 +1712,12 @@ bark_codes bark_forward_coarse_encoder(
 }
 
 bark_codes bark_forward_fine_encoder(
+        bark_context & bctx,
     const bark_codes & tokens,
-    const gpt_model model,
-    std::mt19937 & rng,
-    const int n_threads,
-    const float temp) {
+        std::mt19937 & rng,
+           const int   n_threads,
+         const float   temp) {
     // tokens: [N, n_codes]
-
     bark_codes input = tokens;
     std::vector<float> logits;
 
@@ -1772,7 +1771,7 @@ bark_codes bark_forward_fine_encoder(
 
         for (int nn = n_coarse; nn < N_FINE_CODEBOOKS; nn++) {
             int64_t t_predict_start_us = ggml_time_us();
-            fine_gpt_eval(model, in_buffer, buf_compute, alloc, work_buffer, logits, n_threads, nn);
+            fine_gpt_eval(bctx, in_buffer, nullptr, logits, n_threads, nn);
             t_predict_us += (ggml_time_us() - t_predict_start_us);
 
             for (int i = 0; i < (int) logits.size(); i++) {
@@ -1806,7 +1805,6 @@ bark_codes bark_forward_fine_encoder(
     const int64_t t_main_end_us = ggml_time_us();
 
     printf("\n\n");
-    printf("%s: mem per token = %8.2f MB\n", __func__, mem_per_token/1000.0f/1000.0f);
     printf("%s:   sample time = %8.2f ms\n", __func__, t_sample_us/1000.0f);
     printf("%s:  predict time = %8.2f ms\n", __func__, t_predict_us/1000.0f);
     printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us)/1000.0f);
