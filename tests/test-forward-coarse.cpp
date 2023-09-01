@@ -22,11 +22,15 @@ int main() {
 
     std::mt19937 rng(0);
 
-    gpt_model model;
-    if(!gpt_model_load(fname, model)) {
+    bark_model model;
+
+    if(!gpt_model_load(fname, model.coarse_model)) {
         fprintf(stderr, "%s: invalid model file '%s'\n", __func__, fname.c_str());
         return 1;
     }
+
+    bark_context * ctx = bark_new_context_with_model(&model);
+    ctx->rng = rng;
 
     bark_sequence input;
     bark_codes gt_tokens;
@@ -37,18 +41,20 @@ int main() {
 
         std::string path = test_data[i];
         load_test_data(path, input, gt_tokens);
+        ctx->semantic_tokens = input;
 
-        bark_codes tokens = bark_forward_coarse_encoder(
-            input, model, rng, n_threads, temp, max_coarse_history, sliding_window_size);
+        bark_forward_coarse_encoder(ctx, max_coarse_history, sliding_window_size, temp, n_threads);
 
         printf("\n");
         printf("%s: %s\n", __func__, path.c_str());
-        if (!run_test(transpose(gt_tokens), tokens)) {
+        if (!run_test(transpose(gt_tokens), ctx->coarse_tokens)) {
             printf("%s:     test %d failed.\n", __func__, i+1);
         } else {
             printf("%s:     test %d passed.\n", __func__, i+1);
         }
     }
+
+    bark_free(ctx);
 
     return 0;
 }

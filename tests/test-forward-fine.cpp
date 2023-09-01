@@ -20,25 +20,30 @@ int main() {
 
     std::mt19937 rng(0);
 
-    gpt_model model;
-    if(!gpt_model_load(fname, model)) {
+    bark_model model;
+
+    if(!gpt_model_load(fname, model.fine_model)) {
         fprintf(stderr, "%s: invalid model file '%s'\n", __func__, fname.c_str());
         return 1;
     }
 
-    bark_codes input, gt_tokens, tokens;
+    bark_context * ctx = bark_new_context_with_model(&model);
+    ctx->rng = rng;
+
+    bark_codes input, gt_tokens;
 
     for (int i = 0; i < (int) test_data.size(); i++) {
         input.clear();
         gt_tokens.clear();
-        tokens.clear();
 
         std::string path = test_data[i];
         load_test_data(path, input, gt_tokens);
+        ctx->coarse_tokens = input;
 
         // TODO: need to remove transpose
         bark_codes input_t = transpose(input);
-        bark_codes tokens  = transpose(bark_forward_fine_encoder(input_t, model, rng, n_threads, temp));
+        bark_forward_fine_encoder(ctx, temp, n_threads);
+        bark_codes tokens  = transpose(ctx->fine_tokens);
 
         printf("\n");
         printf("%s: %s\n", __func__, path.c_str());
@@ -48,6 +53,8 @@ int main() {
             printf("%s:     test %d passed.\n", __func__, i+1);
         }
     }
+
+    bark_free(ctx);
 
     return 0;
 }
