@@ -121,7 +121,11 @@ struct encodec_model {
 
     std::map<std::string, struct ggml_tensor *> tensors;
 
+    int64_t t_predict_us = 0;
+    int64_t t_main_us = 0;
+
     int64_t memsize = 0;
+    size_t mem_per_token = 0;
 };
 
 

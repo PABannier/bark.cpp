@@ -34,11 +34,10 @@ int main() {
     logits.resize(n_vocab);
 
     // dry run to estimate mem_per_token
-    size_t mem_per_token = 0;
     {
         int n_past = 0;
         bark_vocab::id decoy[4] = { 0, 1, 2, 3 };
-        gpt_eval(model, decoy, 4, nullptr, &n_past, false, n_threads, mem_per_token);
+        gpt_eval(model, decoy, 4, nullptr, &n_past, false, n_threads);
     }
 
     for (int i = 0; i < (int) test_args.size(); i++) {
@@ -51,7 +50,7 @@ int main() {
         load_test_data(path, tokens, gt_logits);
 
         int n_past = 0;
-        gpt_eval(model, tokens.data(), tokens.size(), logits.data(), &n_past, merge_ctx, n_threads, mem_per_token);
+        gpt_eval(model, tokens.data(), tokens.size(), logits.data(), &n_past, merge_ctx, n_threads);
 
         printf("\n");
         printf("%s: %s\n", __func__, path.c_str());

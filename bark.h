@@ -27,6 +27,7 @@
 #define COARSE_SEMANTIC_PAD_TOKEN 12048
 #define COARSE_INFER_TOKEN 12050
 
+
 struct bark_params {
     int32_t n_threads = std::min(4, (int32_t) std::thread::hardware_concurrency());
 
@@ -115,7 +116,14 @@ struct gpt_model {
     struct ggml_context * ctx;
     std::map<std::string, struct ggml_tensor *> tensors;
 
+    // 
+    int64_t t_sample_us  = 0;
+    int64_t t_predict_us = 0;
+    int64_t t_main_us    = 0;
+
+    //
     int64_t memsize = 0;
+    size_t mem_per_token = 0;
 };
 
 
@@ -134,32 +142,54 @@ struct bark_model {
     int64_t memsize = 0;
 };
 
+struct bark_context {
+    bark_context(bark_model & model) : model(model) {}
+    ~bark_context() {
+        if (model_owner) {
+            delete &model;
+        }
+    }
+
+    std::mt19937 rng;
+
+    bark_model & model;
+
+    bool model_owner = false;
+
+    int64_t t_load_us;
+    int64_t t_start_us;
+
+    bark_sequence tokens;
+
+    bark_sequence semantic_tokens;
+
+    bark_codes coarse_tokens;
+
+    bark_codes fine_tokens;
+
+    std::vector<float> audio_arr;
+};
+
+void bark_free(bark_context * ctx);
+
 bool gpt_model_load(const std::string& fname, gpt_model& model);
 
 bool gpt_eval(
-    const gpt_model & model,
+          gpt_model & model,
      bark_vocab::id * tokens,
                 int   n_tokens,
               float * logits,
                 int * n_past,
                bool   merge_ctx,
-                int   n_threads,
-             size_t & mem_per_token);
+                int   n_threads);
 
 bool fine_gpt_eval(
-    const gpt_model & model,
+          gpt_model & model,
      bark_vocab::id * tokens,
                 int   n_tokens,
               float * logits,
                 int   n_threads,
-                int   codebook_ix,
-             size_t & mem_per_token);
-
-bark_vocab::id gpt_sample(
-              std::vector<float>          & logits,
-              std::mt19937                & rng,
-              float temp,
-              float * eos_p);
+                int   codebook_ix);
 
 bool bark_model_load(const std::string & dirname, bark_model & model);
 
@@ -173,40 +203,30 @@ void bert_tokenize(
                  int32_t   n_max_tokens);
 
 bool bark_generate_audio(
-        bark_model model,
-        const bark_vocab& vocab,
-        const char * text,
-        const int n_threads,
-        const int32_t seed,
-        const std::string& dest_wav_path);
+        struct bark_context * ctx,
+                 const char * text,
+                std::string & dest_wav_path,
+                        int   n_threads);
 
-bark_sequence bark_forward_text_encoder(
-    const bark_sequence & tokens,
-    const gpt_model model,
-    std::mt19937 & rng,
-    const int n_threads,
-    const float temp,
-    const float min_eos_p);
+void bark_forward_text_encoder(
+        struct bark_context * ctx,
+                      float   temp,
+                      float   min_eos_p,
+                        int   n_threads);
 
-bark_codes bark_forward_coarse_encoder(
-    const bark_sequence & tokens,
-    const gpt_model model,
-    std::mt19937 & rng,
-    const int n_threads,
-    const float temp,
-    const int max_coarse_history,
-    const int sliding_window_size);
+void bark_forward_coarse_encoder(
+        struct bark_context * ctx,
+                        int   max_coarse_history,
+                        int   sliding_window_size,
+                      float   temp,
+                        int   n_threads);
 
-bark_codes bark_forward_fine_encoder(
-    const bark_codes & tokens,
-    const gpt_model model,
-    std::mt19937 & rng,
-    const int n_threads,
-    const float temp);
+void bark_forward_fine_encoder(
+        struct bark_context * ctx,
+                      float   temp, 
+                        int   n_threads);
 
-audio_arr_t bark_forward_encodec(
-    const bark_codes & tokens,
-    const encodec_model model);
+void bark_forward_encodec(struct bark_context * ctx);
 
 struct bark_progress {
     float current = 0.0f;
@@ -241,3 +261,5 @@ void read_tensor_from_file(std::ifstream & fin, struct ggml_tensor * t);
 bool allequal(struct ggml_tensor * a, struct ggml_tensor * b, std::string test_name);
 
 bool allclose(struct ggml_tensor * a, struct ggml_tensor * b, float tol, std::string test_name);
+
+struct bark_context * bark_new_context_with_model(struct bark_model * model);
