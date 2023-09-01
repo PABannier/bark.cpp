@@ -53,12 +53,22 @@ extern "C" {
     //
 
     struct bark_context;
-    struct bark_params;
     struct bark_progress;
 
     struct bark_model;
     struct bark_vocab;
 
+    struct bark_params {
+        int32_t n_threads = std::min(4, (int32_t) std::thread::hardware_concurrency());
+
+        std::string model = "./ggml_weights/";  // weights location
+
+        int32_t seed = 0;
+
+        std::string prompt;  // user prompt
+
+        std::string dest_wav_path = "./output.wav";
+    };
 
     typedef int32_t bark_token;
 
@@ -74,13 +84,20 @@ extern "C" {
 
     BARK_API void bark_free(bark_context * ctx);
 
+    BARK_API void bark_free_model(struct bark_model * ctx);
+
     BARK_API bool bark_generate_audio(
             struct bark_context * ctx,
                      const char * text,
                     std::string & dest_wav_path,
                             int   n_threads);
 
-    BARK_API bool bark_model_load(const std::string & dirname, bark_model & model);
+    BARK_API struct bark_model * bark_load_model_from_file(const std::string & dirname);
+
+    BARK_API bool bark_model_quantize(
+              const std::string & fname_inp,
+              const std::string & fname_out,
+                     ggml_ftype   ftype);
 
     BARK_API bool bark_vocab_load(const std::string & fname, bark_vocab& vocab, int32_t expected_size);
 
