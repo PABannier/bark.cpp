@@ -1687,8 +1687,6 @@ bool encodec_eval(
 void bark_forward_encodec(struct bark_context * ctx) {
     const int64_t t_main_start_us = ggml_time_us();
 
-    audio_arr_t audio_arr;
-
     auto & model = ctx->model.codec_model;
 
     // dry run to estimate mem_per_token
@@ -1697,10 +1695,10 @@ void bark_forward_encodec(struct bark_context * ctx) {
         bark_sequence _tmp(4, i);
         toy_data.push_back(_tmp);
     }
-    encodec_eval(toy_data, model, audio_arr);
+    encodec_eval(toy_data, model, ctx->audio_arr);
 
     // actual run
-    encodec_eval(ctx->fine_tokens, model, audio_arr);
+    encodec_eval(ctx->fine_tokens, model, ctx->audio_arr);
 
     const int64_t t_main_end_us = ggml_time_us();
     model.t_main_us = t_main_end_us - t_main_start_us;
