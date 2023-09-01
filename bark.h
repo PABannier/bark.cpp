@@ -203,10 +203,10 @@ void bert_tokenize(
                  int32_t   n_max_tokens);
 
 bool bark_generate_audio(
-    struct bark_context * ctx,
-             const char * text,
-            std::string & dest_wav_path,
-                    int   n_threads);
+        struct bark_context * ctx,
+                 const char * text,
+                std::string & dest_wav_path,
+                        int   n_threads);
 
 void bark_forward_text_encoder(
         struct bark_context * ctx,
