@@ -146,12 +146,13 @@ bool gpt_eval(
               size_t                      & mem_per_token);
 
 bool fine_gpt_eval(
-        const gpt_model & model,
-        const int n_threads,
-        const int codebook_ix,
-        const bark_codes & embd_inp,
-              std::vector<std::vector<float>> & logits,
-              size_t                          & mem_per_token);
+    const gpt_model & model,
+     bark_vocab::id * tokens,
+                int   n_tokens,
+              float * logits,
+                int   n_threads,
+                int   codebook_ix,
+             size_t & mem_per_token);
 
 bark_vocab::id gpt_sample(
               std::vector<float>          & logits,
