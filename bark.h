@@ -27,37 +27,6 @@
 #define COARSE_SEMANTIC_PAD_TOKEN 12048
 #define COARSE_INFER_TOKEN 12050
 
-typedef std::vector<bark_vocab::id>              bark_sequence;
-typedef std::vector<std::vector<bark_vocab::id>> bark_codes;
-typedef std::vector<float>                       audio_arr_t;
-
-struct bark_context {
-    bark_context(const bark_model & model) : model(model) {}
-    ~bark_context() {
-        if (model_owner) {
-            delete &model;
-        }
-    }
-
-    std::mt19937 rng;
-
-    const bark_model & model;
-
-    bool model_owner = false;
-
-    int64_t t_load_us;
-    int64_t t_start_us;
-
-    bark_sequence tokens;
-
-    bark_sequence semantic_tokens;
-
-    bark_codes coarse_tokens;
-
-    bark_codes fine_tokens;
-
-    audio_arr_t audio_arr;
-};
 
 struct bark_params {
     int32_t n_threads = std::min(4, (int32_t) std::thread::hardware_concurrency());
@@ -94,6 +63,38 @@ struct bark_vocab {
 
     std::map<token, id> subword_token_to_id;
     std::map<id, token> id_to_subword_token;
+};
+
+typedef std::vector<bark_vocab::id>              bark_sequence;
+typedef std::vector<std::vector<bark_vocab::id>> bark_codes;
+typedef std::vector<float>                       audio_arr_t;
+
+struct bark_context {
+    bark_context(const bark_model & model) : model(model) {}
+    ~bark_context() {
+        if (model_owner) {
+            delete &model;
+        }
+    }
+
+    std::mt19937 rng;
+
+    const bark_model & model;
+
+    bool model_owner = false;
+
+    int64_t t_load_us;
+    int64_t t_start_us;
+
+    bark_sequence tokens;
+
+    bark_sequence semantic_tokens;
+
+    bark_codes coarse_tokens;
+
+    bark_codes fine_tokens;
+
+    std::vector<float> audio_arr;
 };
 
 struct gpt_layer {
