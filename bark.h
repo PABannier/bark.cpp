@@ -170,6 +170,8 @@ struct bark_context {
     std::vector<float> audio_arr;
 };
 
+void bark_free(bark_context * ctx);
+
 bool gpt_model_load(const std::string& fname, gpt_model& model);
 
 bool gpt_eval(

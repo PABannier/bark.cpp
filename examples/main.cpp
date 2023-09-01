@@ -62,11 +62,7 @@ int main(int argc, char **argv) {
         printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us)/1000.0f);
     }
 
-    // TODO: write wrapper
-    ggml_free(model.coarse_model.ctx);
-    ggml_free(model.fine_model.ctx);
-    ggml_free(model.text_model.ctx);
-    ggml_free(model.codec_model.ctx);
+    bark_free(ctx);
 
     return 0;
 }

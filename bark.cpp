@@ -1812,3 +1812,12 @@ void bark_print_usage(char ** argv, const bark_params & params) {
     fprintf(stderr, "                        output generated wav (default: %s)\n", params.dest_wav_path.c_str());
     fprintf(stderr, "\n");
 }
+
+void bark_free(bark_context * ctx) {
+    ggml_free(ctx->model.coarse_model.ctx);
+    ggml_free(ctx->model.fine_model.ctx);
+    ggml_free(ctx->model.text_model.ctx);
+    ggml_free(ctx->model.codec_model.ctx);
+
+    delete ctx;
+}
