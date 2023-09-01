@@ -55,9 +55,6 @@ struct bark_vocab {
 
     std::map<token, id> token_to_id;
     std::map<id, token> id_to_token;
-
-    std::map<token, id> subword_token_to_id;
-    std::map<id, token> id_to_subword_token;
 };
 
 struct gpt_layer {
@@ -688,7 +685,7 @@ void bert_tokenize(
 
 bool fine_gpt_eval(
           gpt_model & model,
-     bark_vocab::id * tokens,
+     bark_token * tokens,
                 int   n_tokens,
               float * logits,
                 int   n_threads,
@@ -893,7 +890,7 @@ bool fine_gpt_eval(
 
 bool gpt_eval(
           gpt_model & model,
-     bark_vocab::id * tokens,
+     bark_token * tokens,
                 int   n_tokens,
               float * logits,
                 int * n_past,
@@ -1241,7 +1238,7 @@ void softmax(std::vector<float> & logits) {
         l /= sum;
 }
 
-bark_vocab::id gpt_multinomial_sample(
+bark_token gpt_multinomial_sample(
         std::vector<float> & logits,
         std::mt19937 & rng,
         float temp,
@@ -1253,7 +1250,7 @@ bark_vocab::id gpt_multinomial_sample(
 
     softmax(logits);
 
-    std::discrete_distribution<bark_vocab::id> dist(logits.begin(), logits.end());
+    std::discrete_distribution<bark_token> dist(logits.begin(), logits.end());
     int next = dist(rng);
 
     // likelihood of EOS token
@@ -1263,7 +1260,7 @@ bark_vocab::id gpt_multinomial_sample(
     return next;
 }
 
-bark_vocab::id gpt_argmax_sample(std::vector<float> & logits, float * eos_p) {
+bark_token gpt_argmax_sample(std::vector<float> & logits, float * eos_p) {
     int n_logits = logits.size();
 
     // testing purposes
@@ -1288,7 +1285,7 @@ bark_vocab::id gpt_argmax_sample(std::vector<float> & logits, float * eos_p) {
     return next;
 }
 
-bark_vocab::id gpt_sample(
+bark_token gpt_sample(
             std::vector<float> & logits,
                   std::mt19937 & rng,
                          float   temp,
@@ -1296,7 +1293,7 @@ bark_vocab::id gpt_sample(
                        int64_t * t_sample_us) {
     int64_t t_sample_start_us = ggml_time_us();
 
-    bark_vocab::id res;
+    bark_token res;
     if (temp == 0.0f) {
         res = gpt_argmax_sample(logits, eos_p);
     } else {
@@ -1338,6 +1335,15 @@ bark_sequence bark_tokenize_input(const char * text, const bark_vocab & vocab, i
     return tokens;
 }
 
+static void bark_print_statistics(gpt_model & model) {
+    printf("\n\n");
+    printf("%s: mem per token = %8.2f MB\n", __func__, model.mem_per_token/1000.0f/1000.0f);
+    printf("%s:   sample time = %8.2f ms\n", __func__, model.t_sample_us/1000.0f);
+    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, model.t_predict_us/1000.0f, model.t_predict_us/1000.0f);
+    printf("%s:    total time = %8.2f ms\n", __func__, model.t_main_us/1000.0f);
+    printf("\n");
+}
+
 void bark_forward_text_encoder(
         struct bark_context * ctx,
                       float   temp,
@@ -1365,7 +1371,7 @@ void bark_forward_text_encoder(
     // dry run to estimate mem_per_token
     {
         int n_past = 0;
-        bark_vocab::id decoy[4] = { 0, 1, 2, 3 };
+        bark_token decoy[4] = { 0, 1, 2, 3 };
         gpt_eval(model, decoy, 4, nullptr, &n_past, false, n_threads);
     }
 
@@ -1379,7 +1385,7 @@ void bark_forward_text_encoder(
 
         input.clear();
 
-        bark_vocab::id next = gpt_sample(logits, ctx->rng, temp, &eos_p, &model.t_sample_us);
+        bark_token next = gpt_sample(logits, ctx->rng, temp, &eos_p, &model.t_sample_us);
 
         if (next == SEMANTIC_VOCAB_SIZE || eos_p >= min_eos_p)
             break;
@@ -1436,7 +1442,7 @@ void bark_forward_coarse_encoder(
     // dry run to estimate mem_per_token
     {
         int n_past = 0;
-        bark_vocab::id decoy[4] = { 0, 1, 2, 3 };
+        bark_token decoy[4] = { 0, 1, 2, 3 };
         gpt_eval(model, decoy, 4, nullptr, &n_past, false, n_threads);
     }
 
@@ -1480,7 +1486,7 @@ void bark_forward_coarse_encoder(
             int end_ix    = SEMANTIC_VOCAB_SIZE + (2 - is_major) * CODEBOOK_SIZE;
             std::vector<float> relevant_logits(logits.begin() + start_ix, logits.begin() + end_ix);
 
-            bark_vocab::id next = gpt_sample(relevant_logits, ctx->rng, temp, NULL, &model.t_sample_us);
+            bark_token next = gpt_sample(relevant_logits, ctx->rng, temp, NULL, &model.t_sample_us);
 
             next += start_ix;
 
@@ -1550,7 +1556,7 @@ void bark_forward_fine_encoder(struct bark_context * ctx,float temp, int n_threa
     }
 
     // dry run to estimate mem_per_token
-    bark_vocab::id decoy[16] = { 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8 };
+    bark_token decoy[16] = { 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8 };
     fine_gpt_eval(model, decoy, 16, nullptr, n_threads, 2);
 
     int n_loops = std::max(0, (int) ceilf((input.size() - 1024)/512.f)) + 1;
@@ -1578,7 +1584,7 @@ void bark_forward_fine_encoder(struct bark_context * ctx,float temp, int n_threa
                 std::vector<float> relevant_logits(logits.begin() + i*1056, logits.begin() + (i+1)*1056);
                 relevant_logits.resize(CODEBOOK_SIZE);
 
-                bark_vocab::id next = gpt_sample(relevant_logits, ctx->rng, temp, NULL, &model.t_sample_us);
+                bark_token next = gpt_sample(relevant_logits, ctx->rng, temp, NULL, &model.t_sample_us);
 
                 in_buffer[nn*1024 + rel_start_fill_ix + i] = next;
             }
@@ -1811,15 +1817,6 @@ void bark_free(bark_context * ctx) {
     ggml_free(ctx->model.codec_model.ctx);
 
     delete ctx;
-}
-
-static void bark_print_statistics(gpt_model & model) {
-    printf("\n\n");
-    printf("%s: mem per token = %8.2f MB\n", __func__, model.mem_per_token/1000.0f/1000.0f);
-    printf("%s:   sample time = %8.2f ms\n", __func__, model.t_sample_us/1000.0f);
-    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, model.t_predict_us/1000.0f, model.t_predict_us/1000.0f);
-    printf("%s:    total time = %8.2f ms\n", __func__, model.t_main_us/1000.0f);
-    printf("\n");
 }
 
 bool allequal(struct ggml_tensor * a, struct ggml_tensor * b, std::string test_name) {

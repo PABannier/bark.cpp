@@ -102,7 +102,7 @@ extern "C" {
 
     bool gpt_eval(
              gpt_model & model,
-        bark_vocab::id * tokens,
+        bark_token * tokens,
                    int   n_tokens,
                  float * logits,
                    int * n_past,
@@ -111,7 +111,7 @@ extern "C" {
 
     bool fine_gpt_eval(
              gpt_model & model,
-        bark_vocab::id * tokens,
+        bark_token * tokens,
                    int   n_tokens,
                  float * logits,
                    int   n_threads,
