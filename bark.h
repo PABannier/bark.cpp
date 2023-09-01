@@ -70,7 +70,7 @@ typedef std::vector<std::vector<bark_vocab::id>> bark_codes;
 typedef std::vector<float>                       audio_arr_t;
 
 struct bark_context {
-    bark_context(const bark_model & model) : model(model) {}
+    bark_context(bark_model & model) : model(model) {}
     ~bark_context() {
         if (model_owner) {
             delete &model;
@@ -79,7 +79,7 @@ struct bark_context {
 
     std::mt19937 rng;
 
-    const bark_model & model;
+    bark_model & model;
 
     bool model_owner = false;
 
@@ -144,7 +144,14 @@ struct gpt_model {
     struct ggml_context * ctx;
     std::map<std::string, struct ggml_tensor *> tensors;
 
+    // 
+    int64_t t_sample_us  = 0;
+    int64_t t_predict_us = 0;
+    int64_t t_main_us    = 0;
+
+    //
     int64_t memsize = 0;
+    size_t mem_per_token = 0;
 };
 
 
