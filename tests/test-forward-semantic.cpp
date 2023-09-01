@@ -12,7 +12,7 @@ static const std::vector<std::string> test_data = {
     "./data/semantic/test_pass_semantic_3.bin",   // prompt: El Arte de Vencer se Aprende en las Derrotas
 };
 
-static const int n_threads   = 4;
+static const int   n_threads = 4;
 static const float min_eos_p = 0.2;
 static const float temp      = 0.0f;  // deterministic sampling
 
