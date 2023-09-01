@@ -175,7 +175,7 @@ void bark_free(bark_context * ctx);
 bool gpt_model_load(const std::string& fname, gpt_model& model);
 
 bool gpt_eval(
-    const gpt_model & model,
+          gpt_model & model,
      bark_vocab::id * tokens,
                 int   n_tokens,
               float * logits,
@@ -184,18 +184,12 @@ bool gpt_eval(
                 int   n_threads);
 
 bool fine_gpt_eval(
-    const gpt_model & model,
+          gpt_model & model,
      bark_vocab::id * tokens,
                 int   n_tokens,
               float * logits,
                 int   n_threads,
                 int   codebook_ix);
-
-bark_vocab::id gpt_sample(
-              std::vector<float>          & logits,
-              std::mt19937                & rng,
-              float temp,
-              float * eos_p);
 
 bool bark_model_load(const std::string & dirname, bark_model & model);
 

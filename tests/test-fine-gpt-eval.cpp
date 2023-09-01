@@ -38,9 +38,8 @@ int main() {
     std::vector<float> gt_logits, logits;
 
     // dry run to estimate mem_per_token
-    size_t mem_per_token = 0;
     bark_sequence decoy = { 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8 };
-    fine_gpt_eval(model, decoy.data(), decoy.size(), nullptr, n_threads, 2, mem_per_token);
+    fine_gpt_eval(model, decoy.data(), decoy.size(), nullptr, n_threads, 2);
 
     for (int i = 0; i < (int) test_args.size(); i++) {
         std::string path = std::get<0>(test_args[i]);
@@ -56,7 +55,7 @@ int main() {
         std::vector<int> tokens_vec = flatten(tokens);
 
         logits.resize(1024*1056);
-        fine_gpt_eval(model, tokens_vec.data(), tokens_vec.size(), logits.data(), n_threads, codebook_ix, mem_per_token);
+        fine_gpt_eval(model, tokens_vec.data(), tokens_vec.size(), logits.data(), n_threads, codebook_ix);
 
         printf("\n");
         printf("%s: %s\n", __func__, path.c_str());
