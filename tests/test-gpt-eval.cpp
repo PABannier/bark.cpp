@@ -28,18 +28,22 @@ int main() {
 
     bark_sequence tokens;
     logit_sequence gt_logits, logits;
+    
+    auto & hparams = model.hparams;
+    int n_vocab = hparams.n_out_vocab;
+    logits.resize(n_vocab);
 
     // dry run to estimate mem_per_token
     size_t mem_per_token = 0;
     {
         int n_past = 0;
-        gpt_eval(model, n_threads, &n_past, false, { 0, 1, 2, 3 }, logits, mem_per_token);
+        bark_vocab::id decoy[4] = { 0, 1, 2, 3 };
+        gpt_eval(model, decoy, 4, nullptr, &n_past, false, n_threads, mem_per_token);
     }
 
     for (int i = 0; i < (int) test_args.size(); i++) {
         tokens.clear();
         gt_logits.clear();
-        logits.clear();
 
         std::string path = std::get<0>(test_args[i]);
         bool merge_ctx   = std::get<1>(test_args[i]);
@@ -47,7 +51,7 @@ int main() {
         load_test_data(path, tokens, gt_logits);
 
         int n_past = 0;
-        gpt_eval(model, n_threads, &n_past, merge_ctx, tokens, logits, mem_per_token);
+        gpt_eval(model, tokens.data(), tokens.size(), nullptr, &n_past, merge_ctx, n_threads, mem_per_token);
 
         printf("\n");
         printf("%s: %s\n", __func__, path.c_str());
