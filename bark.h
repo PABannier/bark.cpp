@@ -137,13 +137,14 @@ struct bark_model {
 bool gpt_model_load(const std::string& fname, gpt_model& model);
 
 bool gpt_eval(
-        const gpt_model & model,
-        const int n_threads,
-        int * n_past,
-        const bool merge_ctx,
-        const bark_sequence & embd_inp,
-              std::vector<float>          & embd_w,
-              size_t                      & mem_per_token);
+    const gpt_model & model,
+     bark_vocab::id * tokens,
+                int   n_tokens,
+              float * logits,
+                int * n_past,
+               bool   merge_ctx,
+                int   n_threads,
+             size_t & mem_per_token);
 
 bool fine_gpt_eval(
     const gpt_model & model,
