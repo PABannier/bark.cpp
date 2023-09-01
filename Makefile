@@ -294,6 +294,9 @@ $(info )
 ggml.o: ggml.c
 	$(CC)   $(CFLAGS)     -c $< -o $@
 
+ggml-alloc.o: ggml-alloc.c
+	$(CC)   $(CFLAGS)     -c $< -o $@
+
 encodec.o: encodec.cpp
 	$(CXX)  $(CXXFLAGS)   -c $< -o $@
 
@@ -303,13 +306,13 @@ bark.o: bark.cpp bark.h
 clean:
 	rm -vf *.o *.so *.dll encodec bark $(TEST_TARGETS) $(BUILD_TARGETS)
 
-bark: bark.cpp         encodec.o ggml.o $(OBJS)
+bark: bark.cpp         encodec.o ggml.o ggml-alloc.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
 quantize: quantize.cpp ggml.o bark.o encodec.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
-main: examples/main.cpp  ggml.o bark.o encodec.o $(OBJS)
+main: examples/main.cpp  ggml.o ggml-alloc.o bark.o encodec.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LDFLAGS)
 
 #
@@ -327,7 +330,7 @@ tests/test-tokenizer: tests/test-tokenizer.cpp ggml.o bark.o encodec.o $(OBJS)
 tests/test-gpt-eval: tests/test-gpt-eval.cpp ggml.o bark.o encodec.o common.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
 
-tests/test-fine-gpt-eval: tests/test-fine-gpt-eval.cpp ggml.o bark.o encodec.o common.o $(OBJS)
+tests/test-fine-gpt-eval: tests/test-fine-gpt-eval.cpp ggml.o ggml-alloc.o bark.o encodec.o common.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
 
 tests/test-forward-semantic: tests/test-forward-semantic.cpp ggml.o bark.o encodec.o common.o $(OBJS)
@@ -336,8 +339,11 @@ tests/test-forward-semantic: tests/test-forward-semantic.cpp ggml.o bark.o encod
 tests/test-forward-coarse: tests/test-forward-coarse.cpp ggml.o bark.o encodec.o common.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
 
-tests/test-forward-fine: tests/test-forward-fine.cpp ggml.o bark.o encodec.o common.o $(OBJS)
+tests/test-forward-fine: tests/test-forward-fine.cpp ggml.o ggml-alloc.o bark.o encodec.o common.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
 
 tests/test-forward-encodec: tests/test-forward-encodec.cpp ggml.o bark.o encodec.o common.o $(OBJS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
+
+test-flip-op: test-flip-op.cpp ggml.o encodec.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)

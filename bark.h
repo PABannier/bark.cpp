@@ -120,7 +120,6 @@ struct gpt_model {
     int64_t memsize = 0;
 };
 
-
 struct bark_model {
     // encoder
     gpt_model coarse_model;
@@ -136,6 +135,8 @@ struct bark_model {
     int64_t memsize = 0;
 };
 
+struct bark_context * bark_new_context_with_model(struct bark_model * model);
+
 bool gpt_model_load(const std::string& fname, gpt_model& model);
 
 bool gpt_eval(
@@ -148,12 +149,12 @@ bool gpt_eval(
               size_t                      & mem_per_token);
 
 bool fine_gpt_eval(
-        const gpt_model & model,
-        const int n_threads,
-        const int codebook_ix,
-        const bark_codes & embd_inp,
-              std::vector<std::vector<float>> & logits,
-              size_t                          & mem_per_token);
+            bark_context & bctx,
+        const bark_codes & tokens,
+             const float * embd,
+      std::vector<float> & logits,
+                     int   n_threads,
+                     int   codebook_ix);
 
 bark_vocab::id gpt_sample(
               std::vector<float>          & logits,
@@ -198,11 +199,11 @@ bark_codes bark_forward_coarse_encoder(
     const int sliding_window_size);
 
 bark_codes bark_forward_fine_encoder(
+        bark_context & bctx,
     const bark_codes & tokens,
-    const gpt_model model,
-    std::mt19937 & rng,
-    const int n_threads,
-    const float temp);
+        std::mt19937 & rng,
+           const int   n_threads,
+         const float   temp);
 
 audio_arr_t bark_forward_encodec(
     const bark_codes & tokens,

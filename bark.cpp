@@ -24,6 +24,8 @@ Author: Pierre-Antoine Bannier <pierreantoine.bannier@gmail.com>
 
 #define BARK_DEBUG 0
 
+#define ggml_norm(x, y) ggml_norm(x, y, 1e-12)
+
 bool allequal(struct ggml_tensor * a, struct ggml_tensor * b, std::string test_name) {
     assert(a->ne[0] == b->ne[0]);
     assert(a->ne[1] == b->ne[1]);
@@ -263,43 +265,6 @@ struct bark_context {
     bark_buffer buf_alloc;
     ggml_allocr * alloc = NULL;
 };
-
-struct bark_context * bark_new_context_with_model(struct bark_model * model) {
-    if (!model) {
-        return nullptr;
-    }
-
-    bark_context * ctx = new bark_context(*model);
-
-    // reserve memory for context buffers
-    static const size_t tensor_alignment = 32;
-
-    // the compute buffer is used to store the tensor and graph structs
-    ctx->buf_compute.resize(ggml_tensor_overhead()*GGML_MAX_NODES + ggml_graph_overhead());
-
-    // the allocator buffer is used for the tensor data
-    {
-        ctx->alloc = ggml_allocr_new_measure(tensor_alignment);
-
-        // build worst-case graph
-        int n_tokens = 1024;  // context size for fine encoder
-        bark_codes tokens = { { 0, 1 }, { 1, 2 }, { 3, 4 }, { 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 8 } };
-        ggml_cgraph * gf = bark_build_fine_gpt_graph(*ctx, tokens, NULL, 2 /* codebook_ix */);
-
-        // measure memory requirements for the graph
-        size_t alloc_size = ggml_allocr_alloc_graph(ctx->alloc, gf) + tensor_alignment;
-
-        printf("%s: compute buffer total size = %7.2f MB\n", __func__, (ctx->buf_compute.size + alloc_size) / 1024.0 / 1024.0);
-
-        // recreate allocator with exact memory requirements
-        ggml_allocr_free(ctx->alloc);
-
-        ctx->buf_alloc.resize(alloc_size);
-        ctx->alloc = ggml_allocr_new(ctx->buf_alloc.data, ctx->buf_alloc.size, tensor_alignment);
-    }
-
-    return ctx;
-}
 
 bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expected_size) {
     auto fin = std::ifstream(fname, std::ios::binary);
@@ -809,7 +774,6 @@ static struct ggml_cgraph * bark_build_fine_gpt_graph(
     const int n_layer = hparams.n_layer;
     const int n_ctx   = hparams.block_size;
     const int n_head  = hparams.n_head;
-    const int n_vocab = hparams.n_out_vocab;
 
     const int n_codes_given = hparams.n_codes_given;
 
@@ -1043,7 +1007,7 @@ static struct ggml_cgraph * bark_build_fine_gpt_graph(
     return gf;
 }
 
-static bool fine_gpt_eval(
+bool fine_gpt_eval(
             bark_context & bctx,
         const bark_codes & tokens,
              const float * embd,
@@ -1866,9 +1830,9 @@ bool encodec_eval(
 
     dump_tensor(output, false);
 
-    // int out_seq_length = output->ne[0];
-    // audio_arr.resize(out_seq_length);
-    // memcpy(audio_arr.data(), (float *) ggml_get_data(output), sizeof(float)*out_seq_length);
+    int out_seq_length = output->ne[0];
+    audio_arr.resize(out_seq_length);
+    memcpy(audio_arr.data(), (float *) ggml_get_data(output), sizeof(float)*out_seq_length);
 
     if (mem_per_token == 0) {
         mem_per_token = ggml_used_mem(ctx0)/N/n_codes;
@@ -1969,16 +1933,16 @@ bool bark_generate_audio(
             semantic_tokens, model.coarse_model, rng, n_threads, temp, max_coarse_history, sliding_window_size);
     printf("\n");
 
-    bark_codes fine_tokens = bark_forward_fine_encoder(
-            coarse_tokens, model.fine_model, rng, n_threads, fine_temp);
-    printf("\n");
+    // bark_codes fine_tokens = bark_forward_fine_encoder(
+    //         coarse_tokens, model.fine_model, rng, n_threads, fine_temp);
+    // printf("\n");
 
-    audio_arr_t audio_arr = bark_forward_encodec(fine_tokens, model.codec_model);
-    printf("\n");
+    // audio_arr_t audio_arr = bark_forward_encodec(fine_tokens, model.codec_model);
+    // printf("\n");
 
-    if (dest_wav_path != "") {
-        write_wav_on_disk(audio_arr, dest_wav_path);
-    }
+    // if (dest_wav_path != "") {
+    //     write_wav_on_disk(audio_arr, dest_wav_path);
+    // }
 
     return true;
 }
@@ -2024,4 +1988,41 @@ void bark_print_usage(char ** argv, const bark_params & params) {
     fprintf(stderr, "  -o FNAME, --outwav FNAME\n");
     fprintf(stderr, "                        output generated wav (default: %s)\n", params.dest_wav_path.c_str());
     fprintf(stderr, "\n");
+}
+
+struct bark_context * bark_new_context_with_model(struct bark_model * model) {
+    if (!model) {
+        return nullptr;
+    }
+
+    bark_context * ctx = new bark_context(*model);
+
+    // reserve memory for context buffers
+    static const size_t tensor_alignment = 32;
+
+    // the compute buffer is used to store the tensor and graph structs
+    ctx->buf_compute.resize(ggml_tensor_overhead()*GGML_MAX_NODES + ggml_graph_overhead());
+
+    // the allocator buffer is used for the tensor data
+    {
+        ctx->alloc = ggml_allocr_new_measure(tensor_alignment);
+
+        // build worst-case graph
+        int n_tokens = 1024;  // context size for fine encoder
+        bark_codes tokens = { { 0, 1 }, { 1, 2 }, { 3, 4 }, { 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 8 } };
+        ggml_cgraph * gf = bark_build_fine_gpt_graph(*ctx, tokens, NULL, 2 /* codebook_ix */);
+
+        // measure memory requirements for the graph
+        size_t alloc_size = ggml_allocr_alloc_graph(ctx->alloc, gf) + tensor_alignment;
+
+        printf("%s: compute buffer total size = %7.2f MB\n", __func__, (ctx->buf_compute.size + alloc_size) / 1024.0 / 1024.0);
+
+        // recreate allocator with exact memory requirements
+        ggml_allocr_free(ctx->alloc);
+
+        ctx->buf_alloc.resize(alloc_size);
+        ctx->alloc = ggml_allocr_new(ctx->buf_alloc.data, ctx->buf_alloc.size, tensor_alignment);
+    }
+
+    return ctx;
 }
