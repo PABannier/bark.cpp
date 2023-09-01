@@ -38,10 +38,9 @@ int main() {
 
         std::string path = test_data[i];
         load_test_data(path, input, gt_tokens);
-        ctx->coarse_tokens = input;
 
         // TODO: need to remove transpose
-        bark_codes input_t = transpose(input);
+        ctx->coarse_tokens = transpose(input);
         bark_forward_fine_encoder(ctx, temp, n_threads);
         bark_codes tokens  = transpose(ctx->fine_tokens);
 
