@@ -34,6 +34,13 @@ int main(int argc, char **argv) {
         t_load_us = ggml_time_us() - t_start_us;
     }
 
+    // create a context
+    bark_context * ctx = bark_new_context_with_model(&model);
+    if (ctx == nullptr) {
+        fprintf(stderr, "%s: failed to create context\n", __func__);
+        return 1;
+    }
+
     printf("\n");
 
     std::string prompt = "this is an audio";
@@ -42,7 +49,7 @@ int main(int argc, char **argv) {
     }
 
     const int64_t t_eval_us_start = ggml_time_us();
-    bark_generate_audio(model, model.vocab, prompt.data(), params.n_threads, params.seed, params.dest_wav_path);
+    bark_generate_audio(ctx, prompt.data(), params.dest_wav_path, params.n_threads);
     t_eval_us = ggml_time_us() - t_eval_us_start;
 
     // report timing

@@ -1516,6 +1516,7 @@ void bark_forward_coarse_encoder(
     ctx->coarse_tokens = out_coarse;
 
     const int64_t t_main_end_us = ggml_time_us();
+    model.t_main_us = t_main_end_us - t_main_start_us;
 
     bark_print_statistics(model);
 
@@ -1610,6 +1611,7 @@ void bark_forward_fine_encoder(struct bark_context * ctx,float temp, int n_threa
     ctx->fine_tokens = in_arr;
 
     const int64_t t_main_end_us = ggml_time_us();
+    model.t_main_us = t_main_end_us - t_main_start_us;
 
     bark_print_statistics(model);
 }
@@ -1757,7 +1759,7 @@ bool bark_generate_audio(
 
     bark_forward_text_encoder(ctx, temp, min_eos_p, n_threads);
     bark_forward_coarse_encoder(ctx, max_coarse_history, sliding_window_size, temp, n_threads);
-    bark_forward_fine_encoder(ctx, temp, n_threads);
+    bark_forward_fine_encoder(ctx, fine_temp, n_threads);
 
     bark_forward_encodec(ctx);
 

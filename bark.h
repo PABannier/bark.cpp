@@ -69,34 +69,6 @@ typedef std::vector<bark_vocab::id>              bark_sequence;
 typedef std::vector<std::vector<bark_vocab::id>> bark_codes;
 typedef std::vector<float>                       audio_arr_t;
 
-struct bark_context {
-    bark_context(bark_model & model) : model(model) {}
-    ~bark_context() {
-        if (model_owner) {
-            delete &model;
-        }
-    }
-
-    std::mt19937 rng;
-
-    bark_model & model;
-
-    bool model_owner = false;
-
-    int64_t t_load_us;
-    int64_t t_start_us;
-
-    bark_sequence tokens;
-
-    bark_sequence semantic_tokens;
-
-    bark_codes coarse_tokens;
-
-    bark_codes fine_tokens;
-
-    std::vector<float> audio_arr;
-};
-
 struct gpt_layer {
     // normalization
     struct ggml_tensor * ln_1_g;
@@ -170,6 +142,34 @@ struct bark_model {
     int64_t memsize = 0;
 };
 
+struct bark_context {
+    bark_context(bark_model & model) : model(model) {}
+    ~bark_context() {
+        if (model_owner) {
+            delete &model;
+        }
+    }
+
+    std::mt19937 rng;
+
+    bark_model & model;
+
+    bool model_owner = false;
+
+    int64_t t_load_us;
+    int64_t t_start_us;
+
+    bark_sequence tokens;
+
+    bark_sequence semantic_tokens;
+
+    bark_codes coarse_tokens;
+
+    bark_codes fine_tokens;
+
+    std::vector<float> audio_arr;
+};
+
 bool gpt_model_load(const std::string& fname, gpt_model& model);
 
 bool gpt_eval(
@@ -179,8 +179,7 @@ bool gpt_eval(
               float * logits,
                 int * n_past,
                bool   merge_ctx,
-                int   n_threads,
-             size_t & mem_per_token);
+                int   n_threads);
 
 bool fine_gpt_eval(
     const gpt_model & model,
@@ -188,8 +187,7 @@ bool fine_gpt_eval(
                 int   n_tokens,
               float * logits,
                 int   n_threads,
-                int   codebook_ix,
-             size_t & mem_per_token);
+                int   codebook_ix);
 
 bark_vocab::id gpt_sample(
               std::vector<float>          & logits,
