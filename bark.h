@@ -101,7 +101,7 @@ extern "C" {
     int gpt_model_load(const std::string& fname, gpt_model& model);
 
     int gpt_eval(
-                  gpt_model & model,
+                  gpt_model * model,
                  bark_token * tokens,
                         int   n_tokens,
                       float * logits,
@@ -110,7 +110,7 @@ extern "C" {
                         int   n_threads);
 
     bool fine_gpt_eval(
-                  gpt_model & model,
+                  gpt_model * model,
                  bark_token * tokens,
                         int   n_tokens,
                       float * logits,
@@ -118,7 +118,7 @@ extern "C" {
                         int   codebook_ix);
 
     void bert_tokenize(
-           const bark_vocab & vocab,
+           const bark_vocab * vocab,
                  const char * text,
                     int32_t * tokens,
                     int32_t * n_tokens,
