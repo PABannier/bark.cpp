@@ -23,171 +23,153 @@ Author: Pierre-Antoine Bannier <pierreantoine.bannier@gmail.com>
 
 #define BARK_DEBUG 0
 
-bool allequal(struct ggml_tensor * a, struct ggml_tensor * b, std::string test_name) {
-    assert(a->ne[0] == b->ne[0]);
-    assert(a->ne[1] == b->ne[1]);
-    assert(a->ne[2] == b->ne[2]);
-    assert(a->ne[3] == b->ne[3]);
+struct gpt_hparams {
+    int32_t n_in_vocab;
+    int32_t n_out_vocab;
+    int32_t n_layer;
+    int32_t n_head;
+    int32_t n_embd;
+    int32_t block_size;
+    int32_t n_lm_heads;
+    int32_t n_wtes;
+    int32_t ftype;
 
-    assert(a->type == GGML_TYPE_I32);
-    assert(b->type == GGML_TYPE_I32);
+    int32_t n_codes_given = 1;
+};
 
-    int64_t n_violations = 0;
+struct bark_vocab {
+    using id    = int32_t;
+    using token = std::string;
 
-    for (int i = 0; i < a->ne[3]; i++) {
-        for (int j = 0; j < a->ne[2]; j++) {
-            for (int k = 0; k < a->ne[1]; k++) {
-                for (int l = 0; l < a->ne[0]; l++) {
-                    int32_t * aval = (int32_t *) (
-                        (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
-                    int32_t * bval = (int32_t *) (
-                        (char *) b->data + i*b->nb[3] + j*b->nb[2] + k*b->nb[1] + l*b->nb[0]);
-                    if (*aval != *bval)
-                        n_violations += 1;
-                }
+    std::map<token, id> token_to_id;
+    std::map<id, token> id_to_token;
+};
+
+struct gpt_layer {
+    // normalization
+    struct ggml_tensor * ln_1_g;
+    struct ggml_tensor * ln_1_b;
+
+    struct ggml_tensor * ln_2_g;
+    struct ggml_tensor * ln_2_b;
+
+    // attention
+    struct ggml_tensor * c_attn_attn_w;
+    struct ggml_tensor * c_attn_attn_b;
+
+    struct ggml_tensor * c_attn_proj_w;
+    struct ggml_tensor * c_attn_proj_b;
+
+    // mlp
+    struct ggml_tensor * c_mlp_fc_w;
+    struct ggml_tensor * c_mlp_fc_b;
+
+    struct ggml_tensor * c_mlp_proj_w;
+    struct ggml_tensor * c_mlp_proj_b;
+};
+
+struct gpt_model {
+    gpt_hparams hparams;
+
+    // normalization
+    struct ggml_tensor * ln_f_g;
+    struct ggml_tensor * ln_f_b;
+
+    struct ggml_tensor * wpe;     //     token embedding
+    // struct ggml_tensor * wte;     //  position embedding
+    // struct ggml_tensor * lm_head; // language model head
+
+    std::vector<struct ggml_tensor *> wtes;
+    std::vector<struct ggml_tensor *> lm_heads;
+
+    std::vector<gpt_layer> layers;
+
+    // key + value memory
+    struct ggml_tensor * memory_k;
+    struct ggml_tensor * memory_v;
+
+    //
+    struct ggml_context * ctx;
+    std::map<std::string, struct ggml_tensor *> tensors;
+
+    //
+    int64_t t_sample_us  = 0;
+    int64_t t_predict_us = 0;
+    int64_t t_main_us    = 0;
+
+    //
+    int64_t n_sample  = 0;
+    int64_t n_predict = 0;
+
+    //
+    int64_t memsize = 0;
+    size_t mem_per_token = 0;
+};
+
+struct bark_model {
+    // encoder
+    gpt_model coarse_model;
+    gpt_model   fine_model;
+    gpt_model   text_model;
+
+    // decoder
+    encodec_model codec_model;
+
+    // vocab
+    bark_vocab vocab;
+
+    int64_t memsize = 0;
+};
+
+struct bark_context {
+    bark_context(bark_model & model) : model(model) {}
+    ~bark_context() {
+        if (model_owner) {
+            delete &model;
+        }
+    }
+
+    std::mt19937 rng;
+
+    bark_model & model;
+
+    bool model_owner = false;
+
+    int64_t t_load_us;
+    int64_t t_start_us;
+
+    bark_sequence tokens;
+
+    bark_sequence semantic_tokens;
+
+    bark_codes coarse_tokens;
+
+    bark_codes fine_tokens;
+
+    std::vector<float> audio_arr;
+};
+
+struct bark_progress {
+    float current = 0.0f;
+    const char * func = NULL;
+
+    bark_progress() {}
+
+    void callback(float progress) {
+        float percentage = progress * 100;
+        if (percentage == 0.0f && func != NULL) {
+            fprintf(stderr, "%s: ", func);
+        }
+        while (percentage > current) {
+            current = percentage;
+            fprintf(stderr, ".");
+            fflush(stderr);
+            if (percentage >= 100) {
+                fprintf(stderr, "\n");
             }
         }
     }
-
-    int64_t n_elements = a->ne[0]*a->ne[1]*a->ne[2]*a->ne[3];
-    float perc_viol = 100.0f*float(n_violations)/n_elements;
-
-    printf("%s: %s\n", __func__, test_name.c_str());
-    printf("%s: %%_viol=%.1f\n", __func__, perc_viol);
-    printf("\n");
-    return n_violations == 0;
-}
-
-bool allclose(struct ggml_tensor * a, struct ggml_tensor * b, float tol, std::string test_name) {
-    assert(a->ne[0] == b->ne[0]);
-    assert(a->ne[1] == b->ne[1]);
-    assert(a->ne[2] == b->ne[2]);
-    assert(a->ne[3] == b->ne[3]);
-
-    assert(a->type == GGML_TYPE_F32);
-    assert(b->type == GGML_TYPE_F32);
-
-    float max_violation = -INFINITY;
-    int64_t n_violations = 0;
-
-    for (int i = 0; i < a->ne[3]; i++) {
-        for (int j = 0; j < a->ne[2]; j++) {
-            for (int k = 0; k < a->ne[1]; k++) {
-                for (int l = 0; l < a->ne[0]; l++) {
-                    float * aval = (float *) (
-                        (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
-                    float * bval = (float *) (
-                        (char *) b->data + i*b->nb[3] + j*b->nb[2] + k*b->nb[1] + l*b->nb[0]);
-                    float violation = fabs(*aval - *bval);
-                    max_violation = std::max(max_violation, violation);
-                    if (violation > tol)
-                        n_violations += 1;
-                }
-            }
-        }
-    }
-
-    int64_t n_elements = a->ne[0]*a->ne[1]*a->ne[2]*a->ne[3];
-    float perc_viol = 100.0f*float(n_violations)/n_elements;
-
-    printf("%s: %s\n", __func__, test_name.c_str());
-    printf("%s: max_viol=%.4f; viol=%.1f%% (tol=%.4f)\n", __func__, max_violation, perc_viol, tol);
-    printf("\n");
-    return n_violations == 0;
-}
-
-
-void read_tensor_from_file_f32(std::ifstream & fin, struct ggml_tensor *t) {
-    int32_t n_dims;
-    read_safe(fin, n_dims);
-
-    int32_t ne[3] = { 1, 1, 1 };
-    for (int i = 0; i < n_dims; i++) { read_safe(fin, ne[i]); }
-
-    assert(t->ne[0] == ne[0]);
-    assert(t->ne[1] == ne[1]);
-    assert(t->ne[2] == ne[2]);
-    assert(t->type == GGML_TYPE_F32);
-
-    for (int i = 0; i < ne[2]; i++) {
-        for (int j = 0; j < ne[1]; j++) {
-            int offset = i*t->nb[2] + j*t->nb[1];
-            fin.read(reinterpret_cast<char *>(t->data) + offset, ne[0]*sizeof(float));
-        }
-    }
-}
-
-void read_tensor_from_file_int32(std::ifstream & fin, struct ggml_tensor *t) {
-    int32_t n_dims;
-    read_safe(fin, n_dims);
-
-    int32_t ne[3] = { 1, 1, 1 };
-    for (int i = 0; i < n_dims; i++) { read_safe(fin, ne[i]); }
-
-    assert(t->ne[0] == ne[0]);
-    assert(t->ne[1] == ne[1]);
-    assert(t->ne[2] == ne[2]);
-    assert(t->type == GGML_TYPE_I32);
-
-    for (int i = 0; i < ne[2]; i++) {
-        for (int j = 0; j < ne[1]; j++) {
-            int offset = i*t->nb[2] + j*t->nb[1];
-            fin.read(reinterpret_cast<char *>(t->data) + offset, ne[0]*sizeof(int32_t));
-        }
-    }
-}
-
-void read_tensor_from_file(std::ifstream & fin, struct ggml_tensor * t) {
-    if (t->type == GGML_TYPE_F32) {
-        read_tensor_from_file_f32(fin, t);
-    } else if (t->type == GGML_TYPE_I32) {
-        read_tensor_from_file_int32(fin, t);
-    } else {
-        throw;
-    }
-}
-
-void load_gt_tensor(std::string path, struct ggml_tensor * t) {
-    auto fin = std::ifstream(path, std::ios::binary);
-    if (!fin) {
-        fprintf(stderr, "failed to open.");
-        throw;
-    }
-    read_tensor_from_file(fin, t);
-}
-
-void print_tensor(struct ggml_tensor * a) {
-    for (int i = 0; i < a->ne[3]; i++) {
-        for (int j = 0; j < a->ne[2]; j++) {
-            for (int k = 0; k < a->ne[1]; k++) {
-                for (int l = 0; l < a->ne[0]; l++) {
-                    if (a->type == GGML_TYPE_F32) {
-                        float * aval = (float *) (
-                            (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
-                        printf("%.4f ", *aval);
-                    } else if (a->type == GGML_TYPE_I32) {
-                        int32_t * aval = (int32_t *) (
-                            (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
-                        printf("%d ", *aval);
-                    } else {
-                        throw;
-                    }
-                }
-                printf("\n");
-            }
-            printf("\n\n");
-        }
-    }
-}
-
-static void bark_print_statistics(gpt_model & model) {
-    printf("\n\n");
-    printf("%s: mem per token = %8.2f MB\n", __func__, model.mem_per_token/1000.0f/1000.0f);
-    printf("%s:   sample time = %8.2f ms\n", __func__, model.t_sample_us/1000.0f);
-    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, model.t_predict_us/1000.0f, model.t_predict_us/1000.0f);
-    printf("%s:    total time = %8.2f ms\n", __func__, model.t_main_us/1000.0f);
-    printf("\n");
-}
+};
 
 struct bark_context * bark_new_context_with_model(struct bark_model * model) {
     if (!model) {
@@ -201,11 +183,11 @@ struct bark_context * bark_new_context_with_model(struct bark_model * model) {
     return ctx;
 }
 
-bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expected_size) {
+int bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expected_size) {
     auto fin = std::ifstream(fname, std::ios::binary);
     if (!fin) {
         fprintf(stderr, "%s: faield to open '%s'\n", __func__, fname.c_str());
-        return false;
+        return 1;
     }
 
     // verify magic
@@ -214,7 +196,7 @@ bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expect
         fin.read((char *) &magic, sizeof(magic));
         if (magic != GGML_FILE_MAGIC) {
             fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname.c_str());
-            return false;
+            return 1;
         }
     }
 
@@ -224,7 +206,7 @@ bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expect
     // 5 special tokens: [UNK, SEP, MASK, PAD, CLS]
     if (n_vocab != expected_size) {
         fprintf(stderr, "%s: wrong voculary size (%d != %d)\n", __func__, n_vocab, expected_size);
-        return false;
+        return 1;
     }
 
     std::string word;
@@ -248,14 +230,14 @@ bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expect
         vocab.id_to_token[i] = word;
     }
 
-    return true;
+    return 0;
 }
 
-bool gpt_model_load(const std::string& fname, gpt_model& model) {
+int gpt_model_load(const std::string& fname, gpt_model& model) {
     auto fin = std::ifstream(fname, std::ios::binary);
     if (!fin) {
         fprintf(stderr, "%s: failed to open '%s'\n", __func__, fname.c_str());
-        return false;
+        return 1;
     }
 
     // verify magic
@@ -264,7 +246,7 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
         fin.read((char *) &magic, sizeof(magic));
         if (magic != GGML_FILE_MAGIC) {
             fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname.c_str());
-            return false;
+            return 1;
         }
     }
 
@@ -304,7 +286,7 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
     if (wtype == GGML_TYPE_COUNT) {
         fprintf(stderr, "%s: invalid model file '%s' (bad ftype value %d)\n",
                 __func__, fname.c_str(), model.hparams.ftype);
-        return false;
+        return 1;
     }
 
     auto & ctx = model.ctx;
@@ -367,7 +349,7 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
         model.ctx = ggml_init(params);
         if (!model.ctx) {
             fprintf(stderr, "%s: ggml_init() failed\n", __func__);
-            return false;
+            return 1;
         }
     }
 
@@ -497,19 +479,19 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
 
             if (model.tensors.find(name.data()) == model.tensors.end()) {
                 fprintf(stderr, "%s: unknown tensor '%s' in model file\n", __func__, name.data());
-                return false;
+                return 1;
             }
 
             auto tensor = model.tensors[name.data()];
             if (ggml_nelements(tensor) != nelements) {
                 fprintf(stderr, "%s: tensor '%s' has wrong size in model file\n", __func__, name.data());
-                return false;
+                return 1;
             }
 
             if (tensor->ne[0] != ne[0] || tensor->ne[1] != ne[1]) {
                 fprintf(stderr, "%s: tensor '%s' has wrong shape in model file: got [%d, %d], expected [%d, %d]\n",
                         __func__, name.data(), (int) tensor->ne[0], (int) tensor->ne[1], ne[0], ne[1]);
-                return false;
+                return 1;
             }
 
             const size_t bpe = ggml_type_size(ggml_type(ttype));
@@ -517,7 +499,7 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
             if ((nelements*bpe)/ggml_blck_size(tensor->type) != ggml_nbytes(tensor)) {
                 fprintf(stderr, "%s: tensor '%s' has wrong size in model file: got %zu, expected %zu\n",
                         __func__, name.data(), ggml_nbytes(tensor), nelements*bpe);
-                return false;
+                return 1;
             }
 
             fin.read(reinterpret_cast<char *>(tensor->data), ggml_nbytes(tensor));
@@ -533,32 +515,34 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
 
     fin.close();
 
-    return true;
+    return 0;
 }
 
-bool bark_model_load(const std::string & dirname, bark_model & model) {
+struct bark_model * bark_load_model_from_file(const std::string & dirname) {
     printf("%s: loading model from '%s'\n", __func__, dirname.c_str());
+
+    bark_model * model = new bark_model;
 
     // text
     {
         printf("%s: reading bark text model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_text.bin";
-        if(!gpt_model_load(fname, model.text_model)) {
+        if (gpt_model_load(fname, model->text_model) > 0) {
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
-            return false;
+            return nullptr;
         }
-        model.memsize += model.text_model.memsize;
+        model->memsize += model->text_model.memsize;
     }
 
     // vocab
     {
         printf("%s: reading bark vocab\n", __func__);
         const std::string fname     = dirname + "/ggml_vocab.bin";
-        const gpt_hparams hparams   = model.text_model.hparams;
+        const gpt_hparams hparams   = model->text_model.hparams;
         const int32_t expected_size = hparams.n_in_vocab - hparams.n_out_vocab - 5;
-        if(!bark_vocab_load(fname, model.vocab, expected_size)) {
+        if (bark_vocab_load(fname, model->vocab, expected_size) > 0) {
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
-            return false;
+            return nullptr;
         }
     }
 
@@ -566,38 +550,347 @@ bool bark_model_load(const std::string & dirname, bark_model & model) {
     {
         printf("\n%s: reading bark coarse model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_coarse.bin";
-        if(!gpt_model_load(fname, model.coarse_model)) {
+        if (gpt_model_load(fname, model->coarse_model) > 0) {
             fprintf(stderr, "%s: invalid model file '%s' (bad coarse)\n", __func__, fname.c_str());
-            return false;
+            return nullptr;
         }
-        model.memsize += model.coarse_model.memsize;
+        model->memsize += model->coarse_model.memsize;
     }
 
     // fine
     {
         printf("\n%s: reading bark fine model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_fine.bin";
-        if(!gpt_model_load(fname, model.fine_model)) {
+        if (gpt_model_load(fname, model->fine_model) > 0) {
             fprintf(stderr, "%s: invalid model file '%s' (bad fine)\n", __func__, fname.c_str());
-            return false;
+            return nullptr;
         }
-        model.memsize += model.fine_model.memsize;
+        model->memsize += model->fine_model.memsize;
     }
 
     // codec
     {
         printf("\n%s: reading bark codec model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_codec.bin";
-        if(!encodec_model_load(fname, model.codec_model)) {
+        if (encodec_model_load(fname, model->codec_model) > 0) {
             fprintf(stderr, "%s: invalid model file '%s' (bad codec)\n", __func__, fname.c_str());
-            return false;
+            return nullptr;
         }
-        model.memsize += model.codec_model.memsize;
+        model->memsize += model->codec_model.memsize;
     }
 
-    printf("\n%s: total model size  = %8.2f MB\n", __func__, model.memsize/1024.0/1024.0);
+    printf("\n%s: total model size  = %8.2f MB\n", __func__, model->memsize/1024.0/1024.0);
 
-    return true;
+    return model;
+}
+
+int ggml_common_quantize_0(
+        std::ifstream & fin,
+        std::ofstream & fout,
+        const ggml_ftype ftype,
+        const std::vector<std::string> & to_quant,
+        const std::vector<std::string> & to_skip) {
+
+    ggml_type qtype = GGML_TYPE_F32;
+
+    switch (ftype) {
+        case GGML_FTYPE_MOSTLY_Q4_0: qtype = GGML_TYPE_Q4_0; break;
+        case GGML_FTYPE_MOSTLY_Q4_1: qtype = GGML_TYPE_Q4_1; break;
+        case GGML_FTYPE_MOSTLY_Q5_0: qtype = GGML_TYPE_Q5_0; break;
+        case GGML_FTYPE_MOSTLY_Q5_1: qtype = GGML_TYPE_Q5_1; break;
+        case GGML_FTYPE_MOSTLY_Q8_0: qtype = GGML_TYPE_Q8_0; break;
+        case GGML_FTYPE_UNKNOWN:
+        case GGML_FTYPE_ALL_F32:
+        case GGML_FTYPE_MOSTLY_F16:
+        case GGML_FTYPE_MOSTLY_Q4_1_SOME_F16:
+        case GGML_FTYPE_MOSTLY_Q2_K:
+        case GGML_FTYPE_MOSTLY_Q3_K:
+        case GGML_FTYPE_MOSTLY_Q4_K:
+        case GGML_FTYPE_MOSTLY_Q5_K:
+        case GGML_FTYPE_MOSTLY_Q6_K:
+                {
+                    fprintf(stderr, "%s: invalid model type %d\n", __func__, ftype);
+                    return 1;
+                }
+    };
+
+    if (!ggml_is_quantized(qtype)) {
+        fprintf(stderr, "%s: invalid quantization type %d (%s)\n", __func__, qtype, ggml_type_name(qtype));
+        return 1;
+    }
+
+    size_t total_size_org = 0;
+    size_t total_size_new = 0;
+
+    std::vector<float> work;
+
+    std::vector<uint8_t>     data_u8;
+    std::vector<ggml_fp16_t> data_f16;
+    std::vector<float>       data_f32;
+
+    std::vector<int64_t> hist_all(1 << 4, 0);
+
+    while (true) {
+        int32_t n_dims;
+        int32_t length;
+        int32_t ttype;
+
+        read_safe(fin, n_dims);
+        read_safe(fin, length);
+        read_safe(fin, ttype);
+
+        if (fin.eof()) {
+            break;
+        }
+
+        int32_t nelements = 1;
+        int32_t ne[4] = { 1, 1, 1, 1 };
+        for (int i = 0; i < n_dims; ++i) {
+            read_safe(fin, ne[i]);
+            nelements *= ne[i];
+        }
+
+        std::string name(length, 0);
+        fin.read(&name[0], length);
+
+        printf("%64s - [%5d, %5d, %5d], type = %6s ", name.data(), ne[0], ne[1], ne[2], ggml_type_name((ggml_type) ttype));
+
+        bool quantize = false;
+
+        // check if we should quantize this tensor
+        for (const auto & s : to_quant) {
+            if (std::regex_match(name, std::regex(s))) {
+                quantize = true;
+                break;
+            }
+        }
+
+        // check if we should skip this tensor
+        for (const auto & s : to_skip) {
+            if (std::regex_match(name, std::regex(s))) {
+                quantize = false;
+                break;
+            }
+        }
+
+        // quantize only 2D tensors
+        quantize &= (n_dims == 2);
+
+        if (quantize) {
+            if (ttype != GGML_TYPE_F32 && ttype != GGML_TYPE_F16) {
+                fprintf(stderr, "%s: unsupported ttype %d (%s) for integer quantization\n", __func__, ttype, ggml_type_name((ggml_type) ttype));
+                return 1;
+            }
+
+            if (ttype == GGML_TYPE_F16) {
+                data_f16.resize(nelements);
+                fin.read(reinterpret_cast<char *>(data_f16.data()), nelements * sizeof(ggml_fp16_t));
+                data_f32.resize(nelements);
+                for (int i = 0; i < nelements; ++i) {
+                    data_f32[i] = ggml_fp16_to_fp32(data_f16[i]);
+                }
+            } else {
+                data_f32.resize(nelements);
+                fin.read(reinterpret_cast<char *>(data_f32.data()), nelements * sizeof(float));
+            }
+
+            ttype = qtype;
+        } else {
+            const int bpe = (ttype == 0) ? sizeof(float) : sizeof(uint16_t);
+
+            data_u8.resize(nelements*bpe);
+            fin.read(reinterpret_cast<char *>(data_u8.data()), nelements * bpe);
+        }
+
+        write_safe(fout, n_dims);
+        write_safe(fout, length);
+        write_safe(fout, ttype);
+
+        for (int i = 0; i < n_dims; ++i) {
+            write_safe(fout, ne[i]);
+        }
+        fout.write(&name[0], length);
+
+        if (quantize) {
+            work.resize(nelements); // for quantization
+
+            size_t cur_size = 0;
+            std::vector<int64_t> hist_cur(1 << 4, 0);
+
+            switch ((ggml_type) ttype) {
+                case GGML_TYPE_Q4_0:
+                    {
+                        cur_size = ggml_quantize_q4_0(data_f32.data(), work.data(), nelements, ne[0], hist_cur.data());
+                    } break;
+                case GGML_TYPE_Q4_1:
+                    {
+                        cur_size = ggml_quantize_q4_1(data_f32.data(), work.data(), nelements, ne[0], hist_cur.data());
+                    } break;
+                case GGML_TYPE_Q5_0:
+                    {
+                        cur_size = ggml_quantize_q5_0(data_f32.data(), work.data(), nelements, ne[0], hist_cur.data());
+                    } break;
+                case GGML_TYPE_Q5_1:
+                    {
+                        cur_size = ggml_quantize_q5_1(data_f32.data(), work.data(), nelements, ne[0], hist_cur.data());
+                    } break;
+                case GGML_TYPE_Q8_0:
+                    {
+                        cur_size = ggml_quantize_q8_0(data_f32.data(), work.data(), nelements, ne[0], hist_cur.data());
+                    } break;
+                case GGML_TYPE_F32:
+                case GGML_TYPE_F16:
+                case GGML_TYPE_I8:
+                case GGML_TYPE_I16:
+                case GGML_TYPE_I32:
+                case GGML_TYPE_Q8_1:
+                case GGML_TYPE_Q2_K:
+                case GGML_TYPE_Q3_K:
+                case GGML_TYPE_Q4_K:
+                case GGML_TYPE_Q5_K:
+                case GGML_TYPE_Q6_K:
+                case GGML_TYPE_Q8_K:
+                case GGML_TYPE_COUNT:
+                    {
+                        fprintf(stderr, "%s: unsupported quantization type %d (%s)\n", __func__, ttype, ggml_type_name((ggml_type) ttype));
+                        return 1;
+                    }
+            }
+
+            fout.write(reinterpret_cast<char *>(work.data()), cur_size);
+            total_size_new += cur_size;
+
+            printf("size = %8.2f MB -> %8.2f MB | hist: ", nelements * sizeof(float)/1024.0/1024.0, cur_size/1024.0/1024.0);
+            for (int i = 0; i < (int) hist_cur.size(); ++i) {
+                hist_all[i] += hist_cur[i];
+            }
+
+            for (int i = 0; i < (int) hist_cur.size(); ++i) {
+                printf("%5.3f ", hist_cur[i] / (float)nelements);
+            }
+            printf("\n");
+        } else {
+            printf("size = %8.3f MB\n", data_u8.size()/1024.0/1024.0);
+            fout.write(reinterpret_cast<char *>(data_u8.data()), data_u8.size());
+            total_size_new += data_u8.size();
+        }
+
+        total_size_org += nelements * sizeof(float);
+    }
+
+    printf("%s: model size  = %8.2f MB\n", __func__, total_size_org/1024.0/1024.0);
+    printf("%s: quant size  = %8.2f MB | ftype = %d (%s)\n", __func__, total_size_new/1024.0/1024.0, ftype, ggml_type_name(qtype));
+
+    {
+        int64_t sum_all = 0;
+        for (int i = 0; i < (int) hist_all.size(); ++i) {
+            sum_all += hist_all[i];
+        }
+
+        printf("%s: hist: ", __func__);
+        for (int i = 0; i < (int) hist_all.size(); ++i) {
+            printf("%5.3f ", hist_all[i] / (float)sum_all);
+        }
+        printf("\n");
+    }
+
+    return 0;
+}
+
+int bark_model_quantize(
+        const std::string & fname_inp,
+        const std::string & fname_out,
+               ggml_ftype   ftype) {
+    printf("%s: loading model from '%s'\n", __func__, fname_inp.c_str());
+
+    gpt_model model;
+
+    auto fin = std::ifstream(fname_inp, std::ios::binary);
+    if (!fin) {
+        fprintf(stderr, "%s: failed to open '%s' for reading\n", __func__, fname_inp.c_str());
+        return 1;
+    }
+
+    auto fout = std::ofstream(fname_out, std::ios::binary);
+    if (!fout) {
+        fprintf(stderr, "%s: failed to open '%s' for writing\n", __func__, fname_out.c_str());
+        return 1;
+    }
+
+    // verify magic
+    {
+        uint32_t magic;
+        fin.read((char *) &magic, sizeof(magic));
+        if (magic != GGML_FILE_MAGIC) {
+            fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname_inp.c_str());
+            return 1;
+        }
+
+        fout.write((char *) &magic, sizeof(magic));
+    }
+
+    gpt_hparams hparams;
+
+    // load hparams
+    {
+        auto & hparams = model.hparams;
+
+        read_safe(fin, hparams.n_layer);
+        read_safe(fin, hparams.n_head);
+        read_safe(fin, hparams.n_embd);
+        read_safe(fin, hparams.block_size);
+        read_safe(fin, hparams.n_in_vocab);
+        read_safe(fin, hparams.n_out_vocab);
+        read_safe(fin, hparams.n_lm_heads);
+        read_safe(fin, hparams.n_wtes);
+        read_safe(fin, hparams.ftype);
+
+        const int32_t qntvr_src = hparams.ftype / GGML_QNT_VERSION_FACTOR;
+        int32_t ftype_dst = GGML_QNT_VERSION * GGML_QNT_VERSION_FACTOR + ftype;
+
+        printf("%s: n_in_vocab  = %d\n", __func__, hparams.n_in_vocab);
+        printf("%s: n_out_vocab = %d\n", __func__, hparams.n_out_vocab);
+        printf("%s: block_size  = %d\n", __func__, hparams.block_size);
+        printf("%s: n_embd      = %d\n", __func__, hparams.n_embd);
+        printf("%s: n_head      = %d\n", __func__, hparams.n_head);
+        printf("%s: n_layer     = %d\n", __func__, hparams.n_layer);
+        printf("%s: n_lm_heads  = %d\n", __func__, hparams.n_lm_heads);
+        printf("%s: n_wtes      = %d\n", __func__, hparams.n_wtes);
+        printf("%s: ftype (src) = %d\n", __func__, hparams.ftype);
+        printf("%s: qntvr (src) = %d\n", __func__, qntvr_src);
+        printf("%s: ftype (dst) = %d\n", __func__, ftype_dst);
+        printf("%s: qntvr (dst) = %d\n", __func__, GGML_QNT_VERSION);
+
+        write_safe(fout, hparams.n_layer);
+        write_safe(fout, hparams.n_head);
+        write_safe(fout, hparams.n_embd);
+        write_safe(fout, hparams.block_size);
+        write_safe(fout, hparams.n_in_vocab);
+        write_safe(fout, hparams.n_out_vocab);
+        write_safe(fout, hparams.n_lm_heads);
+        write_safe(fout, hparams.n_wtes);
+        write_safe(fout, ftype_dst);
+    }
+
+    // regexes of tensor names to be quantized
+    const std::vector<std::string> to_quant = {
+        "model/wte/.*",
+        "model/lm_head/.*",
+        "model/h.*/attn/c_attn/w",
+        "model/h.*/attn/c_proj/w",
+        "model/h.*/mlp/c_fc/w",
+        "model/h.*/mlp/c_proj/w",
+    };
+
+    if (ggml_common_quantize_0(fin, fout, ftype, to_quant, {}) > 0) {
+        fprintf(stderr, "%s: failed to quantize model '%s'\n", __func__, fname_inp.c_str());
+        return 1;
+    }
+
+    fin.close();
+    fout.close();
+
+    return 0;
 }
 
 std::string strip_accents(const std::string &in_str) {
@@ -693,9 +986,9 @@ void bert_tokenize(
     *n_tokens = t;
 }
 
-bool fine_gpt_eval(
+int fine_gpt_eval(
           gpt_model & model,
-     bark_vocab::id * tokens,
+         bark_token * tokens,
                 int   n_tokens,
               float * logits,
                 int   n_threads,
@@ -730,7 +1023,7 @@ bool fine_gpt_eval(
         buf = realloc(buf, buf_size);
         if (buf == nullptr) {
             fprintf(stderr, "%s: failed to allocate %zu bytes\n", __func__, buf_size);
-            return false;
+            return 1;
         }
     }
 
@@ -893,14 +1186,15 @@ bool fine_gpt_eval(
 
     int64_t t_predict_end_us = ggml_time_us();
     model.t_predict_us += (t_predict_end_us - t_predict_start_us);
+    model.n_predict += 1;
 
-    return true;
+    return 0;
 }
 
 
 bool gpt_eval(
           gpt_model & model,
-     bark_vocab::id * tokens,
+         bark_token * tokens,
                 int   n_tokens,
               float * logits,
                 int * n_past,
@@ -931,7 +1225,7 @@ bool gpt_eval(
         buf = realloc(buf, buf_size);
         if (buf == nullptr) {
             fprintf(stderr, "%s: failed to allocate %zu bytes\n", __func__, buf_size);
-            return false;
+            return 1;
         }
     }
 
@@ -1227,8 +1521,9 @@ bool gpt_eval(
     ggml_free(ctx0);
 
     model.t_predict_us += (ggml_time_us() - t_predict_start_us);
+    model.n_predict += 1;
 
-    return true;
+    return 0;
 }
 
 void softmax(std::vector<float> & logits) {
@@ -1248,7 +1543,7 @@ void softmax(std::vector<float> & logits) {
         l /= sum;
 }
 
-bark_vocab::id gpt_multinomial_sample(
+bark_token gpt_multinomial_sample(
         std::vector<float> & logits,
         std::mt19937 & rng,
         float temp,
@@ -1260,7 +1555,7 @@ bark_vocab::id gpt_multinomial_sample(
 
     softmax(logits);
 
-    std::discrete_distribution<bark_vocab::id> dist(logits.begin(), logits.end());
+    std::discrete_distribution<bark_token> dist(logits.begin(), logits.end());
     int next = dist(rng);
 
     // likelihood of EOS token
@@ -1270,7 +1565,7 @@ bark_vocab::id gpt_multinomial_sample(
     return next;
 }
 
-bark_vocab::id gpt_argmax_sample(std::vector<float> & logits, float * eos_p) {
+bark_token gpt_argmax_sample(std::vector<float> & logits, float * eos_p) {
     int n_logits = logits.size();
 
     // testing purposes
@@ -1295,15 +1590,16 @@ bark_vocab::id gpt_argmax_sample(std::vector<float> & logits, float * eos_p) {
     return next;
 }
 
-bark_vocab::id gpt_sample(
+bark_token gpt_sample(
             std::vector<float> & logits,
                   std::mt19937 & rng,
                          float   temp,
                          float * eos_p,
-                       int64_t * t_sample_us) {
+                       int64_t * t_sample_us,
+                       int64_t * n_sample) {
     int64_t t_sample_start_us = ggml_time_us();
 
-    bark_vocab::id res;
+    bark_token res;
     if (temp == 0.0f) {
         res = gpt_argmax_sample(logits, eos_p);
     } else {
@@ -1312,6 +1608,7 @@ bark_vocab::id gpt_sample(
 
     int64_t t_sample_end_us = ggml_time_us();
     *t_sample_us += (t_sample_end_us - t_sample_start_us);
+    *n_sample += 1;
 
     return res;
 }
@@ -1345,6 +1642,15 @@ bark_sequence bark_tokenize_input(const char * text, const bark_vocab & vocab, i
     return tokens;
 }
 
+static void bark_print_statistics(gpt_model & model) {
+    printf("\n\n");
+    printf("%s: mem per token = %8.2f MB\n", __func__, model.mem_per_token/1000.0f/1000.0f);
+    printf("%s:   sample time = %8.2f ms / %lld tokens\n", __func__, model.t_sample_us/1000.0f, model.n_sample);
+    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, model.t_predict_us/1000.0f, model.t_predict_us/model.n_predict/1000.0f);
+    printf("%s:    total time = %8.2f ms\n", __func__, model.t_main_us/1000.0f);
+    printf("\n");
+}
+
 void bark_forward_text_encoder(
         struct bark_context * ctx,
                       float   temp,
@@ -1372,7 +1678,7 @@ void bark_forward_text_encoder(
     // dry run to estimate mem_per_token
     {
         int n_past = 0;
-        bark_vocab::id decoy[4] = { 0, 1, 2, 3 };
+        bark_token decoy[4] = { 0, 1, 2, 3 };
         gpt_eval(model, decoy, 4, nullptr, &n_past, false, n_threads);
     }
 
@@ -1386,7 +1692,8 @@ void bark_forward_text_encoder(
 
         input.clear();
 
-        bark_vocab::id next = gpt_sample(logits, ctx->rng, temp, &eos_p, &model.t_sample_us);
+        bark_token next = gpt_sample(
+            logits, ctx->rng, temp, &eos_p, &model.t_sample_us, &model.n_sample);
 
         if (next == SEMANTIC_VOCAB_SIZE || eos_p >= min_eos_p)
             break;
@@ -1443,7 +1750,7 @@ void bark_forward_coarse_encoder(
     // dry run to estimate mem_per_token
     {
         int n_past = 0;
-        bark_vocab::id decoy[4] = { 0, 1, 2, 3 };
+        bark_token decoy[4] = { 0, 1, 2, 3 };
         gpt_eval(model, decoy, 4, nullptr, &n_past, false, n_threads);
     }
 
@@ -1471,7 +1778,7 @@ void bark_forward_coarse_encoder(
         );
 
         int n_past = 0;
-        // TODO: this is a hack, 
+        // TODO: this is a hack,
         model.mem_per_token *= 1.1;  // context length is growing, mem_per_token must grow as well
 
         for (int j = 0; j < sliding_window_size; j++) {
@@ -1487,7 +1794,8 @@ void bark_forward_coarse_encoder(
             int end_ix    = SEMANTIC_VOCAB_SIZE + (2 - is_major) * CODEBOOK_SIZE;
             std::vector<float> relevant_logits(logits.begin() + start_ix, logits.begin() + end_ix);
 
-            bark_vocab::id next = gpt_sample(relevant_logits, ctx->rng, temp, NULL, &model.t_sample_us);
+            bark_token next = gpt_sample(
+                relevant_logits, ctx->rng, temp, NULL, &model.t_sample_us, &model.n_sample);
 
             next += start_ix;
 
@@ -1557,7 +1865,7 @@ void bark_forward_fine_encoder(struct bark_context * ctx,float temp, int n_threa
     }
 
     // dry run to estimate mem_per_token
-    bark_vocab::id decoy[16] = { 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8 };
+    bark_token decoy[16] = { 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8 };
     fine_gpt_eval(model, decoy, 16, nullptr, n_threads, 2);
 
     int n_loops = std::max(0, (int) ceilf((input.size() - 1024)/512.f)) + 1;
@@ -1585,7 +1893,8 @@ void bark_forward_fine_encoder(struct bark_context * ctx,float temp, int n_threa
                 std::vector<float> relevant_logits(logits.begin() + i*1056, logits.begin() + (i+1)*1056);
                 relevant_logits.resize(CODEBOOK_SIZE);
 
-                bark_vocab::id next = gpt_sample(relevant_logits, ctx->rng, temp, NULL, &model.t_sample_us);
+                bark_token next = gpt_sample(
+                    relevant_logits, ctx->rng, temp, NULL, &model.t_sample_us, &model.n_sample);
 
                 in_buffer[nn*1024 + rel_start_fill_ix + i] = next;
             }
@@ -1616,7 +1925,7 @@ void bark_forward_fine_encoder(struct bark_context * ctx,float temp, int n_threa
     bark_print_statistics(model);
 }
 
-bool encodec_eval(
+int encodec_eval(
          const bark_codes & tokens,
             encodec_model & model,
               audio_arr_t & audio_arr) {
@@ -1639,7 +1948,7 @@ bool encodec_eval(
         buf = realloc(buf, buf_size);
         if (buf == nullptr) {
             fprintf(stderr, "%s: failed to allocate %zu bytes\n", __func__, buf_size);
-            return false;
+            return 1;
         }
     }
 
@@ -1681,7 +1990,7 @@ bool encodec_eval(
 
     model.t_predict_us += (ggml_time_us() - t_predict_start_us);
 
-    return true;
+    return 0;
 }
 
 void bark_forward_encodec(struct bark_context * ctx) {
@@ -1705,7 +2014,7 @@ void bark_forward_encodec(struct bark_context * ctx) {
 
     printf("\n\n");
     printf("%s: mem per token = %zu bytes\n", __func__, model.mem_per_token);
-    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, model.t_predict_us/1000.0f, model.t_predict_us/1000.0f);
+    printf("%s:  predict time = %8.2f ms\n", __func__, model.t_predict_us/1000.0f);
     printf("%s:    total time = %8.2f ms\n", __func__, model.t_main_us/1000.0f);
     printf("\n");
 }
@@ -1728,7 +2037,7 @@ int write_wav_on_disk(audio_arr_t& audio_arr, std::string dest_path) {
     return 0;
 }
 
-bool bark_generate_audio(
+int bark_generate_audio(
     struct bark_context * ctx,
              const char * text,
             std::string & dest_wav_path,
@@ -1765,10 +2074,10 @@ bool bark_generate_audio(
         write_wav_on_disk(ctx->audio_arr, dest_wav_path);
     }
 
-    return true;
+    return 0;
 }
 
-bool bark_params_parse(int argc, char ** argv, bark_params & params) {
+int bark_params_parse(int argc, char ** argv, bark_params & params) {
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
 
@@ -1792,7 +2101,7 @@ bool bark_params_parse(int argc, char ** argv, bark_params & params) {
         }
     }
 
-    return true;
+    return 0;
 }
 
 void bark_print_usage(char ** argv, const bark_params & params) {
@@ -1811,6 +2120,10 @@ void bark_print_usage(char ** argv, const bark_params & params) {
     fprintf(stderr, "\n");
 }
 
+void bark_free_model(struct bark_model * model) {
+    delete model;
+}
+
 void bark_free(bark_context * ctx) {
     ggml_free(ctx->model.coarse_model.ctx);
     ggml_free(ctx->model.fine_model.ctx);
@@ -1818,4 +2131,161 @@ void bark_free(bark_context * ctx) {
     ggml_free(ctx->model.codec_model.ctx);
 
     delete ctx;
+}
+
+bool allequal(struct ggml_tensor * a, struct ggml_tensor * b, std::string test_name) {
+    assert(a->ne[0] == b->ne[0]);
+    assert(a->ne[1] == b->ne[1]);
+    assert(a->ne[2] == b->ne[2]);
+    assert(a->ne[3] == b->ne[3]);
+
+    assert(a->type == GGML_TYPE_I32);
+    assert(b->type == GGML_TYPE_I32);
+
+    int64_t n_violations = 0;
+
+    for (int i = 0; i < a->ne[3]; i++) {
+        for (int j = 0; j < a->ne[2]; j++) {
+            for (int k = 0; k < a->ne[1]; k++) {
+                for (int l = 0; l < a->ne[0]; l++) {
+                    int32_t * aval = (int32_t *) (
+                        (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
+                    int32_t * bval = (int32_t *) (
+                        (char *) b->data + i*b->nb[3] + j*b->nb[2] + k*b->nb[1] + l*b->nb[0]);
+                    if (*aval != *bval)
+                        n_violations += 1;
+                }
+            }
+        }
+    }
+
+    int64_t n_elements = a->ne[0]*a->ne[1]*a->ne[2]*a->ne[3];
+    float perc_viol = 100.0f*float(n_violations)/n_elements;
+
+    printf("%s: %s\n", __func__, test_name.c_str());
+    printf("%s: %%_viol=%.1f\n", __func__, perc_viol);
+    printf("\n");
+    return n_violations == 0;
+}
+
+bool allclose(struct ggml_tensor * a, struct ggml_tensor * b, float tol, std::string test_name) {
+    assert(a->ne[0] == b->ne[0]);
+    assert(a->ne[1] == b->ne[1]);
+    assert(a->ne[2] == b->ne[2]);
+    assert(a->ne[3] == b->ne[3]);
+
+    assert(a->type == GGML_TYPE_F32);
+    assert(b->type == GGML_TYPE_F32);
+
+    float max_violation = -INFINITY;
+    int64_t n_violations = 0;
+
+    for (int i = 0; i < a->ne[3]; i++) {
+        for (int j = 0; j < a->ne[2]; j++) {
+            for (int k = 0; k < a->ne[1]; k++) {
+                for (int l = 0; l < a->ne[0]; l++) {
+                    float * aval = (float *) (
+                        (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
+                    float * bval = (float *) (
+                        (char *) b->data + i*b->nb[3] + j*b->nb[2] + k*b->nb[1] + l*b->nb[0]);
+                    float violation = fabs(*aval - *bval);
+                    max_violation = std::max(max_violation, violation);
+                    if (violation > tol)
+                        n_violations += 1;
+                }
+            }
+        }
+    }
+
+    int64_t n_elements = a->ne[0]*a->ne[1]*a->ne[2]*a->ne[3];
+    float perc_viol = 100.0f*float(n_violations)/n_elements;
+
+    printf("%s: %s\n", __func__, test_name.c_str());
+    printf("%s: max_viol=%.4f; viol=%.1f%% (tol=%.4f)\n", __func__, max_violation, perc_viol, tol);
+    printf("\n");
+    return n_violations == 0;
+}
+
+
+void read_tensor_from_file_f32(std::ifstream & fin, struct ggml_tensor *t) {
+    int32_t n_dims;
+    read_safe(fin, n_dims);
+
+    int32_t ne[3] = { 1, 1, 1 };
+    for (int i = 0; i < n_dims; i++) { read_safe(fin, ne[i]); }
+
+    assert(t->ne[0] == ne[0]);
+    assert(t->ne[1] == ne[1]);
+    assert(t->ne[2] == ne[2]);
+    assert(t->type == GGML_TYPE_F32);
+
+    for (int i = 0; i < ne[2]; i++) {
+        for (int j = 0; j < ne[1]; j++) {
+            int offset = i*t->nb[2] + j*t->nb[1];
+            fin.read(reinterpret_cast<char *>(t->data) + offset, ne[0]*sizeof(float));
+        }
+    }
+}
+
+void read_tensor_from_file_int32(std::ifstream & fin, struct ggml_tensor *t) {
+    int32_t n_dims;
+    read_safe(fin, n_dims);
+
+    int32_t ne[3] = { 1, 1, 1 };
+    for (int i = 0; i < n_dims; i++) { read_safe(fin, ne[i]); }
+
+    assert(t->ne[0] == ne[0]);
+    assert(t->ne[1] == ne[1]);
+    assert(t->ne[2] == ne[2]);
+    assert(t->type == GGML_TYPE_I32);
+
+    for (int i = 0; i < ne[2]; i++) {
+        for (int j = 0; j < ne[1]; j++) {
+            int offset = i*t->nb[2] + j*t->nb[1];
+            fin.read(reinterpret_cast<char *>(t->data) + offset, ne[0]*sizeof(int32_t));
+        }
+    }
+}
+
+void read_tensor_from_file(std::ifstream & fin, struct ggml_tensor * t) {
+    if (t->type == GGML_TYPE_F32) {
+        read_tensor_from_file_f32(fin, t);
+    } else if (t->type == GGML_TYPE_I32) {
+        read_tensor_from_file_int32(fin, t);
+    } else {
+        throw;
+    }
+}
+
+void load_gt_tensor(std::string path, struct ggml_tensor * t) {
+    auto fin = std::ifstream(path, std::ios::binary);
+    if (!fin) {
+        fprintf(stderr, "failed to open.");
+        throw;
+    }
+    read_tensor_from_file(fin, t);
+}
+
+void print_tensor(struct ggml_tensor * a) {
+    for (int i = 0; i < a->ne[3]; i++) {
+        for (int j = 0; j < a->ne[2]; j++) {
+            for (int k = 0; k < a->ne[1]; k++) {
+                for (int l = 0; l < a->ne[0]; l++) {
+                    if (a->type == GGML_TYPE_F32) {
+                        float * aval = (float *) (
+                            (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
+                        printf("%.4f ", *aval);
+                    } else if (a->type == GGML_TYPE_I32) {
+                        int32_t * aval = (int32_t *) (
+                            (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
+                        printf("%d ", *aval);
+                    } else {
+                        throw;
+                    }
+                }
+                printf("\n");
+            }
+            printf("\n\n");
+        }
+    }
 }

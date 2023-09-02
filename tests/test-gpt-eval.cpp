@@ -21,7 +21,7 @@ int main() {
     const std::string fname = "../ggml_weights/ggml_weights_text.bin";
 
     gpt_model model;
-    if(!gpt_model_load(fname, model)) {
+    if (gpt_model_load(fname, model) > 0) {
         fprintf(stderr, "%s: invalid model file '%s'\n", __func__, fname.c_str());
         return 1;
     }
@@ -36,7 +36,7 @@ int main() {
     // dry run to estimate mem_per_token
     {
         int n_past = 0;
-        bark_vocab::id decoy[4] = { 0, 1, 2, 3 };
+        bark_token decoy[4] = { 0, 1, 2, 3 };
         gpt_eval(model, decoy, 4, nullptr, &n_past, false, n_threads);
     }
 

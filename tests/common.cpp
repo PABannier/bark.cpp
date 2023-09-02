@@ -5,6 +5,8 @@
 #include "bark-util.h"
 #include "common.h"
 
+#define BARK_API_INTERNAL
+
 int64_t bytes_left(std::ifstream & f) {
     // utils to check all bytes are read from stream
     int64_t curr_pos = f.tellg();
