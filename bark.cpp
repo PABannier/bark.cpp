@@ -98,6 +98,10 @@ struct gpt_model {
     int64_t t_main_us    = 0;
 
     //
+    int64_t n_sample  = 0;
+    int64_t n_predict = 0;
+
+    //
     int64_t memsize = 0;
     size_t mem_per_token = 0;
 };
@@ -1182,6 +1186,7 @@ int fine_gpt_eval(
 
     int64_t t_predict_end_us = ggml_time_us();
     model.t_predict_us += (t_predict_end_us - t_predict_start_us);
+    model.n_predict += 1;
 
     return 0;
 }
@@ -1516,6 +1521,7 @@ bool gpt_eval(
     ggml_free(ctx0);
 
     model.t_predict_us += (ggml_time_us() - t_predict_start_us);
+    model.n_predict += 1;
 
     return 0;
 }
@@ -1589,7 +1595,8 @@ bark_token gpt_sample(
                   std::mt19937 & rng,
                          float   temp,
                          float * eos_p,
-                       int64_t * t_sample_us) {
+                       int64_t * t_sample_us,
+                       int64_t * n_sample) {
     int64_t t_sample_start_us = ggml_time_us();
 
     bark_token res;
@@ -1601,6 +1608,7 @@ bark_token gpt_sample(
 
     int64_t t_sample_end_us = ggml_time_us();
     *t_sample_us += (t_sample_end_us - t_sample_start_us);
+    *n_sample += 1;
 
     return res;
 }
@@ -1637,8 +1645,8 @@ bark_sequence bark_tokenize_input(const char * text, const bark_vocab & vocab, i
 static void bark_print_statistics(gpt_model & model) {
     printf("\n\n");
     printf("%s: mem per token = %8.2f MB\n", __func__, model.mem_per_token/1000.0f/1000.0f);
-    printf("%s:   sample time = %8.2f ms\n", __func__, model.t_sample_us/1000.0f);
-    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, model.t_predict_us/1000.0f, model.t_predict_us/1000.0f);
+    printf("%s:   sample time = %8.2f ms / %d tokens sampled\n", __func__, model.t_sample_us/1000.0f, model.n_sample);
+    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, model.t_predict_us/1000.0f, model.t_predict_us/model.n_predict/1000.0f);
     printf("%s:    total time = %8.2f ms\n", __func__, model.t_main_us/1000.0f);
     printf("\n");
 }
@@ -1684,7 +1692,8 @@ void bark_forward_text_encoder(
 
         input.clear();
 
-        bark_token next = gpt_sample(logits, ctx->rng, temp, &eos_p, &model.t_sample_us);
+        bark_token next = gpt_sample(
+            logits, ctx->rng, temp, &eos_p, &model.t_sample_us, &model.n_sample);
 
         if (next == SEMANTIC_VOCAB_SIZE || eos_p >= min_eos_p)
             break;
@@ -1785,7 +1794,8 @@ void bark_forward_coarse_encoder(
             int end_ix    = SEMANTIC_VOCAB_SIZE + (2 - is_major) * CODEBOOK_SIZE;
             std::vector<float> relevant_logits(logits.begin() + start_ix, logits.begin() + end_ix);
 
-            bark_token next = gpt_sample(relevant_logits, ctx->rng, temp, NULL, &model.t_sample_us);
+            bark_token next = gpt_sample(
+                relevant_logits, ctx->rng, temp, NULL, &model.t_sample_us, &model.n_sample);
 
             next += start_ix;
 
@@ -1883,7 +1893,8 @@ void bark_forward_fine_encoder(struct bark_context * ctx,float temp, int n_threa
                 std::vector<float> relevant_logits(logits.begin() + i*1056, logits.begin() + (i+1)*1056);
                 relevant_logits.resize(CODEBOOK_SIZE);
 
-                bark_token next = gpt_sample(relevant_logits, ctx->rng, temp, NULL, &model.t_sample_us);
+                bark_token next = gpt_sample(
+                    relevant_logits, ctx->rng, temp, NULL, &model.t_sample_us, &model.n_sample);
 
                 in_buffer[nn*1024 + rel_start_fill_ix + i] = next;
             }
@@ -2003,7 +2014,7 @@ void bark_forward_encodec(struct bark_context * ctx) {
 
     printf("\n\n");
     printf("%s: mem per token = %zu bytes\n", __func__, model.mem_per_token);
-    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, model.t_predict_us/1000.0f, model.t_predict_us/1000.0f);
+    printf("%s:  predict time = %8.2f ms\n", __func__, model.t_predict_us/1000.0f);
     printf("%s:    total time = %8.2f ms\n", __func__, model.t_main_us/1000.0f);
     printf("\n");
 }
