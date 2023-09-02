@@ -58,19 +58,6 @@ extern "C" {
     struct bark_model;
     struct bark_vocab;
 
-    struct bark_params {
-        int32_t n_threads = std::min(4, (int32_t) std::thread::hardware_concurrency());
-
-        // user prompt
-        char * prompt;
-
-        // paths
-        char * model_path;
-        char * dest_wav_path;
-
-        int32_t seed = 0;
-    };
-
     typedef int32_t bark_token;
 
     struct gpt_hparams;
@@ -100,10 +87,6 @@ extern "C" {
                      const char * fname,
                      bark_vocab & vocab,
                         int32_t   expected_size);
-
-    BARK_API int bark_params_parse(int argc, char ** argv, bark_params & params);
-
-    BARK_API void bark_print_usage(char ** argv, const bark_params & params);
 
 #ifdef __cplusplus
 }

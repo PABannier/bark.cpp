@@ -3,16 +3,72 @@
 
 #include <tuple>
 
+struct bark_params {
+    int32_t n_threads = std::min(4, (int32_t) std::thread::hardware_concurrency());
+
+    // user prompt
+    std::string prompt = "this is an audio";
+
+    // paths
+    std::string model_path = "./ggml_weights";
+    std::string dest_wav_path = "output.wav";
+
+    int32_t seed = 0;
+};
+
+void bark_print_usage(char ** argv, const bark_params & params) {
+    fprintf(stderr, "usage: %s [options]\n", argv[0]);
+    fprintf(stderr, "\n");
+    fprintf(stderr, "options:\n");
+    fprintf(stderr, "  -h, --help            show this help message and exit\n");
+    fprintf(stderr, "  -t N, --threads N     number of threads to use during computation (default: %d)\n", params.n_threads);
+    fprintf(stderr, "  -s N, --seed N        seed for random number generator (default: %d)\n", params.seed);
+    fprintf(stderr, "  -p PROMPT, --prompt PROMPT\n");
+    fprintf(stderr, "                        prompt to start generation with (default: random)\n");
+    fprintf(stderr, "  -m FNAME, --model FNAME\n");
+    fprintf(stderr, "                        model path (default: %s)\n", params.model_path.c_str());
+    fprintf(stderr, "  -o FNAME, --outwav FNAME\n");
+    fprintf(stderr, "                        output generated wav (default: %s)\n", params.dest_wav_path.c_str());
+    fprintf(stderr, "\n");
+}
+
+int bark_params_parse(int argc, char ** argv, bark_params & params) {
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+
+        if (arg == "-t" || arg == "--threads") {
+            params.n_threads = std::stoi(argv[++i]);
+        } else if (arg == "-p" || arg == "--prompt") {
+            params.prompt = argv[++i];
+        } else if (arg == "-m" || arg == "--model") {
+            params.model_path = argv[++i];
+        } else if (arg == "-s" || arg == "--seed") {
+            params.seed = std::stoi(argv[++i]);
+        } else if (arg == "-o" || arg == "--outwav") {
+            params.dest_wav_path = argv[++i];
+        } else if (arg == "-h" || arg == "--help") {
+            bark_print_usage(argv, params);
+            exit(0);
+        } else {
+            fprintf(stderr, "error: unknown argument: %s\n", arg.c_str());
+            bark_print_usage(argv, params);
+            exit(0);
+        }
+    }
+
+    return 0;
+}
+
 std::tuple<struct bark_model *, struct bark_context *> bark_init_from_params(bark_params & params) {
-    bark_model * model = bark_load_model_from_file(params.model_path);
+    bark_model * model = bark_load_model_from_file(params.model_path.c_str());
     if (model == NULL) {
-        fprintf(stderr, "%s: error: failed to load model '%s'\n", __func__, params.model_path);
+        fprintf(stderr, "%s: error: failed to load model '%s'\n", __func__, params.model_path.c_str());
         return std::make_tuple(nullptr, nullptr);
     }
 
     bark_context * bctx = bark_new_context_with_model(model);
     if (bctx == NULL) {
-        fprintf(stderr, "%s: error: failed to create context with model '%s'\n", __func__, params.model_path);
+        fprintf(stderr, "%s: error: failed to create context with model '%s'\n", __func__, params.model_path.c_str());
         bark_free_model(model);
         return std::make_tuple(nullptr, nullptr);
     }
@@ -37,21 +93,6 @@ int main(int argc, char **argv) {
     bark_context * bctx;
     bark_model * model;
 
-    std::string fname = "./ggml_weights";
-    if (params.model_path) {
-        fname = std::string(params.model_path);
-    }
-
-    std::string prompt = "this is an audio";
-    if (params.prompt) {
-        prompt = params.prompt;
-    }
-
-    std::string out_path = "./ggml_out.wav";
-    if (params.dest_wav_path) {
-        out_path = std::string(params.dest_wav_path);
-    }
-
     // load the model
     const int64_t t_start_us = ggml_time_us();
     std::tie(model, bctx) = bark_init_from_params(params);
@@ -60,7 +101,7 @@ int main(int argc, char **argv) {
     printf("\n");
 
     const int64_t t_eval_us_start = ggml_time_us();
-    bark_generate_audio(bctx, prompt.data(), out_path.c_str(), params.n_threads);
+    bark_generate_audio(bctx, params.prompt.data(), params.dest_wav_path.c_str(), params.n_threads);
     t_eval_us = ggml_time_us() - t_eval_us_start;
 
     // report timing
