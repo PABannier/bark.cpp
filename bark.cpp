@@ -179,11 +179,11 @@ struct bark_context * bark_new_context_with_model(struct bark_model * model) {
     return ctx;
 }
 
-bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expected_size) {
+int bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expected_size) {
     auto fin = std::ifstream(fname, std::ios::binary);
     if (!fin) {
         fprintf(stderr, "%s: faield to open '%s'\n", __func__, fname.c_str());
-        return false;
+        return 1;
     }
 
     // verify magic
@@ -192,7 +192,7 @@ bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expect
         fin.read((char *) &magic, sizeof(magic));
         if (magic != GGML_FILE_MAGIC) {
             fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname.c_str());
-            return false;
+            return 1;
         }
     }
 
@@ -202,7 +202,7 @@ bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expect
     // 5 special tokens: [UNK, SEP, MASK, PAD, CLS]
     if (n_vocab != expected_size) {
         fprintf(stderr, "%s: wrong voculary size (%d != %d)\n", __func__, n_vocab, expected_size);
-        return false;
+        return 1;
     }
 
     std::string word;
@@ -226,14 +226,14 @@ bool bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expect
         vocab.id_to_token[i] = word;
     }
 
-    return true;
+    return 0;
 }
 
-bool gpt_model_load(const std::string& fname, gpt_model& model) {
+int gpt_model_load(const std::string& fname, gpt_model& model) {
     auto fin = std::ifstream(fname, std::ios::binary);
     if (!fin) {
         fprintf(stderr, "%s: failed to open '%s'\n", __func__, fname.c_str());
-        return false;
+        return 1;
     }
 
     // verify magic
@@ -242,7 +242,7 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
         fin.read((char *) &magic, sizeof(magic));
         if (magic != GGML_FILE_MAGIC) {
             fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname.c_str());
-            return false;
+            return 1;
         }
     }
 
@@ -282,7 +282,7 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
     if (wtype == GGML_TYPE_COUNT) {
         fprintf(stderr, "%s: invalid model file '%s' (bad ftype value %d)\n",
                 __func__, fname.c_str(), model.hparams.ftype);
-        return false;
+        return 1;
     }
 
     auto & ctx = model.ctx;
@@ -345,7 +345,7 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
         model.ctx = ggml_init(params);
         if (!model.ctx) {
             fprintf(stderr, "%s: ggml_init() failed\n", __func__);
-            return false;
+            return 1;
         }
     }
 
@@ -475,19 +475,19 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
 
             if (model.tensors.find(name.data()) == model.tensors.end()) {
                 fprintf(stderr, "%s: unknown tensor '%s' in model file\n", __func__, name.data());
-                return false;
+                return 1;
             }
 
             auto tensor = model.tensors[name.data()];
             if (ggml_nelements(tensor) != nelements) {
                 fprintf(stderr, "%s: tensor '%s' has wrong size in model file\n", __func__, name.data());
-                return false;
+                return 1;
             }
 
             if (tensor->ne[0] != ne[0] || tensor->ne[1] != ne[1]) {
                 fprintf(stderr, "%s: tensor '%s' has wrong shape in model file: got [%d, %d], expected [%d, %d]\n",
                         __func__, name.data(), (int) tensor->ne[0], (int) tensor->ne[1], ne[0], ne[1]);
-                return false;
+                return 1;
             }
 
             const size_t bpe = ggml_type_size(ggml_type(ttype));
@@ -495,7 +495,7 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
             if ((nelements*bpe)/ggml_blck_size(tensor->type) != ggml_nbytes(tensor)) {
                 fprintf(stderr, "%s: tensor '%s' has wrong size in model file: got %zu, expected %zu\n",
                         __func__, name.data(), ggml_nbytes(tensor), nelements*bpe);
-                return false;
+                return 1;
             }
 
             fin.read(reinterpret_cast<char *>(tensor->data), ggml_nbytes(tensor));
@@ -511,7 +511,7 @@ bool gpt_model_load(const std::string& fname, gpt_model& model) {
 
     fin.close();
 
-    return true;
+    return 0;
 }
 
 struct bark_model * bark_load_model_from_file(const std::string & dirname) {
@@ -523,7 +523,7 @@ struct bark_model * bark_load_model_from_file(const std::string & dirname) {
     {
         printf("%s: reading bark text model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_text.bin";
-        if(!gpt_model_load(fname, model->text_model)) {
+        if (gpt_model_load(fname, model->text_model) > 0) {
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
             return nullptr;
         }
@@ -536,7 +536,7 @@ struct bark_model * bark_load_model_from_file(const std::string & dirname) {
         const std::string fname     = dirname + "/ggml_vocab.bin";
         const gpt_hparams hparams   = model->text_model.hparams;
         const int32_t expected_size = hparams.n_in_vocab - hparams.n_out_vocab - 5;
-        if(!bark_vocab_load(fname, model->vocab, expected_size)) {
+        if (bark_vocab_load(fname, model->vocab, expected_size) > 0) {
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
             return nullptr;
         }
@@ -546,7 +546,7 @@ struct bark_model * bark_load_model_from_file(const std::string & dirname) {
     {
         printf("\n%s: reading bark coarse model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_coarse.bin";
-        if(!gpt_model_load(fname, model->coarse_model)) {
+        if (gpt_model_load(fname, model->coarse_model) > 0) {
             fprintf(stderr, "%s: invalid model file '%s' (bad coarse)\n", __func__, fname.c_str());
             return nullptr;
         }
@@ -557,7 +557,7 @@ struct bark_model * bark_load_model_from_file(const std::string & dirname) {
     {
         printf("\n%s: reading bark fine model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_fine.bin";
-        if(!gpt_model_load(fname, model->fine_model)) {
+        if (gpt_model_load(fname, model->fine_model) > 0) {
             fprintf(stderr, "%s: invalid model file '%s' (bad fine)\n", __func__, fname.c_str());
             return nullptr;
         }
@@ -568,7 +568,7 @@ struct bark_model * bark_load_model_from_file(const std::string & dirname) {
     {
         printf("\n%s: reading bark codec model\n", __func__);
         const std::string fname = dirname + "/ggml_weights_codec.bin";
-        if(!encodec_model_load(fname, model->codec_model)) {
+        if (encodec_model_load(fname, model->codec_model) > 0) {
             fprintf(stderr, "%s: invalid model file '%s' (bad codec)\n", __func__, fname.c_str());
             return nullptr;
         }
@@ -580,7 +580,7 @@ struct bark_model * bark_load_model_from_file(const std::string & dirname) {
     return model;
 }
 
-bool ggml_common_quantize_0(
+int ggml_common_quantize_0(
         std::ifstream & fin,
         std::ofstream & fout,
         const ggml_ftype ftype,
@@ -606,13 +606,13 @@ bool ggml_common_quantize_0(
         case GGML_FTYPE_MOSTLY_Q6_K:
                 {
                     fprintf(stderr, "%s: invalid model type %d\n", __func__, ftype);
-                    return false;
+                    return 1;
                 }
     };
 
     if (!ggml_is_quantized(qtype)) {
         fprintf(stderr, "%s: invalid quantization type %d (%s)\n", __func__, qtype, ggml_type_name(qtype));
-        return false;
+        return 1;
     }
 
     size_t total_size_org = 0;
@@ -675,7 +675,7 @@ bool ggml_common_quantize_0(
         if (quantize) {
             if (ttype != GGML_TYPE_F32 && ttype != GGML_TYPE_F16) {
                 fprintf(stderr, "%s: unsupported ttype %d (%s) for integer quantization\n", __func__, ttype, ggml_type_name((ggml_type) ttype));
-                return false;
+                return 1;
             }
 
             if (ttype == GGML_TYPE_F16) {
@@ -749,7 +749,7 @@ bool ggml_common_quantize_0(
                 case GGML_TYPE_COUNT:
                     {
                         fprintf(stderr, "%s: unsupported quantization type %d (%s)\n", __func__, ttype, ggml_type_name((ggml_type) ttype));
-                        return false;
+                        return 1;
                     }
             }
 
@@ -790,10 +790,10 @@ bool ggml_common_quantize_0(
         printf("\n");
     }
 
-    return true;
+    return 0;
 }
 
-bool bark_model_quantize(
+int bark_model_quantize(
         const std::string & fname_inp,
         const std::string & fname_out,
                ggml_ftype   ftype) {
@@ -804,13 +804,13 @@ bool bark_model_quantize(
     auto fin = std::ifstream(fname_inp, std::ios::binary);
     if (!fin) {
         fprintf(stderr, "%s: failed to open '%s' for reading\n", __func__, fname_inp.c_str());
-        return false;
+        return 1;
     }
 
     auto fout = std::ofstream(fname_out, std::ios::binary);
     if (!fout) {
         fprintf(stderr, "%s: failed to open '%s' for writing\n", __func__, fname_out.c_str());
-        return false;
+        return 1;
     }
 
     // verify magic
@@ -819,7 +819,7 @@ bool bark_model_quantize(
         fin.read((char *) &magic, sizeof(magic));
         if (magic != GGML_FILE_MAGIC) {
             fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname_inp.c_str());
-            return false;
+            return 1;
         }
 
         fout.write((char *) &magic, sizeof(magic));
@@ -841,7 +841,7 @@ bool bark_model_quantize(
         read_safe(fin, hparams.n_wtes);
         read_safe(fin, hparams.ftype);
 
-        const int32_t qntvr_src =    hparams.ftype / GGML_QNT_VERSION_FACTOR;
+        const int32_t qntvr_src = hparams.ftype / GGML_QNT_VERSION_FACTOR;
         int32_t ftype_dst = GGML_QNT_VERSION * GGML_QNT_VERSION_FACTOR + ftype;
 
         printf("%s: n_in_vocab  = %d\n", __func__, hparams.n_in_vocab);
@@ -878,15 +878,15 @@ bool bark_model_quantize(
         "model/h.*/mlp/c_proj/w",
     };
 
-    if (!ggml_common_quantize_0(fin, fout, ftype, to_quant, {})) {
+    if (ggml_common_quantize_0(fin, fout, ftype, to_quant, {}) > 0) {
         fprintf(stderr, "%s: failed to quantize model '%s'\n", __func__, fname_inp.c_str());
-        return false;
+        return 1;
     }
 
     fin.close();
     fout.close();
 
-    return true;
+    return 0;
 }
 
 std::string strip_accents(const std::string &in_str) {
@@ -982,9 +982,9 @@ void bert_tokenize(
     *n_tokens = t;
 }
 
-bool fine_gpt_eval(
+int fine_gpt_eval(
           gpt_model & model,
-     bark_token * tokens,
+         bark_token * tokens,
                 int   n_tokens,
               float * logits,
                 int   n_threads,
@@ -1019,7 +1019,7 @@ bool fine_gpt_eval(
         buf = realloc(buf, buf_size);
         if (buf == nullptr) {
             fprintf(stderr, "%s: failed to allocate %zu bytes\n", __func__, buf_size);
-            return false;
+            return 1;
         }
     }
 
@@ -1183,13 +1183,13 @@ bool fine_gpt_eval(
     int64_t t_predict_end_us = ggml_time_us();
     model.t_predict_us += (t_predict_end_us - t_predict_start_us);
 
-    return true;
+    return 0;
 }
 
 
 bool gpt_eval(
           gpt_model & model,
-     bark_token * tokens,
+         bark_token * tokens,
                 int   n_tokens,
               float * logits,
                 int * n_past,
@@ -1220,7 +1220,7 @@ bool gpt_eval(
         buf = realloc(buf, buf_size);
         if (buf == nullptr) {
             fprintf(stderr, "%s: failed to allocate %zu bytes\n", __func__, buf_size);
-            return false;
+            return 1;
         }
     }
 
@@ -1517,7 +1517,7 @@ bool gpt_eval(
 
     model.t_predict_us += (ggml_time_us() - t_predict_start_us);
 
-    return true;
+    return 0;
 }
 
 void softmax(std::vector<float> & logits) {
@@ -1914,7 +1914,7 @@ void bark_forward_fine_encoder(struct bark_context * ctx,float temp, int n_threa
     bark_print_statistics(model);
 }
 
-bool encodec_eval(
+int encodec_eval(
          const bark_codes & tokens,
             encodec_model & model,
               audio_arr_t & audio_arr) {
@@ -1937,7 +1937,7 @@ bool encodec_eval(
         buf = realloc(buf, buf_size);
         if (buf == nullptr) {
             fprintf(stderr, "%s: failed to allocate %zu bytes\n", __func__, buf_size);
-            return false;
+            return 1;
         }
     }
 
@@ -1979,7 +1979,7 @@ bool encodec_eval(
 
     model.t_predict_us += (ggml_time_us() - t_predict_start_us);
 
-    return true;
+    return 0;
 }
 
 void bark_forward_encodec(struct bark_context * ctx) {
@@ -2026,7 +2026,7 @@ int write_wav_on_disk(audio_arr_t& audio_arr, std::string dest_path) {
     return 0;
 }
 
-bool bark_generate_audio(
+int bark_generate_audio(
     struct bark_context * ctx,
              const char * text,
             std::string & dest_wav_path,
@@ -2063,10 +2063,10 @@ bool bark_generate_audio(
         write_wav_on_disk(ctx->audio_arr, dest_wav_path);
     }
 
-    return true;
+    return 0;
 }
 
-bool bark_params_parse(int argc, char ** argv, bark_params & params) {
+int bark_params_parse(int argc, char ** argv, bark_params & params) {
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
 
@@ -2090,7 +2090,7 @@ bool bark_params_parse(int argc, char ** argv, bark_params & params) {
         }
     }
 
-    return true;
+    return 0;
 }
 
 void bark_print_usage(char ** argv, const bark_params & params) {

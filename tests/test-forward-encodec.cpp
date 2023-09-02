@@ -16,7 +16,7 @@ int main() {
     const std::string fname = "../ggml_weights/ggml_weights_codec.bin";
 
     encodec_model model;
-    if(!encodec_model_load(fname, model)) {
+    if (encodec_model_load(fname, model) > 0) {
         fprintf(stderr, "%s: invalid model file '%s'\n", __func__, fname.c_str());
         return 1;
     }

@@ -23,7 +23,7 @@ int main() {
 
     bark_model model;
 
-    if(!gpt_model_load(fname, model.text_model)) {
+    if (gpt_model_load(fname, model.text_model) > 0) {
         fprintf(stderr, "%s: invalid model file '%s'\n", __func__, fname.c_str());
         return 1;
     }

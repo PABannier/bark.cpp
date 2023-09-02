@@ -82,12 +82,7 @@ int main(int argc, char ** argv) {
     // load the model
     {
         const int64_t t_start_us = ggml_time_us();
-
-        if (!bark_model_quantize(fname_inp, fname_out, ggml_ftype(ftype))) {
-            fprintf(stderr, "%s: failed to quantize model from '%s'\n", __func__, fname_inp.c_str());
-            return 1;
-        }
-
+        bark_model_quantize(fname_inp, fname_out, ggml_ftype(ftype));
         t_quantize_us = ggml_time_us() - t_start_us;
     }
 

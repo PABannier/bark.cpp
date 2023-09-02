@@ -24,7 +24,7 @@ int main() {
 
     bark_model model;
 
-    if(!gpt_model_load(fname, model.coarse_model)) {
+    if (gpt_model_load(fname, model.coarse_model) > 0) {
         fprintf(stderr, "%s: invalid model file '%s'\n", __func__, fname.c_str());
         return 1;
     }

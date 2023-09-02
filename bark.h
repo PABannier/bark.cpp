@@ -86,7 +86,7 @@ extern "C" {
 
     BARK_API void bark_free_model(struct bark_model * ctx);
 
-    BARK_API bool bark_generate_audio(
+    BARK_API int bark_generate_audio(
             struct bark_context * ctx,
                      const char * text,
                     std::string & dest_wav_path,
@@ -94,14 +94,14 @@ extern "C" {
 
     BARK_API struct bark_model * bark_load_model_from_file(const std::string & dirname);
 
-    BARK_API bool bark_model_quantize(
+    BARK_API int bark_model_quantize(
               const std::string & fname_inp,
               const std::string & fname_out,
                      ggml_ftype   ftype);
 
-    BARK_API bool bark_vocab_load(const std::string & fname, bark_vocab& vocab, int32_t expected_size);
+    BARK_API int bark_vocab_load(const std::string & fname, bark_vocab& vocab, int32_t expected_size);
 
-    BARK_API bool bark_params_parse(int argc, char ** argv, bark_params & params);
+    BARK_API int bark_params_parse(int argc, char ** argv, bark_params & params);
 
     BARK_API void bark_print_usage(char ** argv, const bark_params & params);
 
@@ -115,11 +115,11 @@ extern "C" {
     // Internal API for tests
     // 
 
-    bool gpt_model_load(const std::string& fname, gpt_model& model);
+    int gpt_model_load(const std::string& fname, gpt_model& model);
 
-    bool gpt_eval(
+    int gpt_eval(
              gpt_model & model,
-        bark_token * tokens,
+            bark_token * tokens,
                    int   n_tokens,
                  float * logits,
                    int * n_past,

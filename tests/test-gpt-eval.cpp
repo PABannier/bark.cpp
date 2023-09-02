@@ -21,7 +21,7 @@ int main() {
     const std::string fname = "../ggml_weights/ggml_weights_text.bin";
 
     gpt_model model;
-    if(!gpt_model_load(fname, model)) {
+    if (gpt_model_load(fname, model) > 0) {
         fprintf(stderr, "%s: invalid model file '%s'\n", __func__, fname.c_str());
         return 1;
     }
