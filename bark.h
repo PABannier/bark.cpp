@@ -61,13 +61,14 @@ extern "C" {
     struct bark_params {
         int32_t n_threads = std::min(4, (int32_t) std::thread::hardware_concurrency());
 
-        char * model = "./ggml_weights/";  // weights location
+        // user prompt
+        char * prompt;
+
+        // paths
+        char * model_path;
+        char * dest_wav_path;
 
         int32_t seed = 0;
-
-        char * prompt;  // user prompt
-
-        char * dest_wav_path = "./output.wav";
     };
 
     typedef int32_t bark_token;

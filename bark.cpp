@@ -1648,6 +1648,13 @@ void bark_tokenize_input(struct bark_context * ctx, const char * text) {
     assert(tokens.size() == 256 + 256 + 1);
 
     ctx->tokens = tokens;
+
+    printf("%s: prompt: '%s'\n", __func__, text);
+    printf("%s: number of tokens in prompt = %zu, first 8 tokens: ", __func__, ctx->tokens.size());
+    for (int i = 0; i < std::min(8, (int) ctx->tokens.size()); i++) {
+        printf("%d ", ctx->tokens[i]);
+    }
+    printf("\n");
 }
 
 static void bark_print_statistics(gpt_model & model) {
@@ -2058,22 +2065,15 @@ int bark_generate_audio(
 
     const float min_eos_p = 0.2;
 
-    auto & model = ctx->model;
-
     // tokenize input (bert tokenizer)
     bark_tokenize_input(ctx, text);
 
-    printf("%s: prompt: '%s'\n", __func__, text);
-    printf("%s: number of tokens in prompt = %zu, first 8 tokens: ", __func__, ctx->tokens.size());
-    for (int i = 0; i < std::min(8, (int) ctx->tokens.size()); i++) {
-        printf("%d ", ctx->tokens[i]);
-    }
-    printf("\n");
-
+    // forward pass
     bark_forward_text_encoder(ctx, temp, min_eos_p, n_threads);
     bark_forward_coarse_encoder(ctx, max_coarse_history, sliding_window_size, temp, n_threads);
     bark_forward_fine_encoder(ctx, fine_temp, n_threads);
 
+    // encode audio
     bark_forward_encodec(ctx);
 
     if (dest_wav_path != "") {
@@ -2092,7 +2092,7 @@ int bark_params_parse(int argc, char ** argv, bark_params & params) {
         } else if (arg == "-p" || arg == "--prompt") {
             params.prompt = argv[++i];
         } else if (arg == "-m" || arg == "--model") {
-            params.model = argv[++i];
+            params.model_path = argv[++i];
         } else if (arg == "-s" || arg == "--seed") {
             params.seed = std::stoi(argv[++i]);
         } else if (arg == "-o" || arg == "--outwav") {
@@ -2120,7 +2120,7 @@ void bark_print_usage(char ** argv, const bark_params & params) {
     fprintf(stderr, "  -p PROMPT, --prompt PROMPT\n");
     fprintf(stderr, "                        prompt to start generation with (default: random)\n");
     fprintf(stderr, "  -m FNAME, --model FNAME\n");
-    fprintf(stderr, "                        model path (default: %s)\n", params.model);
+    fprintf(stderr, "                        model path (default: %s)\n", params.model_path);
     fprintf(stderr, "  -o FNAME, --outwav FNAME\n");
     fprintf(stderr, "                        output generated wav (default: %s)\n", params.dest_wav_path);
     fprintf(stderr, "\n");
