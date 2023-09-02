@@ -185,8 +185,8 @@ struct bark_context * bark_new_context_with_model(struct bark_model * model) {
 }
 
 int bark_vocab_load(
-            const char * fname, 
-            bark_vocab & vocab, 
+            const char * fname,
+            bark_vocab & vocab,
                int32_t   expected_size) {
     auto fin = std::ifstream(fname, std::ios::binary);
     if (!fin) {
@@ -2076,9 +2076,8 @@ int bark_generate_audio(
     // encode audio
     bark_forward_encodec(ctx);
 
-    if (dest_wav_path != "") {
-        write_wav_on_disk(ctx->audio_arr, dest_wav_path);
-    }
+    // write wav file
+    write_wav_on_disk(ctx->audio_arr, dest_wav_path);
 
     return 0;
 }

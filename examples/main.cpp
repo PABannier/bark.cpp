@@ -38,9 +38,18 @@ int main(int argc, char **argv) {
     bark_model * model;
 
     std::string fname = "./ggml_weights";
-
-    if (params.model_path != "") {
+    if (params.model_path) {
         fname = std::string(params.model_path);
+    }
+
+    std::string prompt = "this is an audio";
+    if (params.prompt) {
+        prompt = params.prompt;
+    }
+
+    std::string out_path = "./ggml_out.wav";
+    if (params.dest_wav_path) {
+        out_path = std::string(params.dest_wav_path);
     }
 
     // load the model
@@ -50,13 +59,8 @@ int main(int argc, char **argv) {
 
     printf("\n");
 
-    std::string prompt = "this is an audio";
-    if (params.prompt != "") {
-        prompt = params.prompt;
-    }
-
     const int64_t t_eval_us_start = ggml_time_us();
-    bark_generate_audio(bctx, prompt.data(), params.dest_wav_path, params.n_threads);
+    bark_generate_audio(bctx, prompt.data(), out_path.c_str(), params.n_threads);
     t_eval_us = ggml_time_us() - t_eval_us_start;
 
     // report timing
