@@ -1645,7 +1645,7 @@ bark_sequence bark_tokenize_input(const char * text, const bark_vocab & vocab, i
 static void bark_print_statistics(gpt_model & model) {
     printf("\n\n");
     printf("%s: mem per token = %8.2f MB\n", __func__, model.mem_per_token/1000.0f/1000.0f);
-    printf("%s:   sample time = %8.2f ms / %d tokens sampled\n", __func__, model.t_sample_us/1000.0f, model.n_sample);
+    printf("%s:   sample time = %8.2f ms / %lld tokens\n", __func__, model.t_sample_us/1000.0f, model.n_sample);
     printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, model.t_predict_us/1000.0f, model.t_predict_us/model.n_predict/1000.0f);
     printf("%s:    total time = %8.2f ms\n", __func__, model.t_main_us/1000.0f);
     printf("\n");
