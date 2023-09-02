@@ -2059,7 +2059,6 @@ int bark_generate_audio(
     const float min_eos_p = 0.2;
 
     auto & model = ctx->model;
-    auto & vocab = model.vocab;
 
     // tokenize input (bert tokenizer)
     bark_tokenize_input(ctx, text);

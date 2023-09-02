@@ -70,8 +70,8 @@ int main(int argc, char ** argv) {
         ggml_free(ctx);
     }
 
-    const std::string fname_inp = argv[1];
-    const std::string fname_out = argv[2];
+    const char * fname_inp = argv[1];
+    const char * fname_out = argv[2];
 
     const ggml_ftype ftype = ggml_parse_ftype(argv[3]);
 
