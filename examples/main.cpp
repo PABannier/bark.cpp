@@ -26,7 +26,8 @@ int main(int argc, char **argv) {
 
     bark_params params;
 
-    if (bark_params_parse(argc, argv, params) == false) {
+    if (bark_params_parse(argc, argv, params) > 0) {
+        fprintf(stderr, "%s: Could not parse arguments\n", __func__);
         return 1;
     }
 
