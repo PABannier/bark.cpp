@@ -4,15 +4,15 @@
 #include <tuple>
 
 std::tuple<struct bark_model *, struct bark_context *> bark_init_from_params(bark_params & params) {
-    bark_model * model = bark_load_model_from_file(params.model.c_str());
+    bark_model * model = bark_load_model_from_file(params.model);
     if (model == NULL) {
-        fprintf(stderr, "%s: error: failed to load model '%s'\n", __func__, params.model.c_str());
+        fprintf(stderr, "%s: error: failed to load model '%s'\n", __func__, params.model);
         return std::make_tuple(nullptr, nullptr);
     }
 
     bark_context * bctx = bark_new_context_with_model(model);
     if (bctx == NULL) {
-        fprintf(stderr, "%s: error: failed to create context with model '%s'\n", __func__, params.model.c_str());
+        fprintf(stderr, "%s: error: failed to create context with model '%s'\n", __func__, params.model);
         bark_free_model(model);
         return std::make_tuple(nullptr, nullptr);
     }
@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
 
     std::string fname = "./ggml_weights";
 
-    if (!params.model.empty()) {
+    if (params.model != "") {
         fname = params.model;
     }
 
@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
     printf("\n");
 
     std::string prompt = "this is an audio";
-    if (!params.prompt.empty()) {
+    if (params.prompt != "") {
         prompt = params.prompt;
     }
 
