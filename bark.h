@@ -85,7 +85,7 @@ extern "C" {
 
     BARK_API int bark_vocab_load(
                      const char * fname,
-                     bark_vocab & vocab,
+                     bark_vocab * vocab,
                         int32_t   expected_size);
 
 #ifdef __cplusplus

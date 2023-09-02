@@ -186,7 +186,7 @@ struct bark_context * bark_new_context_with_model(struct bark_model * model) {
 
 int bark_vocab_load(
             const char * fname,
-            bark_vocab & vocab,
+            bark_vocab * vocab,
                int32_t   expected_size) {
     auto fin = std::ifstream(fname, std::ios::binary);
     if (!fin) {
@@ -230,8 +230,8 @@ int bark_vocab_load(
             word = "";
         }
 
-        vocab.token_to_id[word] = i;
-        vocab.id_to_token[i] = word;
+        vocab->token_to_id[word] = i;
+        vocab->id_to_token[i] = word;
     }
 
     return 0;
@@ -544,7 +544,7 @@ struct bark_model * bark_load_model_from_file(const char * dirname) {
         const std::string fname     = std::string(dirname) + "/ggml_vocab.bin";
         const gpt_hparams hparams   = model->text_model.hparams;
         const int32_t expected_size = hparams.n_in_vocab - hparams.n_out_vocab - 5;
-        if (bark_vocab_load(fname.c_str(), model->vocab, expected_size) > 0) {
+        if (bark_vocab_load(fname.c_str(), &model->vocab, expected_size) > 0) {
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
             return nullptr;
         }
