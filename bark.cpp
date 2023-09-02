@@ -23,6 +23,11 @@ Author: Pierre-Antoine Bannier <pierreantoine.bannier@gmail.com>
 
 #define BARK_DEBUG 0
 
+typedef std::vector<int32_t> bark_sequence;
+typedef std::vector<float>   audio_arr_t;
+
+typedef std::vector<std::vector<int32_t>> bark_codes;
+
 struct gpt_hparams {
     int32_t n_in_vocab;
     int32_t n_out_vocab;
@@ -75,9 +80,7 @@ struct gpt_model {
     struct ggml_tensor * ln_f_g;
     struct ggml_tensor * ln_f_b;
 
-    struct ggml_tensor * wpe;     //     token embedding
-    // struct ggml_tensor * wte;     //  position embedding
-    // struct ggml_tensor * lm_head; // language model head
+    struct ggml_tensor * wpe;
 
     std::vector<struct ggml_tensor *> wtes;
     std::vector<struct ggml_tensor *> lm_heads;
@@ -139,14 +142,12 @@ struct bark_context {
     int64_t t_start_us;
 
     bark_sequence tokens;
-
     bark_sequence semantic_tokens;
 
     bark_codes coarse_tokens;
-
     bark_codes fine_tokens;
 
-    std::vector<float> audio_arr;
+    audio_arr_t audio_arr;
 };
 
 struct bark_progress {
@@ -183,10 +184,13 @@ struct bark_context * bark_new_context_with_model(struct bark_model * model) {
     return ctx;
 }
 
-int bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expected_size) {
+int bark_vocab_load(
+            const char * fname,
+            bark_vocab & vocab,
+               int32_t   expected_size) {
     auto fin = std::ifstream(fname, std::ios::binary);
     if (!fin) {
-        fprintf(stderr, "%s: faield to open '%s'\n", __func__, fname.c_str());
+        fprintf(stderr, "%s: faield to open '%s'\n", __func__, fname);
         return 1;
     }
 
@@ -195,7 +199,7 @@ int bark_vocab_load(const std::string& fname, bark_vocab& vocab, int32_t expecte
         uint32_t magic;
         fin.read((char *) &magic, sizeof(magic));
         if (magic != GGML_FILE_MAGIC) {
-            fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname.c_str());
+            fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname);
             return 1;
         }
     }
@@ -518,15 +522,15 @@ int gpt_model_load(const std::string& fname, gpt_model& model) {
     return 0;
 }
 
-struct bark_model * bark_load_model_from_file(const std::string & dirname) {
-    printf("%s: loading model from '%s'\n", __func__, dirname.c_str());
+struct bark_model * bark_load_model_from_file(const char * dirname) {
+    printf("%s: loading model from '%s'\n", __func__, dirname);
 
     bark_model * model = new bark_model;
 
     // text
     {
         printf("%s: reading bark text model\n", __func__);
-        const std::string fname = dirname + "/ggml_weights_text.bin";
+        const std::string fname = std::string(dirname) + "/ggml_weights_text.bin";
         if (gpt_model_load(fname, model->text_model) > 0) {
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
             return nullptr;
@@ -537,10 +541,10 @@ struct bark_model * bark_load_model_from_file(const std::string & dirname) {
     // vocab
     {
         printf("%s: reading bark vocab\n", __func__);
-        const std::string fname     = dirname + "/ggml_vocab.bin";
+        const std::string fname     = std::string(dirname) + "/ggml_vocab.bin";
         const gpt_hparams hparams   = model->text_model.hparams;
         const int32_t expected_size = hparams.n_in_vocab - hparams.n_out_vocab - 5;
-        if (bark_vocab_load(fname, model->vocab, expected_size) > 0) {
+        if (bark_vocab_load(fname.c_str(), model->vocab, expected_size) > 0) {
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
             return nullptr;
         }
@@ -549,7 +553,7 @@ struct bark_model * bark_load_model_from_file(const std::string & dirname) {
     // coarse
     {
         printf("\n%s: reading bark coarse model\n", __func__);
-        const std::string fname = dirname + "/ggml_weights_coarse.bin";
+        const std::string fname = std::string(dirname) + "/ggml_weights_coarse.bin";
         if (gpt_model_load(fname, model->coarse_model) > 0) {
             fprintf(stderr, "%s: invalid model file '%s' (bad coarse)\n", __func__, fname.c_str());
             return nullptr;
@@ -560,7 +564,7 @@ struct bark_model * bark_load_model_from_file(const std::string & dirname) {
     // fine
     {
         printf("\n%s: reading bark fine model\n", __func__);
-        const std::string fname = dirname + "/ggml_weights_fine.bin";
+        const std::string fname = std::string(dirname) + "/ggml_weights_fine.bin";
         if (gpt_model_load(fname, model->fine_model) > 0) {
             fprintf(stderr, "%s: invalid model file '%s' (bad fine)\n", __func__, fname.c_str());
             return nullptr;
@@ -571,7 +575,7 @@ struct bark_model * bark_load_model_from_file(const std::string & dirname) {
     // codec
     {
         printf("\n%s: reading bark codec model\n", __func__);
-        const std::string fname = dirname + "/ggml_weights_codec.bin";
+        const std::string fname = std::string(dirname) + "/ggml_weights_codec.bin";
         if (encodec_model_load(fname, model->codec_model) > 0) {
             fprintf(stderr, "%s: invalid model file '%s' (bad codec)\n", __func__, fname.c_str());
             return nullptr;
@@ -798,22 +802,22 @@ int ggml_common_quantize_0(
 }
 
 int bark_model_quantize(
-        const std::string & fname_inp,
-        const std::string & fname_out,
-               ggml_ftype   ftype) {
-    printf("%s: loading model from '%s'\n", __func__, fname_inp.c_str());
+        const char * fname_inp,
+        const char * fname_out,
+        ggml_ftype   ftype) {
+    printf("%s: loading model from '%s'\n", __func__, fname_inp);
 
     gpt_model model;
 
     auto fin = std::ifstream(fname_inp, std::ios::binary);
     if (!fin) {
-        fprintf(stderr, "%s: failed to open '%s' for reading\n", __func__, fname_inp.c_str());
+        fprintf(stderr, "%s: failed to open '%s' for reading\n", __func__, fname_inp);
         return 1;
     }
 
     auto fout = std::ofstream(fname_out, std::ios::binary);
     if (!fout) {
-        fprintf(stderr, "%s: failed to open '%s' for writing\n", __func__, fname_out.c_str());
+        fprintf(stderr, "%s: failed to open '%s' for writing\n", __func__, fname_out);
         return 1;
     }
 
@@ -822,7 +826,7 @@ int bark_model_quantize(
         uint32_t magic;
         fin.read((char *) &magic, sizeof(magic));
         if (magic != GGML_FILE_MAGIC) {
-            fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname_inp.c_str());
+            fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname_inp);
             return 1;
         }
 
@@ -883,7 +887,7 @@ int bark_model_quantize(
     };
 
     if (ggml_common_quantize_0(fin, fout, ftype, to_quant, {}) > 0) {
-        fprintf(stderr, "%s: failed to quantize model '%s'\n", __func__, fname_inp.c_str());
+        fprintf(stderr, "%s: failed to quantize model '%s'\n", __func__, fname_inp);
         return 1;
     }
 
@@ -1703,7 +1707,11 @@ bark_token gpt_sample(
     return res;
 }
 
-bark_sequence bark_tokenize_input(const char * text, const bark_vocab & vocab, int32_t block_size) {
+void bark_tokenize_input(struct bark_context * ctx, const char * text) {
+    auto & model = ctx->model.text_model;
+    auto & vocab = ctx->model.vocab;
+
+    int32_t block_size = model.hparams.block_size;
     int32_t max_ctx_size = std::min(block_size, 256);
     int32_t n_tokens;
 
@@ -1729,7 +1737,14 @@ bark_sequence bark_tokenize_input(const char * text, const bark_vocab & vocab, i
 
     assert(tokens.size() == 256 + 256 + 1);
 
-    return tokens;
+    ctx->tokens = tokens;
+
+    printf("%s: prompt: '%s'\n", __func__, text);
+    printf("%s: number of tokens in prompt = %zu, first 8 tokens: ", __func__, ctx->tokens.size());
+    for (int i = 0; i < std::min(8, (int) ctx->tokens.size()); i++) {
+        printf("%d ", ctx->tokens[i]);
+    }
+    printf("\n");
 }
 
 static void bark_print_statistics(gpt_model & model) {
@@ -2130,7 +2145,7 @@ int write_wav_on_disk(audio_arr_t& audio_arr, std::string dest_path) {
 int bark_generate_audio(
     struct bark_context * ctx,
              const char * text,
-            std::string & dest_wav_path,
+             const char * dest_wav_path,
                     int   n_threads) {
     const float temp      = 0.7;
     const float fine_temp = 0.5;
@@ -2140,75 +2155,23 @@ int bark_generate_audio(
 
     const float min_eos_p = 0.2;
 
-    auto & model = ctx->model;
-    auto & vocab = model.vocab;
-
     // tokenize input (bert tokenizer)
-    int32_t block_size = model.text_model.hparams.block_size;
-    ctx->tokens = bark_tokenize_input(text, vocab, block_size);
+    bark_tokenize_input(ctx, text);
 
-    printf("%s: prompt: '%s'\n", __func__, text);
-    printf("%s: number of tokens in prompt = %zu, first 8 tokens: ", __func__, ctx->tokens.size());
-    for (int i = 0; i < std::min(8, (int) ctx->tokens.size()); i++) {
-        printf("%d ", ctx->tokens[i]);
-    }
-    printf("\n");
-
+    // forward pass
     bark_forward_text_encoder(ctx, temp, min_eos_p, n_threads);
     bark_forward_coarse_encoder(ctx, max_coarse_history, sliding_window_size, temp, n_threads);
     bark_forward_fine_encoder(ctx, fine_temp, n_threads);
 
+    // encode audio
     bark_forward_encodec(ctx);
 
-    if (dest_wav_path != "") {
-        write_wav_on_disk(ctx->audio_arr, dest_wav_path);
-    }
+    // write wav file
+    write_wav_on_disk(ctx->audio_arr, dest_wav_path);
 
     return 0;
 }
 
-int bark_params_parse(int argc, char ** argv, bark_params & params) {
-    for (int i = 1; i < argc; i++) {
-        std::string arg = argv[i];
-
-        if (arg == "-t" || arg == "--threads") {
-            params.n_threads = std::stoi(argv[++i]);
-        } else if (arg == "-p" || arg == "--prompt") {
-            params.prompt = argv[++i];
-        } else if (arg == "-m" || arg == "--model") {
-            params.model = argv[++i];
-        } else if (arg == "-s" || arg == "--seed") {
-            params.seed = std::stoi(argv[++i]);
-        } else if (arg == "-o" || arg == "--outwav") {
-            params.dest_wav_path = argv[++i];
-        } else if (arg == "-h" || arg == "--help") {
-            bark_print_usage(argv, params);
-            exit(0);
-        } else {
-            fprintf(stderr, "error: unknown argument: %s\n", arg.c_str());
-            bark_print_usage(argv, params);
-            exit(0);
-        }
-    }
-
-    return 0;
-}
-
-void bark_print_usage(char ** argv, const bark_params & params) {
-    fprintf(stderr, "usage: %s [options]\n", argv[0]);
-    fprintf(stderr, "\n");
-    fprintf(stderr, "options:\n");
-    fprintf(stderr, "  -h, --help            show this help message and exit\n");
-    fprintf(stderr, "  -t N, --threads N     number of threads to use during computation (default: %d)\n", params.n_threads);
-    fprintf(stderr, "  -s N, --seed N        seed for random number generator (default: %d)\n", params.seed);
-    fprintf(stderr, "  -p PROMPT, --prompt PROMPT\n");
-    fprintf(stderr, "                        prompt to start generation with (default: random)\n");
-    fprintf(stderr, "  -m FNAME, --model FNAME\n");
-    fprintf(stderr, "                        model path (default: %s)\n", params.model.c_str());
-    fprintf(stderr, "  -o FNAME, --outwav FNAME\n");
-    fprintf(stderr, "                        output generated wav (default: %s)\n", params.dest_wav_path.c_str());
-    fprintf(stderr, "\n");
-}
 
 void bark_free_model(struct bark_model * model) {
     delete model;
