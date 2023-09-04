@@ -1295,9 +1295,6 @@ static struct ggml_cgraph * bark_build_gpt_graph(
 
     ggml_cgraph * gf = ggml_new_graph(ctx0);
 
-    struct ggml_tensor * inpL;
-    struct ggml_tensor * cur;
-
     struct ggml_tensor * input = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
     memcpy(input->data, tokens, N*ggml_element_size(input));
     ggml_set_name(input, "input_tokens");
@@ -1340,13 +1337,14 @@ static struct ggml_cgraph * bark_build_gpt_graph(
     ggml_set_name(pos_emb, "position_embeddings");
 
     // wte + wpe
-    inpL = ggml_add(ctx0, tok_emb, pos_emb);
+    struct ggml_tensor * inpL = ggml_add(ctx0, tok_emb, pos_emb);
 
     struct ggml_tensor * KQ_scale = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, 1);
     ggml_set_f32(KQ_scale, 1.0f/sqrtf(float(n_embd)/n_head));
     ggml_set_name(KQ_scale, "1/sqrt(n_embd_head)");
 
     for (int il = 0; il < n_layer; ++il) {
+        struct ggml_tensor * cur;
         ggml_format_name(inpL, "layer_inp_%d", il);
 
         // norm
@@ -1463,7 +1461,9 @@ static struct ggml_cgraph * bark_build_gpt_graph(
         }
 
         // add the input
-        struct ggml_tensor * inpFF = ggml_add(ctx0, cur, inpL);
+        cur = ggml_add(ctx0, cur, inpL);
+        
+        struct ggml_tensor * inpFF = cur;
         ggml_set_name(inpFF, "inpFF");
 
         // feed-forward
@@ -1487,6 +1487,7 @@ static struct ggml_cgraph * bark_build_gpt_graph(
             cur = ggml_mul_mat(ctx0,
                     model->layers[il].c_mlp_fc_w,
                     cur);
+
             cur = ggml_add(ctx0,
                     ggml_repeat(ctx0, model->layers[il].c_mlp_fc_b, cur),
                     cur);
@@ -1508,36 +1509,32 @@ static struct ggml_cgraph * bark_build_gpt_graph(
             ggml_set_name(cur, "ffn_out_proj");
         }
 
-        cur = ggml_add(ctx0, cur, inpFF);
-        ggml_set_name(cur, "inpFF_+_outFF");
-
         // input for next layer
-        inpL = cur;
+        inpL = ggml_add(ctx0, cur, inpFF);
+        ggml_set_name(cur, "inpFF_+_outFF");
     }
-
-    cur = inpL;
 
     // norm
     {
         // [ 768, N]
-        cur = ggml_norm(ctx0, cur);
-        ggml_set_name(cur, "norm_final");
+        inpL = ggml_norm(ctx0, inpL);
+        ggml_set_name(inpL, "norm_final");
 
         // cur = ln_f_g*cur + ln_f_b
-        cur = ggml_add(ctx0,
+        inpL = ggml_add(ctx0,
                 ggml_mul(ctx0,
-                    ggml_repeat(ctx0, model->ln_f_g, cur),
-                    cur),
-                ggml_repeat(ctx0, model->ln_f_b, cur));
-        ggml_set_name(cur, "result_norm");
+                    ggml_repeat(ctx0, model->ln_f_g, inpL),
+                    inpL),
+                ggml_repeat(ctx0, model->ln_f_b, inpL));
+        ggml_set_name(inpL, "result_norm");
     }
 
     // cur = WTE * cur
-    cur = ggml_mul_mat(ctx0, model->lm_heads[0], cur);
-    ggml_set_name(cur, "result_output");
+    inpL = ggml_mul_mat(ctx0, model->lm_heads[0], inpL);
+    ggml_set_name(inpL, "result_output");
 
     // run the computation
-    ggml_build_forward_expand(gf, cur);
+    ggml_build_forward_expand(gf, inpL);
 
     return gf;
 }
