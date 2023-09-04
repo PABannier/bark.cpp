@@ -72,5 +72,6 @@
         "bit": "cpp",
         "cinttypes": "cpp",
         "codecvt": "cpp"
-    }
+    },
+    "cmake.configureOnOpen": false
 }
