@@ -121,11 +121,15 @@ struct encodec_model {
 
     std::map<std::string, struct ggml_tensor *> tensors;
 
+    int64_t t_predict_us = 0;
+    int64_t t_main_us = 0;
+
     int64_t memsize = 0;
+    size_t mem_per_token = 0;
 };
 
 
-bool encodec_model_load(const std::string& fname, encodec_model& model);
+int encodec_model_load(const std::string& fname, encodec_model& model);
 
 struct ggml_tensor * encodec_quantizer_decode_eval(
                         struct ggml_context * ctx0,

@@ -151,11 +151,11 @@ struct ggml_tensor * strided_conv_transpose_1d(
     return unpadded;
 }
 
-bool encodec_model_load(const std::string& fname, encodec_model& model) {
+int encodec_model_load(const std::string& fname, encodec_model& model) {
     auto fin = std::ifstream(fname, std::ios::binary);
     if (!fin) {
         fprintf(stderr, "%s: failed to open '%s'\n", __func__, fname.c_str());
-        return false;
+        return 1;
     }
 
     // verify magic (i.e. ggml signature in hex format)
@@ -164,7 +164,7 @@ bool encodec_model_load(const std::string& fname, encodec_model& model) {
         read_safe(fin, magic);
         if (magic != GGML_FILE_MAGIC) {
             fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname.c_str());
-            return false;
+            return 1;
         }
     }
 
@@ -243,7 +243,7 @@ bool encodec_model_load(const std::string& fname, encodec_model& model) {
         model.ctx = ggml_init(params);
         if(!model.ctx) {
             fprintf(stderr, "%s: ggml_init() failed\n", __func__);
-            return false;
+            return 1;
         }
     }
 
@@ -379,26 +379,26 @@ bool encodec_model_load(const std::string& fname, encodec_model& model) {
 
             if (model.tensors.find(name.data()) == model.tensors.end()) {
                 fprintf(stderr, "%s: unknown tensor '%s' in model file\n", __func__, name.data());
-                return false;
+                return 1;
             }
 
             auto tensor = model.tensors[name.data()];
             if (ggml_nelements(tensor) != nelements) {
                 fprintf(stderr, "%s: tensor '%s' has wrong size in model file\n", __func__, name.data());
-                return false;
+                return 1;
             }
 
             if (tensor->ne[0] != ne[0] || tensor->ne[1] != ne[1] || tensor->ne[2] != ne[2]) {
                 fprintf(stderr, "%s: tensor '%s' has wrong shape in model file: got [%lld, %lld, %lld], expected [%d, %d, %d]\n",
                         __func__, name.data(), tensor->ne[0], tensor->ne[1], tensor->ne[2], ne[0], ne[1], ne[2]);
-                return false;
+                return 1;
             }
 
             const size_t bpe = ggml_type_size(ggml_type(ftype));
             if ((nelements*bpe)/ggml_blck_size(tensor->type) != ggml_nbytes(tensor)) {
                 fprintf(stderr, "%s: tensor '%s' has wrong size in model file: got %zu, expected %zu\n",
                         __func__, name.data(), ggml_nbytes(tensor), nelements*bpe);
-                return false;
+                return 1;
             }
 
             fin.read(reinterpret_cast<char *>(tensor->data), ggml_nbytes(tensor));
@@ -414,7 +414,7 @@ bool encodec_model_load(const std::string& fname, encodec_model& model) {
 
     fin.close();
 
-    return true;
+    return 0;
 }
 
 struct ggml_tensor * encodec_quantizer_decode_eval(

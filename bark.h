@@ -1,10 +1,26 @@
-#pragma once
+#ifndef BARK_H
+#define BARK_H
+
 #include "encodec.h"
 
 #include <map>
 #include <random>
 #include <thread>
 #include <vector>
+
+#ifdef BARK_SHARED
+#    if defined(_WIN32) && !defined(__MINGW32__)
+#        ifdef BARK_BUILD
+#            define BARK_API __declspec(dllexport)
+#        else
+#            define BARK_API __declspec(dllimport)
+#        endif
+#    else
+#        define BARK_API __attribute__ ((visibility ("default")))
+#    endif
+#else
+#    define BARK_API
+#endif
 
 #define SAMPLE_RATE 24000
 
@@ -27,215 +43,115 @@
 #define COARSE_SEMANTIC_PAD_TOKEN 12048
 #define COARSE_INFER_TOKEN 12050
 
-struct bark_params {
-    int32_t n_threads = std::min(4, (int32_t) std::thread::hardware_concurrency());
 
-    std::string model = "./ggml_weights/";  // weights location
-
-    int32_t seed = 0;
-
-    std::string prompt;  // user prompt
-
-    std::string dest_wav_path = "./output.wav";
-};
-
-struct gpt_hparams {
-    int32_t n_in_vocab;
-    int32_t n_out_vocab;
-    int32_t n_layer;
-    int32_t n_head;
-    int32_t n_embd;
-    int32_t block_size;
-    int32_t n_lm_heads;
-    int32_t n_wtes;
-    int32_t ftype;
-
-    int32_t n_codes_given = 1;
-};
-
-struct bark_vocab {
-    using id    = int32_t;
-    using token = std::string;
-
-    std::map<token, id> token_to_id;
-    std::map<id, token> id_to_token;
-
-    std::map<token, id> subword_token_to_id;
-    std::map<id, token> id_to_subword_token;
-};
-
-typedef std::vector<bark_vocab::id>              bark_sequence;
-typedef std::vector<std::vector<bark_vocab::id>> bark_codes;
-typedef std::vector<float>                       audio_arr_t;
-
-struct gpt_layer {
-    // normalization
-    struct ggml_tensor * ln_1_g;
-    struct ggml_tensor * ln_1_b;
-
-    struct ggml_tensor * ln_2_g;
-    struct ggml_tensor * ln_2_b;
-
-    // attention
-    struct ggml_tensor * c_attn_attn_w;
-    struct ggml_tensor * c_attn_attn_b;
-
-    struct ggml_tensor * c_attn_proj_w;
-    struct ggml_tensor * c_attn_proj_b;
-
-    // mlp
-    struct ggml_tensor * c_mlp_fc_w;
-    struct ggml_tensor * c_mlp_fc_b;
-
-    struct ggml_tensor * c_mlp_proj_w;
-    struct ggml_tensor * c_mlp_proj_b;
-};
-
-struct gpt_model {
-    gpt_hparams hparams;
-
-    // normalization
-    struct ggml_tensor * ln_f_g;
-    struct ggml_tensor * ln_f_b;
-
-    struct ggml_tensor * wpe;     //     token embedding
-    // struct ggml_tensor * wte;     //  position embedding
-    // struct ggml_tensor * lm_head; // language model head
-
-    std::vector<struct ggml_tensor *> wtes;
-    std::vector<struct ggml_tensor *> lm_heads;
-
-    std::vector<gpt_layer> layers;
-
-    // key + value memory
-    struct ggml_tensor * memory_k;
-    struct ggml_tensor * memory_v;
+#ifdef __cplusplus
+extern "C" {
+#endif
 
     //
-    struct ggml_context * ctx;
-    std::map<std::string, struct ggml_tensor *> tensors;
+    // C interface
+    //
 
-    int64_t memsize = 0;
-};
+    struct bark_context;
+    struct bark_progress;
 
+    struct bark_model;
+    struct bark_vocab;
 
-struct bark_model {
-    // encoder
-    gpt_model coarse_model;
-    gpt_model   fine_model;
-    gpt_model   text_model;
+    typedef int32_t bark_token;
 
-    // decoder
-    encodec_model codec_model;
+    struct gpt_hparams;
+    struct gpt_layer;
+    struct gpt_model;
 
-    // vocab
-    bark_vocab vocab;
+    BARK_API struct bark_context * bark_new_context_with_model(struct bark_model * model);
 
-    int64_t memsize = 0;
-};
+    BARK_API void bark_free(struct bark_context * ctx);
 
-bool gpt_model_load(const std::string& fname, gpt_model& model);
+    BARK_API void bark_free_model(struct bark_model * ctx);
 
-bool gpt_eval(
-        const gpt_model & model,
-        const int n_threads,
-        int * n_past,
-        const bool merge_ctx,
-        const bark_sequence & embd_inp,
-              std::vector<float>          & embd_w,
-              size_t                      & mem_per_token);
+    BARK_API int bark_generate_audio(
+            struct bark_context * ctx,
+                     const char * text,
+                     const char * dest_wav_path,
+                            int   n_threads);
 
-bool fine_gpt_eval(
-        const gpt_model & model,
-        const int n_threads,
-        const int codebook_ix,
-        const bark_codes & embd_inp,
-              std::vector<std::vector<float>> & logits,
-              size_t                          & mem_per_token);
+    BARK_API struct bark_model * bark_load_model_from_file(const char * dirname);
 
-bark_vocab::id gpt_sample(
-              std::vector<float>          & logits,
-              std::mt19937                & rng,
-              float temp,
-              float * eos_p);
+    BARK_API int bark_model_quantize(
+                     const char * fname_inp,
+                     const char * fname_out,
+                     ggml_ftype   ftype);
 
-bool bark_model_load(const std::string & dirname, bark_model & model);
+    BARK_API int bark_vocab_load(
+                     const char * fname,
+                     bark_vocab * vocab,
+                        int32_t   expected_size);
 
-bool bark_vocab_load(const std::string & fname, bark_vocab& vocab, int32_t expected_size);
+#ifdef __cplusplus
+}
+#endif
 
-void bert_tokenize(
-        const bark_vocab & vocab,
-              const char * text,
-                 int32_t * tokens,
-                 int32_t * n_tokens,
-                 int32_t   n_max_tokens);
+#ifdef BARK_API_INTERNAL
 
-bool bark_generate_audio(
-        bark_model model,
-        const bark_vocab& vocab,
-        const char * text,
-        const int n_threads,
-        const int32_t seed,
-        const std::string& dest_wav_path);
+    //
+    // Internal API for tests
+    //
 
-bark_sequence bark_forward_text_encoder(
-    const bark_sequence & tokens,
-    const gpt_model model,
-    std::mt19937 & rng,
-    const int n_threads,
-    const float temp,
-    const float min_eos_p);
+    int gpt_model_load(const std::string& fname, gpt_model& model);
 
-bark_codes bark_forward_coarse_encoder(
-    const bark_sequence & tokens,
-    const gpt_model model,
-    std::mt19937 & rng,
-    const int n_threads,
-    const float temp,
-    const int max_coarse_history,
-    const int sliding_window_size);
+    int gpt_eval(
+                  gpt_model * model,
+                 bark_token * tokens,
+                        int   n_tokens,
+                      float * logits,
+                        int * n_past,
+                       bool   merge_ctx,
+                        int   n_threads);
 
-bark_codes bark_forward_fine_encoder(
-    const bark_codes & tokens,
-    const gpt_model model,
-    std::mt19937 & rng,
-    const int n_threads,
-    const float temp);
+    bool fine_gpt_eval(
+                  gpt_model * model,
+                 bark_token * tokens,
+                        int   n_tokens,
+                      float * logits,
+                        int   n_threads,
+                        int   codebook_ix);
 
-audio_arr_t bark_forward_encodec(
-    const bark_codes & tokens,
-    const encodec_model model);
+    void bert_tokenize(
+           const bark_vocab * vocab,
+                 const char * text,
+                    int32_t * tokens,
+                    int32_t * n_tokens,
+                    int32_t   n_max_tokens);
 
-struct bark_progress {
-    float current = 0.0f;
-    const char * func = NULL;
+    void bark_forward_text_encoder(
+        struct bark_context * ctx,
+                      float   temp,
+                      float   min_eos_p,
+                        int   n_threads);
 
-    bark_progress() {}
+    void bark_forward_coarse_encoder(
+        struct bark_context * ctx,
+                        int   max_coarse_history,
+                        int   sliding_window_size,
+                      float   temp,
+                        int   n_threads);
 
-    void callback(float progress) {
-        float percentage = progress * 100;
-        if (percentage == 0.0f && func != NULL) {
-            fprintf(stderr, "%s: ", func);
-        }
-        while (percentage > current) {
-            current = percentage;
-            fprintf(stderr, ".");
-            fflush(stderr);
-            if (percentage >= 100) {
-                fprintf(stderr, "\n");
-            }
-        }
-    }
-};
+    void bark_forward_fine_encoder(
+        struct bark_context * ctx,
+                      float   temp,
+                        int   n_threads);
 
-bool bark_params_parse(int argc, char ** argv, bark_params & params);
+    void bark_forward_encodec(struct bark_context * ctx);
 
-void bark_print_usage(char ** argv, const bark_params & params);
+    void print_tensor(struct ggml_tensor * a);
 
-void print_tensor(struct ggml_tensor * a);
+    void read_tensor_from_file(std::ifstream & fin, struct ggml_tensor * t);
 
-void read_tensor_from_file(std::ifstream & fin, struct ggml_tensor * t);
+    bool allequal(struct ggml_tensor * a, struct ggml_tensor * b, std::string test_name);
 
-bool allequal(struct ggml_tensor * a, struct ggml_tensor * b, std::string test_name);
+    bool allclose(struct ggml_tensor * a, struct ggml_tensor * b, float tol, std::string test_name);
 
-bool allclose(struct ggml_tensor * a, struct ggml_tensor * b, float tol, std::string test_name);
+#endif // BARK_API_INTERNAL
+
+#endif  // BARK_H

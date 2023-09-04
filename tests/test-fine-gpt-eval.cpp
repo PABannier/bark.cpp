@@ -16,34 +16,46 @@ static const std::vector<std::tuple<std::string, int>> test_args = {
 
 static const int n_threads = 4;
 
+template<typename T>
+std::vector<T> flatten(std::vector<std::vector<T>> const &vec) {
+    std::vector<T> flattened;
+    for (auto const &v: vec) {
+        flattened.insert(flattened.end(), v.begin(), v.end());
+    }
+    return flattened;
+}
+
 int main() {
     const std::string fname = "../ggml_weights/ggml_weights_fine.bin";
 
     gpt_model model;
-    if(!gpt_model_load(fname, model)) {
+    if (gpt_model_load(fname, model) > 0) {
         fprintf(stderr, "%s: invalid model file '%s'\n", __func__, fname.c_str());
         return 1;
     }
 
     bark_codes tokens;
-    logit_matrix gt_logits, logits;
+    std::vector<float> gt_logits, logits;
 
     // dry run to estimate mem_per_token
-    size_t mem_per_token = 0;
-    bark_codes toy_codes = { {0, 1}, {1, 2}, {2, 3}, {3, 4}, {4, 5}, {5, 6}, {6, 7}, {7, 8} };
-    fine_gpt_eval(model, n_threads, 2, toy_codes, logits, mem_per_token);
+    bark_sequence decoy = { 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8 };
+    fine_gpt_eval(model, decoy.data(), decoy.size(), nullptr, n_threads, 2);
 
     for (int i = 0; i < (int) test_args.size(); i++) {
+        std::string path = std::get<0>(test_args[i]);
+        int codebook_ix  = std::get<1>(test_args[i]);
+
         tokens.clear();
         gt_logits.clear();
         logits.clear();
 
-        std::string path = std::get<0>(test_args[i]);
-        int codebook_ix  = std::get<1>(test_args[i]);
-
         load_test_data(path, tokens, gt_logits);
+        tokens = transpose(tokens);
 
-        fine_gpt_eval(model, n_threads, codebook_ix, transpose(tokens), logits, mem_per_token);
+        std::vector<int> tokens_vec = flatten(tokens);
+
+        logits.resize(1024*1056);
+        fine_gpt_eval(model, tokens_vec.data(), tokens_vec.size(), logits.data(), n_threads, codebook_ix);
 
         printf("\n");
         printf("%s: %s\n", __func__, path.c_str());

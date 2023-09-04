@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     bark_vocab vocab;
     int max_ctx_size = 256;
 
-    if(!bark_vocab_load(fname, vocab, 119547)) {
+    if (bark_vocab_load(fname, vocab, 119547) > 0) {
         fprintf(stderr, "%s: invalid vocab file '%s'\n", __func__, fname.c_str());
         return 1;
     }
