@@ -19,7 +19,7 @@
 #        define BARK_API __attribute__ ((visibility ("default")))
 #    endif
 #else
-#    define BARK_API 
+#    define BARK_API
 #endif
 
 #define SAMPLE_RATE 24000
@@ -58,23 +58,7 @@ extern "C" {
     struct bark_model;
     struct bark_vocab;
 
-    struct bark_params {
-        int32_t n_threads = std::min(4, (int32_t) std::thread::hardware_concurrency());
-
-        std::string model = "./ggml_weights/";  // weights location
-
-        int32_t seed = 0;
-
-        std::string prompt;  // user prompt
-
-        std::string dest_wav_path = "./output.wav";
-    };
-
     typedef int32_t bark_token;
-
-    typedef std::vector<bark_token>              bark_sequence;
-    typedef std::vector<std::vector<bark_token>> bark_codes;
-    typedef std::vector<float>                   audio_arr_t;
 
     struct gpt_hparams;
     struct gpt_layer;
@@ -82,28 +66,27 @@ extern "C" {
 
     BARK_API struct bark_context * bark_new_context_with_model(struct bark_model * model);
 
-    BARK_API void bark_free(bark_context * ctx);
+    BARK_API void bark_free(struct bark_context * ctx);
 
     BARK_API void bark_free_model(struct bark_model * ctx);
 
     BARK_API int bark_generate_audio(
             struct bark_context * ctx,
                      const char * text,
-                    std::string & dest_wav_path,
+                     const char * dest_wav_path,
                             int   n_threads);
 
-    BARK_API struct bark_model * bark_load_model_from_file(const std::string & dirname);
+    BARK_API struct bark_model * bark_load_model_from_file(const char * dirname);
 
     BARK_API int bark_model_quantize(
-              const std::string & fname_inp,
-              const std::string & fname_out,
+                     const char * fname_inp,
+                     const char * fname_out,
                      ggml_ftype   ftype);
 
-    BARK_API int bark_vocab_load(const std::string & fname, bark_vocab& vocab, int32_t expected_size);
-
-    BARK_API int bark_params_parse(int argc, char ** argv, bark_params & params);
-
-    BARK_API void bark_print_usage(char ** argv, const bark_params & params);
+    BARK_API int bark_vocab_load(
+                     const char * fname,
+                     bark_vocab * vocab,
+                        int32_t   expected_size);
 
 #ifdef __cplusplus
 }
@@ -111,35 +94,35 @@ extern "C" {
 
 #ifdef BARK_API_INTERNAL
 
-    // 
+    //
     // Internal API for tests
-    // 
+    //
 
     int gpt_model_load(const std::string& fname, gpt_model& model);
 
     int gpt_eval(
-             gpt_model & model,
-            bark_token * tokens,
-                   int   n_tokens,
-                 float * logits,
-                   int * n_past,
-                  bool   merge_ctx,
-                   int   n_threads);
+                  gpt_model * model,
+                 bark_token * tokens,
+                        int   n_tokens,
+                      float * logits,
+                        int * n_past,
+                       bool   merge_ctx,
+                        int   n_threads);
 
     bool fine_gpt_eval(
-             gpt_model & model,
-        bark_token * tokens,
-                   int   n_tokens,
-                 float * logits,
-                   int   n_threads,
-                   int   codebook_ix);
+                  gpt_model * model,
+                 bark_token * tokens,
+                        int   n_tokens,
+                      float * logits,
+                        int   n_threads,
+                        int   codebook_ix);
 
     void bert_tokenize(
-      const bark_vocab & vocab,
-            const char * text,
-               int32_t * tokens,
-               int32_t * n_tokens,
-               int32_t   n_max_tokens);
+           const bark_vocab * vocab,
+                 const char * text,
+                    int32_t * tokens,
+                    int32_t * n_tokens,
+                    int32_t   n_max_tokens);
 
     void bark_forward_text_encoder(
         struct bark_context * ctx,
@@ -156,7 +139,7 @@ extern "C" {
 
     void bark_forward_fine_encoder(
         struct bark_context * ctx,
-                      float   temp, 
+                      float   temp,
                         int   n_threads);
 
     void bark_forward_encodec(struct bark_context * ctx);
