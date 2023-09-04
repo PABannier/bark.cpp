@@ -1303,7 +1303,6 @@ static struct ggml_cgraph * bark_build_gpt_graph(
     ggml_set_name(input, "input_tokens");
 
     struct ggml_tensor * tok_emb;
-    ggml_set_name(tok_emb, "token_embeddings");
 
     if (*n_past > 0) {
         BARK_ASSERT(N == 1);
@@ -1330,6 +1329,7 @@ static struct ggml_cgraph * bark_build_gpt_graph(
             tok_emb = ggml_get_rows(ctx0, model->wtes[0], input);
         }
     }
+    ggml_set_name(tok_emb, "token_embeddings");
 
     struct ggml_tensor * position = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
     for (int i = 0; i < N; ++i) {
