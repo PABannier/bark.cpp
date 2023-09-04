@@ -1393,8 +1393,7 @@ static struct ggml_cgraph * bark_build_gpt_graph(
                 ggml_build_forward_expand(gf, ggml_cpy(ctx0, Vcur, v));
             }
 
-            // Q = Qcur.contiguous().view(n_embd/n_head, n_head, N).permute(0, 2, 1, 3)
-            // [64, N, 12]
+            // [n_embd/n_head, N, n_head]
             struct ggml_tensor * Q =
                 ggml_permute(ctx0,
                         ggml_cpy(ctx0,
@@ -1403,8 +1402,7 @@ static struct ggml_cgraph * bark_build_gpt_graph(
                         0, 2, 1, 3);
             ggml_set_name(Q, "Q");
 
-            // K = Kmem.view(n_embd/n_head, n_head, n_past + N).permute(0, 2, 1, 3)
-            // [64, n_past + N, 12]
+            // [n_embd/n_head, n_past + N, n_head]
             struct ggml_tensor * K =
                 ggml_permute(ctx0,
                         ggml_reshape_3d(ctx0,
@@ -1413,28 +1411,23 @@ static struct ggml_cgraph * bark_build_gpt_graph(
                         0, 2, 1, 3);
             ggml_set_name(K, "K");
 
-            // K * Q
-            // [n_past + N, N, 12]
+            // [n_past + N, N, n_head]
             struct ggml_tensor * KQ = ggml_mul_mat(ctx0, K, Q);
             ggml_set_name(KQ, "KQ");
 
-            // KQ_scaled = KQ / sqrt(n_embd/n_head)
-            // [n_past + N, N, 12]
+            // [n_past + N, N, n_head]
             struct ggml_tensor * KQ_scaled = ggml_scale_inplace(ctx0, KQ, KQ_scale);
             ggml_set_name(KQ_scaled, "KQ_scaled");
 
-            // KQ_masked = mask_past(KQ_scaled)
-            // [n_past + N, N, 12]
+            // [n_past + N, N, n_head]
             struct ggml_tensor * KQ_masked = ggml_diag_mask_inf_inplace(ctx0, KQ_scaled, *n_past);
             ggml_set_name(KQ_masked, "KQ_masked");
 
-            // KQ = soft_max(KQ_masked)
-            // [n_past + N, N, 12]
+            // [n_past + N, N, n_head]
             struct ggml_tensor * KQ_soft_max = ggml_soft_max_inplace(ctx0, KQ_masked);
             ggml_set_name(KQ_soft_max, "KQ_soft_max");
 
-            // V_trans = Vmem.view(n_embd/n_head, n_head, n_past + N).permute(1, 2, 0, 3).contiguous()
-            // [n_past + N, 64, 12]
+            // [n_past + N, n_embd/n_head, n_head]
             struct ggml_tensor * V_trans =
                 ggml_cpy(ctx0,
                         ggml_permute(ctx0,
@@ -1445,18 +1438,15 @@ static struct ggml_cgraph * bark_build_gpt_graph(
                         ggml_new_tensor_3d(ctx0, model->memory_v->type, *n_past + N, n_embd/n_head, n_head));
             ggml_set_name(V_trans, "V_trans");
 
-            // KQV = transpose(V) * KQ_soft_max
-            // [64, N, 12]
+            // [n_enbd/n_head, N, n_head]
             struct ggml_tensor * KQV = ggml_mul_mat(ctx0, V_trans, KQ_soft_max);
             ggml_set_name(KQV, "KQV");
 
-            // KQV_merged = KQV.permute(0, 2, 1, 3)
-            // [64, 12, N]
+            // [n_embd/n_head, n_head, N]
             struct ggml_tensor * KQV_merged = ggml_permute(ctx0, KQV, 0, 2, 1, 3);
             ggml_set_name(KQV_merged, "KQV_merged");
 
-            // cur = KQV_merged.contiguous().view(n_embd, N)
-            // [768, N]
+            // [n_embd, N]
             cur = ggml_cpy(ctx0,
                     KQV_merged,
                     ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N));
