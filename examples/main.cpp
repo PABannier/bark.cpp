@@ -100,6 +100,8 @@ int main(int argc, char **argv) {
 
     printf("\n");
 
+    bark_seed_rng(bctx, params.seed);
+
     const int64_t t_eval_us_start = ggml_time_us();
     bark_generate_audio(bctx, params.prompt.data(), params.dest_wav_path.c_str(), params.n_threads);
     t_eval_us = ggml_time_us() - t_eval_us_start;

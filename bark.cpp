@@ -184,6 +184,12 @@ struct bark_context * bark_new_context_with_model(struct bark_model * model) {
     return ctx;
 }
 
+void bark_seed_rng(struct bark_context * ctx, int32_t seed) {
+    if (ctx) {
+        ctx->rng.seed(seed);
+    }
+}
+
 int bark_vocab_load(
             const char * fname,
             bark_vocab * vocab,
