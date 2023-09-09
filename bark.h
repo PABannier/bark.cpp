@@ -105,6 +105,22 @@ extern "C" {
                      bark_vocab * vocab,
                         int32_t   expected_size);
 
+    BARK_API int bark_n_tokens(bark_context * ctx);
+
+    BARK_API int bark_n_semantic_tokens(bark_context * ctx);
+
+    BARK_API int bark_n_coarse_tokens(bark_context * ctx);
+
+    BARK_API int bark_n_fine_tokens(bark_context * ctx);
+
+    BARK_API bark_token * bark_tokens(bark_context * ctx);
+
+    BARK_API bark_token * bark_semantic_tokens(bark_context * ctx);
+
+    BARK_API bark_token * bark_coarse_tokens(bark_context * ctx);
+
+    BARK_API bark_token * bark_fine_tokens(bark_context * ctx);
+
 #ifdef __cplusplus
 }
 #endif
