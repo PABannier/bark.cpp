@@ -161,17 +161,15 @@ struct bark_context {
 };
 
 struct bark_progress {
-
-    bark_progress(const char * func_name) : func_name(func_name) {}
-
-    const char * func_name;
-
     float current = 0.0f;
+    const char * func;
+
+    bark_progress(const char * func): func(func) {}
 
     void callback(float progress) {
         float percentage = progress * 100;
         if (percentage == 0.0f) {
-            fprintf(stderr, "%s: ", func_name);
+            fprintf(stderr, "%s: ", func);
         }
         while (percentage > current) {
             current = percentage;
@@ -1771,8 +1769,7 @@ void bark_forward_coarse_encoder(struct bark_context * ctx, int n_threads) {
     bark_codes out_coarse;
     bark_sequence out;
 
-    bark_progress progress;
-    progress.func = __func__;
+    bark_progress progress(__func__);
 
     int max_coarse_history = ctx->max_coarse_history;
     int sliding_window_size = ctx->sliding_window_size;
@@ -1883,8 +1880,10 @@ void bark_forward_coarse_encoder(struct bark_context * ctx, int n_threads) {
 }
 
 void bark_forward_fine_encoder(struct bark_context * ctx, int n_threads) {
-    // input shape: (N, n_codes)
+    // input shape: [N, n_codes]
     const int64_t t_main_start_us = ggml_time_us();
+
+    bark_progress progress(__func__);
 
     bark_codes input = ctx->coarse_tokens;
 
@@ -1894,9 +1893,6 @@ void bark_forward_fine_encoder(struct bark_context * ctx, int n_threads) {
     logits.resize(1024*1056);
 
     gpt_model * model = &ctx->model.fine_model;
-
-    bark_progress progress;
-    progress.func = __func__;
 
     int n_coarse          = input[0].size();
     int original_seq_len  = input.size();
