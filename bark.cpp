@@ -1688,7 +1688,7 @@ void bark_tokenize_input(struct bark_context * ctx, const char * text) {
     ctx->n_tokens = n_tokens;
 
     printf("%s: prompt: '%s'\n", __func__, text);
-    printf("%s: number of tokens in prompt = %zu, first 8 tokens: ", __func__, n_tokens);
+    printf("%s: number of tokens in prompt = %d, first 8 tokens: ", __func__, n_tokens);
     for (int i = 0; i < 8; i++) {
         printf("%d ", ctx->tokens[i]);
     }
@@ -1756,6 +1756,7 @@ void bark_forward_text_encoder(struct bark_context * ctx, int n_threads) {
 
     out = (int32_t *) realloc(out, model->n_sample);
     ctx->semantic_tokens = out;
+    ctx->n_semantic_tokens = model->n_sample;
 
     const int64_t t_main_end_us = ggml_time_us();
     model->t_main_us = t_main_end_us - t_main_start_us;
@@ -1778,7 +1779,7 @@ void bark_forward_coarse_encoder(struct bark_context * ctx, int n_threads) {
     float semantic_to_coarse_ratio = COARSE_RATE_HZ / SEMANTIC_RATE_HZ * N_COARSE_CODEBOOKS;
     int max_semantic_history = floorf(max_coarse_history / semantic_to_coarse_ratio);
 
-    int n_steps = floorf(ctx->semantic_tokens.size() * semantic_to_coarse_ratio / N_COARSE_CODEBOOKS) * N_COARSE_CODEBOOKS;
+    int n_steps = floorf(ctx->n_semantic_tokens * semantic_to_coarse_ratio / N_COARSE_CODEBOOKS) * N_COARSE_CODEBOOKS;
     int step_ix = 0;
 
     BARK_ASSERT(n_steps > 0);
@@ -1791,7 +1792,10 @@ void bark_forward_coarse_encoder(struct bark_context * ctx, int n_threads) {
     auto & hparams = model->hparams;
     const int n_vocab = hparams.n_out_vocab;
 
-    bark_sequence input = ctx->semantic_tokens;
+    bark_sequence input = {
+        ctx->semantic_tokens,
+        ctx->semantic_tokens + ctx->n_semantic_tokens
+    };
 
     std::vector<float> logits;
     logits.resize(n_vocab);
@@ -2116,15 +2120,18 @@ void bark_free(bark_context * ctx) {
     ggml_free(ctx->model.text_model.ctx);
     ggml_free(ctx->model.codec_model.ctx);
 
+    delete ctx->tokens;
+    delete ctx->semantic_tokens;
+
     delete ctx;
 }
 
 int bark_n_tokens(bark_context * ctx) {
-    return ctx->tokens.size();
+    return ctx->n_tokens;
 }
 
 int bark_n_semantic_tokens(bark_context * ctx) {
-    return ctx->semantic_tokens.size();
+    return ctx->n_semantic_tokens;
 }
 
 int bark_n_coarse_tokens(bark_context * ctx) {
@@ -2136,11 +2143,11 @@ int bark_n_fine_tokens(bark_context * ctx) {
 }
 
 bark_token * bark_tokens(bark_context * ctx) {
-    return ctx->tokens.data();
+    return ctx->tokens;
 }
 
 bark_token * bark_semantic_tokens(bark_context * ctx) {
-    return ctx->semantic_tokens.data();
+    return ctx->semantic_tokens;
 }
 
 bark_token * bark_coarse_tokens(bark_context * ctx) {
