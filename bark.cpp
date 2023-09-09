@@ -1679,9 +1679,8 @@ void bark_tokenize_input(struct bark_context * ctx, const char * text) {
     }
 
     // semantic history
-    for (int i = 256; i < 512; i++)
+    for (int i = max_ctx_size; i < max_ctx_size + 256; i++)
         tokens[i] = SEMANTIC_PAD_TOKEN;
-
     tokens[513] = SEMANTIC_INFER_TOKEN;
 
     ctx->tokens = tokens;
@@ -1792,10 +1791,10 @@ void bark_forward_coarse_encoder(struct bark_context * ctx, int n_threads) {
     auto & hparams = model->hparams;
     const int n_vocab = hparams.n_out_vocab;
 
-    bark_sequence input = {
+    bark_sequence input(
         ctx->semantic_tokens,
         ctx->semantic_tokens + ctx->n_semantic_tokens
-    };
+    );
 
     std::vector<float> logits;
     logits.resize(n_vocab);
@@ -2152,12 +2151,10 @@ bark_token * bark_semantic_tokens(bark_context * ctx) {
 
 bark_token * bark_coarse_tokens(bark_context * ctx) {
     std::vector<bark_token> res;
-    unroll(ctx->coarse_tokens, res);
     return res.data();
 }
 
 bark_token * bark_fine_tokens(bark_context * ctx) {
     std::vector<bark_token> res;
-    unroll(ctx->fine_tokens, res);
     return res.data();
 }
