@@ -23,10 +23,10 @@ Author: Pierre-Antoine Bannier <pierreantoine.bannier@gmail.com>
 
 #define BARK_DEBUG 0
 
-typedef std::vector<int32_t> bark_sequence;
-typedef std::vector<float>   audio_arr_t;
+typedef std::vector<bark_token> bark_sequence;
+typedef std::vector<float> audio_arr_t;
 
-typedef std::vector<std::vector<int32_t>> bark_codes;
+typedef std::vector<std::vector<bark_token>> bark_codes;
 
 struct gpt_hparams {
     int32_t n_in_vocab;
