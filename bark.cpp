@@ -148,6 +148,13 @@ struct bark_context {
     bark_codes fine_tokens;
 
     audio_arr_t audio_arr;
+
+    float temp;
+    float fine_temp;
+
+    float min_eos_p;
+    int sliding_window_size;
+    int max_coarse_history;
 };
 
 struct bark_progress {
@@ -172,16 +179,39 @@ struct bark_progress {
     }
 };
 
-struct bark_context * bark_new_context_with_model(struct bark_model * model) {
+struct bark_context * bark_new_context_with_model(
+                struct bark_model * model,
+       struct bark_context_params  params) {
+
     if (!model) {
         return nullptr;
     }
 
     bark_context * ctx = new bark_context(*model);
 
-    ctx->rng = std::mt19937(0);
+    ctx->rng = std::mt19937(params.seed);
+
+    ctx->temp = params.temp;
+    ctx->fine_temp = params.fine_temp;
+
+    ctx->max_coarse_history = params.max_coarse_history;
+    ctx->sliding_window_size = params.sliding_window_size;
+    ctx->min_eos_p = params.min_eos_p;
 
     return ctx;
+}
+
+struct bark_context_params bark_context_default_params() {
+    struct bark_context_params result = {
+        /*.seed                        =*/ 0,
+        /*.temp                        =*/ 0.7,
+        /*.fine_temp                   =*/ 0.5,
+        /*.min_eos_p                   =*/ 0.2,
+        /*.sliding_window_size         =*/ 60,
+        /*.max_coarse_history          =*/ 630,
+    };
+
+    return result;
 }
 
 void bark_seed_rng(struct bark_context * ctx, int32_t seed) {
@@ -1672,11 +1702,7 @@ static void bark_print_statistics(gpt_model * model) {
     printf("\n");
 }
 
-void bark_forward_text_encoder(
-        struct bark_context * ctx,
-                      float   temp,
-                      float   min_eos_p,
-                        int   n_threads) {
+void bark_forward_text_encoder(struct bark_context * ctx, int n_threads) {
     const int64_t t_main_start_us = ggml_time_us();
 
     bark_sequence out;
@@ -1688,6 +1714,9 @@ void bark_forward_text_encoder(
 
     auto & hparams = model->hparams;
     const int n_vocab = hparams.n_out_vocab;
+
+    float min_eos_p = ctx->min_eos_p;
+    float temp = ctx->temp;
 
     bark_sequence input = ctx->tokens;
 
@@ -1733,12 +1762,7 @@ void bark_forward_text_encoder(
     bark_print_statistics(model);
 }
 
-void bark_forward_coarse_encoder(
-        struct bark_context * ctx,
-                        int   max_coarse_history,
-                        int   sliding_window_size,
-                      float   temp,
-                        int   n_threads) {
+void bark_forward_coarse_encoder(struct bark_context * ctx, int n_threads) {
     const int64_t t_main_start_us = ggml_time_us();
 
     bark_codes out_coarse;
@@ -1746,6 +1770,10 @@ void bark_forward_coarse_encoder(
 
     bark_progress progress;
     progress.func = __func__;
+
+    int max_coarse_history = ctx->max_coarse_history;
+    int sliding_window_size = ctx->sliding_window_size;
+    float temp = ctx->temp;
 
     float semantic_to_coarse_ratio = COARSE_RATE_HZ / SEMANTIC_RATE_HZ * N_COARSE_CODEBOOKS;
     int max_semantic_history = floorf(max_coarse_history / semantic_to_coarse_ratio);
@@ -1851,11 +1879,13 @@ void bark_forward_coarse_encoder(
 
 }
 
-void bark_forward_fine_encoder(struct bark_context * ctx,float temp, int n_threads) {
+void bark_forward_fine_encoder(struct bark_context * ctx, int n_threads) {
     // input shape: (N, n_codes)
     const int64_t t_main_start_us = ggml_time_us();
 
     bark_codes input = ctx->coarse_tokens;
+
+    float temp = ctx->fine_temp;
 
     std::vector<float> logits;
     logits.resize(1024*1056);
@@ -2063,26 +2093,14 @@ int bark_generate_audio(
              const char * text,
              const char * dest_wav_path,
                     int   n_threads) {
-    const float temp      = 0.7;
-    const float fine_temp = 0.5;
-
-    const int sliding_window_size = 60;
-    const int max_coarse_history = 630;
-
-    const float min_eos_p = 0.2;
-
-    // tokenize input (bert tokenizer)
     bark_tokenize_input(ctx, text);
 
-    // forward pass
-    bark_forward_text_encoder(ctx, temp, min_eos_p, n_threads);
-    bark_forward_coarse_encoder(ctx, max_coarse_history, sliding_window_size, temp, n_threads);
-    bark_forward_fine_encoder(ctx, fine_temp, n_threads);
+    bark_forward_text_encoder  (ctx, n_threads);
+    bark_forward_coarse_encoder(ctx, n_threads);
+    bark_forward_fine_encoder  (ctx, n_threads);
 
-    // encode audio
     bark_forward_encodec(ctx);
 
-    // write wav file
     write_wav_on_disk(ctx->audio_arr, dest_wav_path);
 
     return 0;
