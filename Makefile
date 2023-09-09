@@ -341,3 +341,6 @@ tests/test-forward-fine: tests/test-forward-fine.cpp ggml.o bark.o encodec.o com
 
 tests/test-forward-encodec: tests/test-forward-encodec.cpp ggml.o bark.o encodec.o common.o $(OBJS)
 	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
+
+test-conv: test-conv.cpp ggml.o $(OBJS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.txt,$^) -o $@ $(LDFLAGS)
