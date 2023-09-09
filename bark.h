@@ -52,19 +52,34 @@ extern "C" {
     // C interface
     //
 
+    typedef int32_t bark_token;
+
     struct bark_context;
     struct bark_progress;
 
+    struct bark_context_params {
+        uint32_t seed; // RNG seed
+
+        float temp;      // Temperature for sampling (text and coarse encoders)
+        float fine_temp; // Temperature for sampling (fine encoder)
+
+        float min_eos_p;         // Minimum probability for EOS token (text encoder)
+        int sliding_window_size; // Sliding window size for coarse encoder
+        int max_coarse_history;  // Max history for coarse encoder
+    };
+
     struct bark_model;
     struct bark_vocab;
-
-    typedef int32_t bark_token;
 
     struct gpt_hparams;
     struct gpt_layer;
     struct gpt_model;
 
-    BARK_API struct bark_context * bark_new_context_with_model(struct bark_model * model);
+    BARK_API struct bark_context_params bark_context_default_params(void);
+
+    BARK_API struct bark_context * bark_new_context_with_model(
+               struct bark_model * model,
+      struct bark_context_params   params);
 
     BARK_API void bark_seed_rng(struct bark_context * ctx, int32_t seed);
 
@@ -128,20 +143,14 @@ extern "C" {
 
     void bark_forward_text_encoder(
         struct bark_context * ctx,
-                      float   temp,
-                      float   min_eos_p,
                         int   n_threads);
 
     void bark_forward_coarse_encoder(
         struct bark_context * ctx,
-                        int   max_coarse_history,
-                        int   sliding_window_size,
-                      float   temp,
                         int   n_threads);
 
     void bark_forward_fine_encoder(
         struct bark_context * ctx,
-                      float   temp,
                         int   n_threads);
 
     void bark_forward_encodec(struct bark_context * ctx);

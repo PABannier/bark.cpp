@@ -66,7 +66,8 @@ std::tuple<struct bark_model *, struct bark_context *> bark_init_from_params(bar
         return std::make_tuple(nullptr, nullptr);
     }
 
-    bark_context * bctx = bark_new_context_with_model(model);
+    bark_context_params bctx_params = bark_context_default_params();
+    bark_context * bctx = bark_new_context_with_model(model, bctx_params);
     if (bctx == NULL) {
         fprintf(stderr, "%s: error: failed to create context with model '%s'\n", __func__, params.model_path.c_str());
         bark_free_model(model);
