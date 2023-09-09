@@ -42,3 +42,5 @@ tests/test-forward-fine
 tests/test-forward-encodec
 
 tests/test-tokenizer
+
+test-conv
