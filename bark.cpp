@@ -142,10 +142,10 @@ struct bark_context {
     int64_t t_start_us;
 
     bark_token * tokens;
-    int32_t n_tokens;
+    bark_token * semantic_tokens;
 
-    // bark_sequence tokens;
-    bark_sequence semantic_tokens;
+    int32_t n_tokens;
+    int32_t n_semantic_tokens;
 
     bark_codes coarse_tokens;
     bark_codes fine_tokens;
@@ -161,7 +161,7 @@ struct bark_context {
 };
 
 struct bark_progress {
-    
+
     bark_progress(const char * func_name) : func_name(func_name) {}
 
     const char * func_name;
@@ -1719,7 +1719,8 @@ void bark_forward_text_encoder(struct bark_context * ctx, int n_threads) {
     float min_eos_p = ctx->min_eos_p;
     float temp = ctx->temp;
 
-    bark_token * input = ctx->tokens;
+    bark_sequence input(ctx->tokens, ctx->tokens + 513);
+    int32_t * out = new int32_t[768]();
 
     std::vector<float> logits;
     logits.resize(n_vocab);
@@ -1750,11 +1751,12 @@ void bark_forward_text_encoder(struct bark_context * ctx, int n_threads) {
             break;
 
         input.push_back(next);
-        out.push_back(next);
+        out[i] = next;
 
         progress.callback((float) i/768);
     }
 
+    out = (int32_t *) realloc(out, model->n_sample);
     ctx->semantic_tokens = out;
 
     const int64_t t_main_end_us = ggml_time_us();
