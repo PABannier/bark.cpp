@@ -66,6 +66,8 @@ extern "C" {
 
     BARK_API struct bark_context * bark_new_context_with_model(struct bark_model * model);
 
+    BARK_API void bark_seed_rng(struct bark_context * ctx, int32_t seed);
+
     BARK_API void bark_free(struct bark_context * ctx);
 
     BARK_API void bark_free_model(struct bark_model * ctx);
