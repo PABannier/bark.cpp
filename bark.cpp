@@ -141,7 +141,10 @@ struct bark_context {
     int64_t t_load_us;
     int64_t t_start_us;
 
-    bark_sequence tokens;
+    bark_token * tokens;
+    int32_t n_tokens;
+
+    // bark_sequence tokens;
     bark_sequence semantic_tokens;
 
     bark_codes coarse_tokens;
@@ -158,15 +161,17 @@ struct bark_context {
 };
 
 struct bark_progress {
-    float current = 0.0f;
-    const char * func = NULL;
+    
+    bark_progress(const char * func_name) : func_name(func_name) {}
 
-    bark_progress() {}
+    const char * func_name;
+
+    float current = 0.0f;
 
     void callback(float progress) {
         float percentage = progress * 100;
-        if (percentage == 0.0f && func != NULL) {
-            fprintf(stderr, "%s: ", func);
+        if (percentage == 0.0f) {
+            fprintf(stderr, "%s: ", func_name);
         }
         while (percentage > current) {
             current = percentage;
@@ -1659,12 +1664,13 @@ void bark_tokenize_input(struct bark_context * ctx, const char * text) {
 
     int32_t block_size = model.hparams.block_size;
     int32_t max_ctx_size = std::min(block_size, 256);
+
     int32_t n_tokens;
+    int32_t * tokens = new int32_t[513]();
 
-    bark_sequence tokens(max_ctx_size);
-    bert_tokenize(vocab, text, tokens.data(), &n_tokens, max_ctx_size);
+    bert_tokenize(vocab, text, tokens, &n_tokens, max_ctx_size);
 
-    for (int i = 0; i < (int) tokens.size(); i++)
+    for (int i = 0; i < (int) max_ctx_size; i++)
         tokens[i] += TEXT_ENCODING_OFFSET;
 
     if (n_tokens < max_ctx_size) {
@@ -1674,20 +1680,18 @@ void bark_tokenize_input(struct bark_context * ctx, const char * text) {
         fprintf(stderr, "%s: input sequence is too long (%d > 256), truncating sequence", __func__, n_tokens);
     }
 
-    tokens.resize(max_ctx_size);
-
     // semantic history
-    for (int i = 0; i < 256; i++)
-        tokens.push_back(SEMANTIC_PAD_TOKEN);
-    tokens.push_back(SEMANTIC_INFER_TOKEN);
+    for (int i = 256; i < 512; i++)
+        tokens[i] = SEMANTIC_PAD_TOKEN;
 
-    assert(tokens.size() == 256 + 256 + 1);
+    tokens[513] = SEMANTIC_INFER_TOKEN;
 
     ctx->tokens = tokens;
+    ctx->n_tokens = n_tokens;
 
     printf("%s: prompt: '%s'\n", __func__, text);
-    printf("%s: number of tokens in prompt = %zu, first 8 tokens: ", __func__, ctx->tokens.size());
-    for (int i = 0; i < std::min(8, (int) ctx->tokens.size()); i++) {
+    printf("%s: number of tokens in prompt = %zu, first 8 tokens: ", __func__, n_tokens);
+    for (int i = 0; i < 8; i++) {
         printf("%d ", ctx->tokens[i]);
     }
     printf("\n");
@@ -1705,10 +1709,7 @@ static void bark_print_statistics(gpt_model * model) {
 void bark_forward_text_encoder(struct bark_context * ctx, int n_threads) {
     const int64_t t_main_start_us = ggml_time_us();
 
-    bark_sequence out;
-
-    bark_progress progress;
-    progress.func = __func__;
+    bark_progress progress(__func__);
 
     gpt_model * model = &ctx->model.text_model;
 
@@ -1718,7 +1719,7 @@ void bark_forward_text_encoder(struct bark_context * ctx, int n_threads) {
     float min_eos_p = ctx->min_eos_p;
     float temp = ctx->temp;
 
-    bark_sequence input = ctx->tokens;
+    bark_token * input = ctx->tokens;
 
     std::vector<float> logits;
     logits.resize(n_vocab);
