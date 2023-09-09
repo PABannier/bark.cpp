@@ -22,6 +22,8 @@ int main() {
         return 1;
     }
 
+    bark_context * ctx = bark_new_context_with_model(&model);
+
     bark_codes tokens;
     audio_arr_t gt_audio_arr;
 
@@ -31,12 +33,13 @@ int main() {
 
         std::string path = test_data[i];
         load_test_data(path, tokens, gt_audio_arr);
+        ctx->fine_tokens = tokens;
 
-        audio_arr_t audio_arr = bark_forward_encodec(transpose(tokens), model);
+        bark_forward_encodec(ctx);
 
         printf("\n");
         printf("%s: %s\n", __func__, path.c_str());
-        if (!run_test(gt_audio_arr, audio_arr)) {
+        if (!run_test(gt_audio_arr, ctx->audio_arr)) {
             printf("%s:     test %d failed.\n", __func__, i+1);
         } else {
             printf("%s:     test %d passed.\n", __func__, i+1);
