@@ -1983,6 +1983,8 @@ int encodec_eval(
     const int N       = tokens.size();
     const int n_codes = tokens[0].size();
 
+    BARK_ASSERT(n_codes == N_FINE_CODEBOOKS);
+
     bark_codes input = tokens;
 
     static size_t buf_size = 256u*1024*1024;

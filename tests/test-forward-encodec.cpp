@@ -33,7 +33,7 @@ int main() {
         std::string path = test_data[i];
         load_test_data(path, tokens, gt_audio_arr);
 
-        encodec_eval(tokens, model, audio_arr);
+        encodec_eval(transpose(tokens), model, audio_arr);
 
         printf("\n");
         printf("%s: %s\n", __func__, path.c_str());
