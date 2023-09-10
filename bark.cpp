@@ -148,17 +148,24 @@ struct bark_context {
     bark_codes fine_tokens;
 
     audio_arr_t audio_arr;
+
+    float temp;
+    float fine_temp;
+
+    float min_eos_p;
+    int sliding_window_size;
+    int max_coarse_history;
 };
 
 struct bark_progress {
     float current = 0.0f;
-    const char * func = NULL;
+    const char * func;
 
-    bark_progress() {}
+    bark_progress(const char * func): func(func) {}
 
     void callback(float progress) {
         float percentage = progress * 100;
-        if (percentage == 0.0f && func != NULL) {
+        if (percentage == 0.0f) {
             fprintf(stderr, "%s: ", func);
         }
         while (percentage > current) {
@@ -172,16 +179,39 @@ struct bark_progress {
     }
 };
 
-struct bark_context * bark_new_context_with_model(struct bark_model * model) {
+struct bark_context * bark_new_context_with_model(
+                struct bark_model * model,
+       struct bark_context_params  params) {
+
     if (!model) {
         return nullptr;
     }
 
     bark_context * ctx = new bark_context(*model);
 
-    ctx->rng = std::mt19937(0);
+    ctx->rng = std::mt19937(params.seed);
+
+    ctx->temp = params.temp;
+    ctx->fine_temp = params.fine_temp;
+
+    ctx->max_coarse_history = params.max_coarse_history;
+    ctx->sliding_window_size = params.sliding_window_size;
+    ctx->min_eos_p = params.min_eos_p;
 
     return ctx;
+}
+
+struct bark_context_params bark_context_default_params() {
+    struct bark_context_params result = {
+        /*.seed                        =*/ 0,
+        /*.temp                        =*/ 0.7,
+        /*.fine_temp                   =*/ 0.5,
+        /*.min_eos_p                   =*/ 0.2,
+        /*.sliding_window_size         =*/ 60,
+        /*.max_coarse_history          =*/ 630,
+    };
+
+    return result;
 }
 
 void bark_seed_rng(struct bark_context * ctx, int32_t seed) {
@@ -1672,22 +1702,20 @@ static void bark_print_statistics(gpt_model * model) {
     printf("\n");
 }
 
-void bark_forward_text_encoder(
-        struct bark_context * ctx,
-                      float   temp,
-                      float   min_eos_p,
-                        int   n_threads) {
+void bark_forward_text_encoder(struct bark_context * ctx, int n_threads) {
     const int64_t t_main_start_us = ggml_time_us();
 
     bark_sequence out;
 
-    bark_progress progress;
-    progress.func = __func__;
+    bark_progress progress( __func__);
 
     gpt_model * model = &ctx->model.text_model;
 
     auto & hparams = model->hparams;
     const int n_vocab = hparams.n_out_vocab;
+
+    float min_eos_p = ctx->min_eos_p;
+    float temp = ctx->temp;
 
     bark_sequence input = ctx->tokens;
 
@@ -1733,19 +1761,17 @@ void bark_forward_text_encoder(
     bark_print_statistics(model);
 }
 
-void bark_forward_coarse_encoder(
-        struct bark_context * ctx,
-                        int   max_coarse_history,
-                        int   sliding_window_size,
-                      float   temp,
-                        int   n_threads) {
+void bark_forward_coarse_encoder(struct bark_context * ctx, int n_threads) {
     const int64_t t_main_start_us = ggml_time_us();
 
     bark_codes out_coarse;
     bark_sequence out;
 
-    bark_progress progress;
-    progress.func = __func__;
+    bark_progress progress(__func__);
+
+    int max_coarse_history = ctx->max_coarse_history;
+    int sliding_window_size = ctx->sliding_window_size;
+    float temp = ctx->temp;
 
     float semantic_to_coarse_ratio = COARSE_RATE_HZ / SEMANTIC_RATE_HZ * N_COARSE_CODEBOOKS;
     int max_semantic_history = floorf(max_coarse_history / semantic_to_coarse_ratio);
@@ -1851,19 +1877,20 @@ void bark_forward_coarse_encoder(
 
 }
 
-void bark_forward_fine_encoder(struct bark_context * ctx,float temp, int n_threads) {
-    // input shape: (N, n_codes)
+void bark_forward_fine_encoder(struct bark_context * ctx, int n_threads) {
+    // input shape: [N, n_codes]
     const int64_t t_main_start_us = ggml_time_us();
 
+    bark_progress progress(__func__);
+
     bark_codes input = ctx->coarse_tokens;
+
+    float temp = ctx->fine_temp;
 
     std::vector<float> logits;
     logits.resize(1024*1056);
 
     gpt_model * model = &ctx->model.fine_model;
-
-    bark_progress progress;
-    progress.func = __func__;
 
     int n_coarse          = input[0].size();
     int original_seq_len  = input.size();
@@ -2063,26 +2090,14 @@ int bark_generate_audio(
              const char * text,
              const char * dest_wav_path,
                     int   n_threads) {
-    const float temp      = 0.7;
-    const float fine_temp = 0.5;
-
-    const int sliding_window_size = 60;
-    const int max_coarse_history = 630;
-
-    const float min_eos_p = 0.2;
-
-    // tokenize input (bert tokenizer)
     bark_tokenize_input(ctx, text);
 
-    // forward pass
-    bark_forward_text_encoder(ctx, temp, min_eos_p, n_threads);
-    bark_forward_coarse_encoder(ctx, max_coarse_history, sliding_window_size, temp, n_threads);
-    bark_forward_fine_encoder(ctx, fine_temp, n_threads);
+    bark_forward_text_encoder  (ctx, n_threads);
+    bark_forward_coarse_encoder(ctx, n_threads);
+    bark_forward_fine_encoder  (ctx, n_threads);
 
-    // encode audio
     bark_forward_encodec(ctx);
 
-    // write wav file
     write_wav_on_disk(ctx->audio_arr, dest_wav_path);
 
     return 0;
@@ -2100,161 +2115,4 @@ void bark_free(bark_context * ctx) {
     ggml_free(ctx->model.codec_model.ctx);
 
     delete ctx;
-}
-
-bool allequal(struct ggml_tensor * a, struct ggml_tensor * b, std::string test_name) {
-    assert(a->ne[0] == b->ne[0]);
-    assert(a->ne[1] == b->ne[1]);
-    assert(a->ne[2] == b->ne[2]);
-    assert(a->ne[3] == b->ne[3]);
-
-    assert(a->type == GGML_TYPE_I32);
-    assert(b->type == GGML_TYPE_I32);
-
-    int64_t n_violations = 0;
-
-    for (int i = 0; i < a->ne[3]; i++) {
-        for (int j = 0; j < a->ne[2]; j++) {
-            for (int k = 0; k < a->ne[1]; k++) {
-                for (int l = 0; l < a->ne[0]; l++) {
-                    int32_t * aval = (int32_t *) (
-                        (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
-                    int32_t * bval = (int32_t *) (
-                        (char *) b->data + i*b->nb[3] + j*b->nb[2] + k*b->nb[1] + l*b->nb[0]);
-                    if (*aval != *bval)
-                        n_violations += 1;
-                }
-            }
-        }
-    }
-
-    int64_t n_elements = a->ne[0]*a->ne[1]*a->ne[2]*a->ne[3];
-    float perc_viol = 100.0f*float(n_violations)/n_elements;
-
-    printf("%s: %s\n", __func__, test_name.c_str());
-    printf("%s: %%_viol=%.1f\n", __func__, perc_viol);
-    printf("\n");
-    return n_violations == 0;
-}
-
-bool allclose(struct ggml_tensor * a, struct ggml_tensor * b, float tol, std::string test_name) {
-    assert(a->ne[0] == b->ne[0]);
-    assert(a->ne[1] == b->ne[1]);
-    assert(a->ne[2] == b->ne[2]);
-    assert(a->ne[3] == b->ne[3]);
-
-    assert(a->type == GGML_TYPE_F32);
-    assert(b->type == GGML_TYPE_F32);
-
-    float max_violation = -INFINITY;
-    int64_t n_violations = 0;
-
-    for (int i = 0; i < a->ne[3]; i++) {
-        for (int j = 0; j < a->ne[2]; j++) {
-            for (int k = 0; k < a->ne[1]; k++) {
-                for (int l = 0; l < a->ne[0]; l++) {
-                    float * aval = (float *) (
-                        (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
-                    float * bval = (float *) (
-                        (char *) b->data + i*b->nb[3] + j*b->nb[2] + k*b->nb[1] + l*b->nb[0]);
-                    float violation = fabs(*aval - *bval);
-                    max_violation = std::max(max_violation, violation);
-                    if (violation > tol)
-                        n_violations += 1;
-                }
-            }
-        }
-    }
-
-    int64_t n_elements = a->ne[0]*a->ne[1]*a->ne[2]*a->ne[3];
-    float perc_viol = 100.0f*float(n_violations)/n_elements;
-
-    printf("%s: %s\n", __func__, test_name.c_str());
-    printf("%s: max_viol=%.4f; viol=%.1f%% (tol=%.4f)\n", __func__, max_violation, perc_viol, tol);
-    printf("\n");
-    return n_violations == 0;
-}
-
-
-void read_tensor_from_file_f32(std::ifstream & fin, struct ggml_tensor *t) {
-    int32_t n_dims;
-    read_safe(fin, n_dims);
-
-    int32_t ne[3] = { 1, 1, 1 };
-    for (int i = 0; i < n_dims; i++) { read_safe(fin, ne[i]); }
-
-    assert(t->ne[0] == ne[0]);
-    assert(t->ne[1] == ne[1]);
-    assert(t->ne[2] == ne[2]);
-    assert(t->type == GGML_TYPE_F32);
-
-    for (int i = 0; i < ne[2]; i++) {
-        for (int j = 0; j < ne[1]; j++) {
-            int offset = i*t->nb[2] + j*t->nb[1];
-            fin.read(reinterpret_cast<char *>(t->data) + offset, ne[0]*sizeof(float));
-        }
-    }
-}
-
-void read_tensor_from_file_int32(std::ifstream & fin, struct ggml_tensor *t) {
-    int32_t n_dims;
-    read_safe(fin, n_dims);
-
-    int32_t ne[3] = { 1, 1, 1 };
-    for (int i = 0; i < n_dims; i++) { read_safe(fin, ne[i]); }
-
-    assert(t->ne[0] == ne[0]);
-    assert(t->ne[1] == ne[1]);
-    assert(t->ne[2] == ne[2]);
-    assert(t->type == GGML_TYPE_I32);
-
-    for (int i = 0; i < ne[2]; i++) {
-        for (int j = 0; j < ne[1]; j++) {
-            int offset = i*t->nb[2] + j*t->nb[1];
-            fin.read(reinterpret_cast<char *>(t->data) + offset, ne[0]*sizeof(int32_t));
-        }
-    }
-}
-
-void read_tensor_from_file(std::ifstream & fin, struct ggml_tensor * t) {
-    if (t->type == GGML_TYPE_F32) {
-        read_tensor_from_file_f32(fin, t);
-    } else if (t->type == GGML_TYPE_I32) {
-        read_tensor_from_file_int32(fin, t);
-    } else {
-        throw;
-    }
-}
-
-void load_gt_tensor(std::string path, struct ggml_tensor * t) {
-    auto fin = std::ifstream(path, std::ios::binary);
-    if (!fin) {
-        fprintf(stderr, "failed to open.");
-        throw;
-    }
-    read_tensor_from_file(fin, t);
-}
-
-void print_tensor(struct ggml_tensor * a) {
-    for (int i = 0; i < a->ne[3]; i++) {
-        for (int j = 0; j < a->ne[2]; j++) {
-            for (int k = 0; k < a->ne[1]; k++) {
-                for (int l = 0; l < a->ne[0]; l++) {
-                    if (a->type == GGML_TYPE_F32) {
-                        float * aval = (float *) (
-                            (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
-                        printf("%.4f ", *aval);
-                    } else if (a->type == GGML_TYPE_I32) {
-                        int32_t * aval = (int32_t *) (
-                            (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
-                        printf("%d ", *aval);
-                    } else {
-                        throw;
-                    }
-                }
-                printf("\n");
-            }
-            printf("\n\n");
-        }
-    }
 }
