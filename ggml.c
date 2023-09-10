@@ -16713,20 +16713,16 @@ struct ggml_cplan ggml_graph_plan(struct ggml_cgraph * cgraph, int n_threads) {
                     const int64_t ne10 = node->src[1]->ne[0];  // L
                     const int64_t ne11 = node->src[1]->ne[1];  // Cin
 
-                    const int64_t ne0  = node->ne[0];
-                    const int64_t ne1  = node->ne[1];
-
-                    const int64_t nk   = ne00*ne01;
-                    const int64_t ew0  = nk*ne02;
-
                     size_t cur = 0;
 
                     if (node->src[0]->type == GGML_TYPE_F16 &&
                         node->src[1]->type == GGML_TYPE_F32) {
-                        cur = sizeof(ggml_fp16_t)*(ne0*ne1*ew0);
+                        cur = sizeof(ggml_fp16_t)*(ne00*ne01*ne02);
+                        cur += sizeof(float)*(ne10*ne11);
                     } else if (node->src[0]->type == GGML_TYPE_F32 &&
                                node->src[1]->type == GGML_TYPE_F32) {
-                        cur = sizeof(float)*(ne10*ne11);
+                        cur = sizeof(float)*(ne00*ne01*ne02);
+                        cur += sizeof(float)*(ne10*ne11);
                     } else {
                         GGML_ASSERT(false);
                     }
