@@ -1291,7 +1291,6 @@ int fine_gpt_eval(
     GGML_ASSERT(strcmp(res->name,        "result_output") == 0);
     GGML_ASSERT(strcmp(embeddings->name, "result_norm")   == 0);
 
-    // run the computation
     ggml_graph_compute_with_ctx(ctx0, gf, n_threads);
 
     if (logits != NULL) {
@@ -1313,18 +1312,13 @@ int fine_gpt_eval(
     return 0;
 }
 
-bool gpt_eval(
+static struct ggml_cgraph * bark_build_gpt_graph(
+       ggml_context * ctx0,
           gpt_model * model,
          bark_token * tokens,
                 int   n_tokens,
-              float * logits,
                 int * n_past,
-               bool   merge_ctx,
-                int   n_threads) {
-    BARK_ASSERT(n_past != NULL);
-
-    int64_t t_predict_start_us = ggml_time_us();
-
+               bool   merge_ctx) {
     int N = n_tokens;
 
     const auto & hparams = model->hparams;
@@ -1333,31 +1327,8 @@ bool gpt_eval(
     const int n_layer = hparams.n_layer;
     const int n_ctx   = hparams.block_size;
     const int n_head  = hparams.n_head;
-    const int n_vocab = hparams.n_out_vocab;
 
-    static size_t buf_size = 256u*1024*1024;
-    static void * buf = malloc(buf_size);
-
-    if (model->mem_per_token > 0 && model->mem_per_token*N > buf_size) {
-        const size_t buf_size_new = 1.2*(model->mem_per_token*N); // add 20% to account for ggml object overhead
-
-        // reallocate
-        buf_size = buf_size_new;
-        buf = realloc(buf, buf_size);
-        if (buf == nullptr) {
-            fprintf(stderr, "%s: failed to allocate %zu bytes\n", __func__, buf_size);
-            return 1;
-        }
-    }
-
-    struct ggml_init_params params = {
-        /*.mem_size   =*/ buf_size,
-        /*.mem_buffer =*/ buf,
-        /*.no_alloc   =*/ false,
-    };
-
-    struct ggml_context * ctx0 = ggml_init(params);
-    struct ggml_cgraph gf = {};
+    ggml_cgraph * gf = ggml_new_graph(ctx0);
 
     struct ggml_tensor * input = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
     memcpy(input->data, tokens, N*ggml_element_size(input));
@@ -1444,8 +1415,8 @@ bool gpt_eval(
                 struct ggml_tensor * k = ggml_view_1d(ctx0, model->memory_k, N*n_embd, (ggml_element_size(model->memory_k)*n_embd)*(il*n_ctx + *n_past));
                 struct ggml_tensor * v = ggml_view_1d(ctx0, model->memory_v, N*n_embd, (ggml_element_size(model->memory_v)*n_embd)*(il*n_ctx + *n_past));
 
-                ggml_build_forward_expand(&gf, ggml_cpy(ctx0, Kcur, k));
-                ggml_build_forward_expand(&gf, ggml_cpy(ctx0, Vcur, v));
+                ggml_build_forward_expand(gf, ggml_cpy(ctx0, Kcur, k));
+                ggml_build_forward_expand(gf, ggml_cpy(ctx0, Vcur, v));
             }
 
             // Q = Qcur.contiguous().view(n_embd/n_head, n_head, N).permute(0, 2, 1, 3)
@@ -1616,19 +1587,72 @@ bool gpt_eval(
                     inpL),
                 ggml_repeat(ctx0, model->ln_f_b, inpL));
     }
+    ggml_set_name(inpL, "result_norm");
 
     // inpL = WTE * inpL
     // [ 768, 50257] - model.lm_head
     // [ 768, N]     - inpL
     inpL = ggml_mul_mat(ctx0, model->lm_heads[0], inpL);
+    ggml_set_name(inpL, "result_output");
 
     // run the computation
-    ggml_build_forward_expand(&gf, inpL);
-    ggml_graph_compute_with_ctx(ctx0, &gf, n_threads);
+    ggml_build_forward_expand(gf, inpL);
+
+    return gf;
+}
+
+int gpt_eval(
+          gpt_model * model,
+         bark_token * tokens,
+                int   n_tokens,
+              float * logits,
+                int * n_past,
+               bool   merge_ctx,
+                int   n_threads) {
+    BARK_ASSERT(n_past != NULL);
+
+    int64_t t_predict_start_us = ggml_time_us();
+
+    int N = n_tokens;
+
+    const auto & hparams = model->hparams;
+    const int n_vocab = hparams.n_out_vocab;
+
+    static size_t buf_size = 256u*1024*1024;
+    static void * buf = malloc(buf_size);
+
+    if (model->mem_per_token > 0 && model->mem_per_token*N > buf_size) {
+        const size_t buf_size_new = 1.2*(model->mem_per_token*N); // add 20% to account for ggml object overhead
+
+        // reallocate
+        buf_size = buf_size_new;
+        buf = realloc(buf, buf_size);
+        if (buf == nullptr) {
+            fprintf(stderr, "%s: failed to allocate %zu bytes\n", __func__, buf_size);
+            return 1;
+        }
+    }
+
+    struct ggml_init_params params = {
+        /*.mem_size   =*/ buf_size,
+        /*.mem_buffer =*/ buf,
+        /*.no_alloc   =*/ false,
+    };
+
+    struct ggml_context * ctx0 = ggml_init(params);
+    struct ggml_cgraph * gf = bark_build_gpt_graph(ctx0, model, tokens, n_tokens, n_past, merge_ctx);
+
+    struct ggml_tensor * res        = gf->nodes[gf->n_nodes - 1];
+    struct ggml_tensor * embeddings = gf->nodes[gf->n_nodes - 2];
+
+    GGML_ASSERT(strcmp(res->name,        "result_output") == 0);
+    GGML_ASSERT(strcmp(embeddings->name, "result_norm")   == 0);
+
+    ggml_graph_compute_with_ctx(ctx0, gf, n_threads);
 
     if (logits != NULL) {
         // return result just for the last token
-        memcpy(logits, (float *) ggml_get_data(inpL) + (n_vocab*(N-1)), sizeof(float)*n_vocab);
+        memcpy(logits, (float *) ggml_get_data(res) + (n_vocab*(N-1)), sizeof(float)*n_vocab);
     }
 
     if (model->mem_per_token == 0) {
@@ -1641,11 +1665,13 @@ bool gpt_eval(
 
     ggml_free(ctx0);
 
-    model->t_predict_us += (ggml_time_us() - t_predict_start_us);
+    int64_t t_predict_end_us = ggml_time_us();
+    model->t_predict_us += (t_predict_end_us - t_predict_start_us);
     model->n_predict += 1;
 
     return 0;
 }
+
 
 void softmax(std::vector<float> & logits) {
     // for numerical stability
