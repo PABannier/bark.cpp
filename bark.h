@@ -115,6 +115,10 @@ extern "C" {
     // Internal API for tests
     //
 
+    typedef std::vector<bark_token> bark_sequence;
+    typedef std::vector<std::vector<bark_token>> bark_codes;
+    typedef std::vector<float> audio_arr_t;
+
     int gpt_model_load(const std::string& fname, gpt_model& model);
 
     int gpt_eval(
@@ -154,14 +158,6 @@ extern "C" {
                         int   n_threads);
 
     void bark_forward_encodec(struct bark_context * ctx);
-
-    void print_tensor(struct ggml_tensor * a);
-
-    void read_tensor_from_file(std::ifstream & fin, struct ggml_tensor * t);
-
-    bool allequal(struct ggml_tensor * a, struct ggml_tensor * b, std::string test_name);
-
-    bool allclose(struct ggml_tensor * a, struct ggml_tensor * b, float tol, std::string test_name);
 
 #endif // BARK_API_INTERNAL
 
