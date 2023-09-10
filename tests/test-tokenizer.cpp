@@ -1,9 +1,18 @@
-#include "bark.h"
-
 #include <cstdio>
 #include <string>
 #include <map>
 #include <vector>
+
+#define BARK_API_INTERNAL 
+#include "bark.h"
+
+struct bark_vocab {
+    using id    = int32_t;
+    using token = std::string;
+
+    std::map<token, id> token_to_id;
+    std::map<id, token> id_to_token;
+};
 
 static const std::map<std::string, bark_sequence> & k_tests()
 {
@@ -30,7 +39,7 @@ int main(int argc, char **argv) {
     bark_vocab vocab;
     int max_ctx_size = 256;
 
-    if (bark_vocab_load(fname, vocab, 119547) > 0) {
+    if (bark_vocab_load(fname.c_str(), &vocab, 119547) > 0) {
         fprintf(stderr, "%s: invalid vocab file '%s'\n", __func__, fname.c_str());
         return 1;
     }
@@ -38,7 +47,7 @@ int main(int argc, char **argv) {
     for (const auto & test_kv : k_tests()) {
         bark_sequence res(test_kv.first.size());
         int n_tokens;
-        bert_tokenize(vocab, test_kv.first.c_str(), res.data(), &n_tokens, max_ctx_size);
+        bert_tokenize(&vocab, test_kv.first.c_str(), res.data(), &n_tokens, max_ctx_size);
         res.resize(n_tokens);
 
         bool correct = res.size() == test_kv.second.size();

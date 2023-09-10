@@ -115,10 +115,9 @@ extern "C" {
     // Internal API for tests
     //
 
-    int encodec_eval(
-            const std::vector<std::vector<int32_t>> & tokens,
-                                      encodec_model & model,
-                                 std::vector<float> & audio_arr);
+    typedef std::vector<bark_token> bark_sequence;
+    typedef std::vector<std::vector<bark_token>> bark_codes;
+    typedef std::vector<float> audio_arr_t;
 
     int gpt_model_load(const std::string& fname, gpt_model& model);
 
@@ -138,6 +137,11 @@ extern "C" {
                       float * logits,
                         int   n_threads,
                         int   codebook_ix);
+
+    int encodec_eval(
+           const bark_codes & tokens,
+              encodec_model & model,
+                audio_arr_t & audio_arr);
 
     void bert_tokenize(
            const bark_vocab * vocab,
