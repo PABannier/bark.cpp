@@ -75,13 +75,13 @@ extern "C" {
     struct gpt_layer;
     struct gpt_model;
 
-    BARK_API struct bark_context_params bark_context_default_params(void);
-
     BARK_API struct bark_context * bark_new_context_with_model(
                struct bark_model * model,
       struct bark_context_params   params);
 
     BARK_API void bark_seed_rng(struct bark_context * ctx, int32_t seed);
+
+    BARK_API struct bark_context_params bark_context_default_params();
 
     BARK_API void bark_free(struct bark_context * ctx);
 
@@ -114,6 +114,11 @@ extern "C" {
     //
     // Internal API for tests
     //
+
+    int encodec_eval(
+            const std::vector<std::vector<int32_t>> & tokens,
+                                      encodec_model & model,
+                                 std::vector<float> & audio_arr);
 
     int gpt_model_load(const std::string& fname, gpt_model& model);
 
@@ -154,14 +159,6 @@ extern "C" {
                         int   n_threads);
 
     void bark_forward_encodec(struct bark_context * ctx);
-
-    void print_tensor(struct ggml_tensor * a);
-
-    void read_tensor_from_file(std::ifstream & fin, struct ggml_tensor * t);
-
-    bool allequal(struct ggml_tensor * a, struct ggml_tensor * b, std::string test_name);
-
-    bool allclose(struct ggml_tensor * a, struct ggml_tensor * b, float tol, std::string test_name);
 
 #endif // BARK_API_INTERNAL
 

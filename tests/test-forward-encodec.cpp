@@ -3,6 +3,7 @@
 #include <random>
 #include <vector>
 
+#define BARK_API_INTERNAL
 #include "bark.h"
 #include "common.h"
 
@@ -22,10 +23,8 @@ int main() {
         return 1;
     }
 
-    bark_context * ctx = bark_new_context_with_model(&model);
-
     bark_codes tokens;
-    audio_arr_t gt_audio_arr;
+    audio_arr_t gt_audio_arr, audio_arr;
 
     for (int i = 0; i < (int) test_data.size(); i++) {
         tokens.clear();
@@ -33,13 +32,12 @@ int main() {
 
         std::string path = test_data[i];
         load_test_data(path, tokens, gt_audio_arr);
-        ctx->fine_tokens = tokens;
 
-        bark_forward_encodec(ctx);
+        encodec_eval(tokens, model, audio_arr);
 
         printf("\n");
         printf("%s: %s\n", __func__, path.c_str());
-        if (!run_test(gt_audio_arr, ctx->audio_arr)) {
+        if (!run_test(gt_audio_arr, audio_arr)) {
             printf("%s:     test %d failed.\n", __func__, i+1);
         } else {
             printf("%s:     test %d passed.\n", __func__, i+1);
