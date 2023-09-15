@@ -12762,7 +12762,7 @@ static void ggml_compute_forward_conv_1d_f16_f32(
 
 
     // total rows in dst
-    const int nr = ne02;
+    const int nr = ne2;
 
     // rows per thread
     const int dr = (nr + nth - 1)/nth;
@@ -12773,17 +12773,13 @@ static void ggml_compute_forward_conv_1d_f16_f32(
 
     ggml_fp16_t * const wdata = (ggml_fp16_t *) params->wdata + 0;
 
-    for (int i3 = 0; i3 < ne3; i3++) {
-        for (int i2 = 0; i2 < ne2; i2++) {
-            for (int i1 = ir0; i1 < ir1; i1++) {
-                float * dst_data = (float *)((char *) dst->data + i3*nb3 + i2*nb2 + i1*nb1);
+    for (int i1 = ir0; i1 < ir1; i1++) {
+        float * dst_data = (float *)((char *) dst->data + i1*nb1);
 
-                for (int i0 = 0; i0 < ne0; i0++) {
-                    ggml_vec_dot_f16(ew0, dst_data + i0,
-                            (ggml_fp16_t *) ((char *) src0->data + i1*nb02),
-                            (ggml_fp16_t *)                wdata + i3*nb3 + i0*ew0); 
-                }
-            }
+        for (int i0 = 0; i0 < ne0; i0++) {
+            ggml_vec_dot_f16(ew0, dst_data + i0,
+                    (ggml_fp16_t *) ((char *) src0->data + i1*nb02),
+                    (ggml_fp16_t *)                wdata + i0*ew0); 
         }
     }
 }
@@ -12892,17 +12888,13 @@ static void ggml_compute_forward_conv_2d_f16_f32(
 
     ggml_fp16_t * const wdata = (ggml_fp16_t *) params->wdata + 0;
 
-    for (int i3 = 0; i3 < ne3; i3++) {
-        for (int i2 = ip0; i2 < ip1; i2++) {
-            float * dst_data = (float *)((char *) dst->data + i3*nb3 + i2*nb2);
+    float * dst_data = (float *)((char *) dst->data + i3*nb3 + i2*nb2);
 
-            for (int i1 = 0; i1 < ne1; ++i1) {
-                for (int i0 = 0; i0 < ne0; ++i0) {
-                    ggml_vec_dot_f16(ew0, dst_data + i1*ne0 + i0,
-                            (ggml_fp16_t *) ((char *) src0->data + i2*nb03),
-                            (ggml_fp16_t *)                wdata + i3*nb3 + (i1*ne0 + i0)*ew0);
-                }
-            }
+    for (int i1 = 0; i1 < ne1; ++i1) {
+        for (int i0 = 0; i0 < ne0; ++i0) {
+            ggml_vec_dot_f16(ew0, dst_data + i1*ne0 + i0,
+                    (ggml_fp16_t *) ((char *) src0->data + i2*nb03),
+                    (ggml_fp16_t *)                wdata + i3*nb3 + (i1*ne0 + i0)*ew0);
         }
     }
 }
@@ -13192,7 +13184,7 @@ static void ggml_compute_forward_conv_transpose_1d_f16_f32(
     const int32_t s0 = ((const int32_t*)(dst->op_params))[0];
 
     // total rows in dst
-    const int nr = ne01;
+    const int nr = ne1;
 
     // rows per thread
     const int dr = (nr + nth - 1)/nth;
@@ -13211,7 +13203,9 @@ static void ggml_compute_forward_conv_transpose_1d_f16_f32(
             const int i1n = i10*ne11;
             for (int i00 = 0; i00 < ne00; i00++) {  // K
                 float v = 0;
-                ggml_vec_dot_f16(ne02, &v, wdata_src + i1n, wdata_kernel + i00*ne02);
+                ggml_vec_dot_f16(ne02, &v, 
+                        wdata_src + i1n,
+                        wdata_kernel + i00*ne02);
                 dst_data[i10*s0 + i00] += v;
             }
         }
@@ -13281,7 +13275,7 @@ static void ggml_compute_forward_conv_transpose_1d_f32(
     const int32_t s0 = ((const int32_t*)(dst->op_params))[0];
 
     // total rows in dst
-    const int nr = ne01;
+    const int nr = ne1;
 
     // rows per thread
     const int dr = (nr + nth - 1)/nth;
@@ -13300,7 +13294,9 @@ static void ggml_compute_forward_conv_transpose_1d_f32(
             const int i1n = i10*ne11;
             for (int i00 = 0; i00 < ne00; i00++) {  // K
                 float v = 0;
-                ggml_vec_dot_f32(ne02, &v, wdata_src + i1n, wdata_kernel + i00*ne02);
+                ggml_vec_dot_f32(ne02, &v, 
+                        wdata_src + i1n, 
+                        wdata_kernel + i00*ne02);
                 dst_data[i10*s0 + i00] += v;
             }
         }
