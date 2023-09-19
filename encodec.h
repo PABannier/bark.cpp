@@ -3,7 +3,7 @@ Only the decoding quantizer and decoder part is implemented in this file.
 */
 #pragma once
 
-#include "ggml.h"
+#include "ggml/include/ggml.h"
 
 #include <cmath>
 #include <fstream>

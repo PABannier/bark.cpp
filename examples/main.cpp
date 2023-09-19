@@ -1,4 +1,4 @@
-#include "ggml.h"
+#include "ggml/include/ggml/ggml.h"
 #include "bark.h"
 
 #include <tuple>
