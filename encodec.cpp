@@ -9,6 +9,29 @@
 #include <string>
 #include <vector>
 
+static void encodec_sigmoid_impl(struct ggml_tensor * dst, const struct ggml_tensor * src, int ith, int nth, void * userdata) {
+    GGML_ASSERT(userdata == NULL);
+    GGML_ASSERT(ggml_are_same_shape(dst, src));
+    GGML_ASSERT(ggml_is_contiguous(dst));
+    GGML_ASSERT(ggml_is_contiguous(src));
+
+    const float * src_data = ggml_get_data_f32(src);
+    float * dst_data = ggml_get_data_f32(dst);
+
+    const int ne = (int)ggml_nelements(dst);
+    const int dr = (ne + nth - 1) / nth;
+    const int ie0 = dr * ith;
+    const int ie1 = std::min(ie0 + dr, ne);
+
+    for (int i = ie0; i < ie1; ++i) {
+        dst_data[i] = 1.0f / (1.0f + expf(-src_data[i]));
+    }
+}
+
+static struct ggml_tensor * encodec_sigmoid(ggml_context * ctx, struct ggml_tensor * x) {
+    return ggml_map_custom1(ctx, x, encodec_sigmoid_impl, GGML_N_TASKS_MAX, NULL);
+}
+
 static int get_extra_padding_for_conv_1d(ggml_tensor * inp, float kernel_size, float stride, float padding_total) {
     float length = inp->ne[0];
     float n_frames = (length - kernel_size + padding_total) / stride + 1.0f;
@@ -89,10 +112,10 @@ static struct ggml_tensor * forward_pass_lstm_unilayer(
 
         struct ggml_tensor * out_gates = ggml_add(ctx0, inp_gates, hid_gates);
 
-        struct ggml_tensor * i_t = ggml_sigmoid(ctx0, ggml_view_1d(ctx0, out_gates, hidden_dim, 0*sizeof(float)*hidden_dim));
-        struct ggml_tensor * f_t = ggml_sigmoid(ctx0, ggml_view_1d(ctx0, out_gates, hidden_dim, 1*sizeof(float)*hidden_dim));
+        struct ggml_tensor * i_t = encodec_sigmoid(ctx0, ggml_view_1d(ctx0, out_gates, hidden_dim, 0*sizeof(float)*hidden_dim));
+        struct ggml_tensor * f_t = encodec_sigmoid(ctx0, ggml_view_1d(ctx0, out_gates, hidden_dim, 1*sizeof(float)*hidden_dim));
         struct ggml_tensor * g_t = ggml_tanh   (ctx0, ggml_view_1d(ctx0, out_gates, hidden_dim, 2*sizeof(float)*hidden_dim));
-        struct ggml_tensor * o_t = ggml_sigmoid(ctx0, ggml_view_1d(ctx0, out_gates, hidden_dim, 3*sizeof(float)*hidden_dim));
+        struct ggml_tensor * o_t = encodec_sigmoid(ctx0, ggml_view_1d(ctx0, out_gates, hidden_dim, 3*sizeof(float)*hidden_dim));
 
         c_t = ggml_add(ctx0, ggml_mul(ctx0, f_t, c_t), ggml_mul(ctx0, i_t, g_t));
         h_t = ggml_mul(ctx0, o_t, ggml_tanh(ctx0, c_t));
