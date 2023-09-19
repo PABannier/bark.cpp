@@ -235,7 +235,10 @@ if (BARK_CUBLAS)
 
         enable_language(CUDA)
 
-        set(GGML_SOURCES_CUDA ggml-cuda.cu ggml-cuda.h)
+        set(GGML_SOURCES_CUDA
+            ${CMAKE_CURRENT_SOURCE_DIR}/ggml/src/ggml-cuda.cu
+            ${CMAKE_CURRENT_SOURCE_DIR}/ggml/src/ggml-cuda.h
+            )
 
         add_compile_definitions(GGML_USE_CUBLAS)
         if (BARK_CUDA_FORCE_DMMV)
@@ -277,7 +280,10 @@ if (BARK_METAL)
     find_library(METALKIT_FRAMEWORK         MetalKit                REQUIRED)
     find_library(METALPERFORMANCE_FRAMEWORK MetalPerformanceShaders REQUIRED)
 
-    set(GGML_SOURCES_METAL ggml-metal.m ggml-metal.h)
+    set(GGML_SOURCES_METAL
+        ${CMAKE_CURRENT_SOURCE_DIR}/ggml/src/ggml-metal.m
+        ${CMAKE_CURRENT_SOURCE_DIR}/ggml/src/ggml-metal.h
+        )
 
     add_compile_definitions(GGML_USE_METAL)
     add_compile_definitions(GGML_METAL_NDEBUG)
@@ -286,7 +292,7 @@ if (BARK_METAL)
     #add_compile_definitions(GGML_METAL_DIR_KERNELS="${CMAKE_CURRENT_SOURCE_DIR}/")
 
     # copy ggml-metal.metal to bin directory
-    configure_file(ggml-metal.metal bin/ggml-metal.metal COPYONLY)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/ggml/src/ggml-metal.metal bin/ggml-metal.metal COPYONLY)
 
     set(BARK_EXTRA_LIBS ${BARK_EXTRA_LIBS}
         ${FOUNDATION_LIBRARY}
@@ -301,7 +307,10 @@ if (BARK_CLBLAST)
     if (CLBlast_FOUND)
         message(STATUS "CLBlast found")
 
-        set(GGML_SOURCES_OPENCL ggml-opencl.cpp ggml-opencl.h)
+        set(GGML_SOURCES_OPENCL
+            ${CMAKE_CURRENT_SOURCE_DIR}/ggml/src/ggml-opencl.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/ggml/src/ggml-opencl.h
+            )
 
         add_compile_definitions(GGML_USE_CLBLAST)
 
@@ -459,26 +468,7 @@ endif()
 # Build libraries
 #
 
-add_library(ggml OBJECT
-            ggml.c
-            ggml.h
-            ${GGML_SOURCES_CUDA}
-            ${GGML_SOURCES_OPENCL}
-            ${GGML_SOURCES_METAL}
-            ${GGML_SOURCES_EXTRA}
-            )
-
-target_include_directories(ggml PUBLIC . ${BARK_EXTRA_INCLUDES})
-target_compile_features(ggml PUBLIC c_std_11) # don't bump
-target_link_libraries(ggml PUBLIC Threads::Threads ${BARK_EXTRA_LIBS})
-
-add_library(ggml_static STATIC $<TARGET_OBJECTS:ggml>)
-if (BUILD_SHARED_LIBS)
-    set_target_properties(ggml PROPERTIES POSITION_INDEPENDENT_CODE ON)
-    add_library(ggml_shared SHARED $<TARGET_OBJECTS:ggml>)
-    target_link_libraries(ggml_shared PUBLIC Threads::Threads ${BARK_EXTRA_LIBS})
-    install(TARGETS ggml_shared LIBRARY)
-endif()
+add_subdirectory(ggml)
 
 add_library(bark
             bark.cpp
