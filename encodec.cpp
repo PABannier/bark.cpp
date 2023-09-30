@@ -158,7 +158,7 @@ static struct ggml_tensor * strided_conv_transpose_1d(
     int kernel_size   = conv_w->ne[0];
     int padding_total = kernel_size - stride;
 
-    struct ggml_tensor * dst = ggml_transpose_conv_1d(ctx0, conv_w, inp, stride, 0, 1);
+    struct ggml_tensor * dst = ggml_conv_transpose_1d(ctx0, conv_w, inp, stride, 0, 1);
 
     // add bias
     dst = ggml_transpose(ctx0, dst);
