@@ -3,6 +3,9 @@
 *.so
 .DS_Store
 *.swp
+*.plist
+*.wav
+*.bin
 .build/
 build/
 .cache/
@@ -20,15 +23,6 @@ ggml_weights_*/*
 models/
 
 build-info.h
-
-bark
-encodec
-toy
-quantize
-ggml
-
-*.plist
-*.wav
 
 !ggml_weights/ggml_vocab.bin
 !ggml_weights/vocab.txt
