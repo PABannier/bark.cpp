@@ -26,6 +26,7 @@ encodec
 main
 toy
 quantize
+ggml
 
 *.plist
 *.wav

@@ -22,6 +22,7 @@ Author: Pierre-Antoine Bannier <pierreantoine.bannier@gmail.com>
 #include <string>
 
 #define BARK_DEBUG 0
+#define EPS_NORM 1e-8
 
 typedef std::vector<int32_t> bark_sequence;
 typedef std::vector<float>   audio_arr_t;
@@ -1048,7 +1049,7 @@ static struct ggml_cgraph * bark_build_fine_gpt_graph(
     BARK_ASSERT(N <= n_ctx);
     BARK_ASSERT(codebook_ix > 0);
 
-    ggml_cgraph * gf = ggml_new_graph(ctx0);
+    struct ggml_cgraph * gf = ggml_new_graph(ctx0);
 
     struct ggml_tensor * inpL;
     struct ggml_tensor * cur;
@@ -1087,7 +1088,7 @@ static struct ggml_cgraph * bark_build_fine_gpt_graph(
 
         // norm
         {
-            cur = ggml_norm(ctx0, inpL);
+            cur = ggml_norm(ctx0, inpL, EPS_NORM);
             ggml_set_name(cur, "norm_0");
 
             // cur = ln_1_g*cur + ln_1_b
@@ -1183,7 +1184,7 @@ static struct ggml_cgraph * bark_build_fine_gpt_graph(
         {
             // norm
             {
-                cur = ggml_norm(ctx0, inpFF);
+                cur = ggml_norm(ctx0, inpFF, EPS_NORM);
                 ggml_set_name(cur, "norm_1");
 
                 // cur = ln_2_g*cur + ln_2_b
@@ -1219,7 +1220,7 @@ static struct ggml_cgraph * bark_build_fine_gpt_graph(
 
     // norm
     {
-        cur = ggml_norm(ctx0, cur);
+        cur = ggml_norm(ctx0, cur, EPS_NORM);
         ggml_set_name(cur, "norm_final");
 
         // cur = ln_f_g*cur + ln_f_b
@@ -1404,7 +1405,7 @@ bool gpt_eval(
         // norm
         {
             // [ 768, N]
-            cur = ggml_norm(ctx0, inpL);
+            cur = ggml_norm(ctx0, inpL, EPS_NORM);
 
             // cur = ln_1_g*cur + ln_1_b
             // [ 768, N]
@@ -1551,7 +1552,7 @@ bool gpt_eval(
         {
             // norm
             {
-                cur = ggml_norm(ctx0, inpFF);
+                cur = ggml_norm(ctx0, inpFF, EPS_NORM);
 
                 // cur = ln_2_g*cur + ln_2_b
                 // [ 768, N]
@@ -1606,7 +1607,7 @@ bool gpt_eval(
     // norm
     {
         // [ 768, N]
-        inpL = ggml_norm(ctx0, inpL);
+        inpL = ggml_norm(ctx0, inpL, EPS_NORM);
 
         // inpL = ln_f_g*inpL + ln_f_b
         // [ 768, N]

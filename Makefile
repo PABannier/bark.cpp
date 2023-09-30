@@ -217,7 +217,7 @@ endif
 ifdef BARK_CUDA_CCBIN
 	NVCCFLAGS += -ccbin $(BARK_CUDA_CCBIN)
 endif
-ggml-cuda.o: ggml-cuda.cu ggml-cuda.h
+ggml-cuda.o: ggml/src/ggml-cuda.cu ggml/src/ggml-cuda.h
 	$(NVCC) $(NVCCFLAGS) $(CXXFLAGS) -Wno-pedantic -c $< -o $@
 endif # BARK_CUBLAS
 
@@ -234,7 +234,7 @@ ifdef BARK_CLBLAST
 	endif
 	OBJS    += ggml-opencl.o
 
-ggml-opencl.o: ggml-opencl.cpp ggml-opencl.h
+ggml-opencl.o: ggml/src/ggml-opencl.cpp ggml/src/ggml-opencl.h
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 endif # BARK_CLBLAST
 
@@ -268,7 +268,7 @@ ifneq ($(filter armv8%,$(UNAME_M)),)
 endif
 
 ifdef BARK_METAL
-ggml-metal.o: ggml-metal.m ggml-metal.h
+ggml-metal.o: ggml/src/ggml-metal.m ggml/src/ggml-metal.h
 	$(CC) $(CFLAGS) -c $< -o $@
 endif # BARK_METAL
 
@@ -291,7 +291,7 @@ $(info )
 # Build library
 #
 
-ggml.o: ggml.c
+ggml.o: ggml/src/ggml.c
 	$(CC)   $(CFLAGS)     -c $< -o $@
 
 encodec.o: encodec.cpp
