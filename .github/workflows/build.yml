@@ -22,27 +22,6 @@ env:
   GGML_N_THREADS: 1
 
 jobs:
-  ubuntu-focal-make:
-    runs-on: ubuntu-20.04
-
-    steps:
-      - name: Clone
-        id: checkout
-        uses: actions/checkout@v2
-        with:
-          submodules: true
-
-      - name: Dependencies
-        id: depends
-        run: |
-          sudo apt-get update
-          sudo apt-get install build-essential gcc-8
-
-      - name: Build
-        id: make_build
-        run: |
-          CC=gcc-8 make
-
   ubuntu-latest-cmake:
     runs-on: ubuntu-latest
 
@@ -70,25 +49,6 @@ jobs:
         run: |
           cd build
           ctest --verbose --timeout 900
-
-  macOS-latest-make:
-    runs-on: macos-latest
-
-    steps:
-      - name: Clone
-        id: checkout
-        uses: actions/checkout@v1
-
-      - name: Dependencies
-        id: depends
-        continue-on-error: true
-        run: |
-          brew update
-
-      - name: Build
-        id: make_build
-        run: |
-          make
 
   macOS-latest-cmake:
     runs-on: macos-latest

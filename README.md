@@ -160,23 +160,14 @@ cd bark.cpp
 
 ### Build
 
-In order to build bark.cpp you have two different options. We recommend using `CMake` for Windows.
+In order to build bark.cpp you must use `CMake`:
 
-- Using `make`:
-  - On Linux or MacOS:
-
-      ```bash
-      make
-      ```
-
-- Using `CMake`:
-
-    ```bash
-    mkdir build
-    cd build
-    cmake ..
-    cmake --build . --config Release
-    ```
+```bash
+mkdir build
+cd build
+cmake ..
+cmake --build . --config Release
+```
 
 ### Prepare data & Run
 
