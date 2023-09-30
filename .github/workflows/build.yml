@@ -30,7 +30,7 @@ jobs:
         id: checkout
         uses: actions/checkout@v2
         with:
-          submodules: recursive
+          submodules: true
 
       - name: Dependencies
         id: depends
