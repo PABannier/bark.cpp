@@ -1,11 +1,4 @@
-set(BARK_TARGET main)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-add_executable(${BARK_TARGET} main.cpp)
-
-install(TARGETS ${BARK_TARGET} RUNTIME)
-target_link_libraries(${BARK_TARGET} PRIVATE bark.cpp ${CMAKE_THREAD_LIBS_INIT})
-target_compile_features(${BARK_TARGET} PRIVATE cxx_std_11)
-
-if(MSVC)
-    target_compile_definitions(${BARK_TARGET} PRIVATE -D_CRT_SECURE_NO_WARNINGS=1)
-endif()
+add_subdirectory(main)
+add_subdirectory(quantize)
