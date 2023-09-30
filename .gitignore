@@ -23,7 +23,6 @@ build-info.h
 
 bark
 encodec
-main
 toy
 quantize
 ggml
