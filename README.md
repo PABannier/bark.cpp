@@ -26,6 +26,8 @@ The main goal of `bark.cpp` is to synthesize audio from a textual input with the
 
 The original implementation of `bark.cpp` is the bark's 24Khz English model. We expect to support multiple encoders in the future (see [this](https://github.com/PABannier/bark.cpp/issues/36) and [this](https://github.com/PABannier/bark.cpp/issues/6)), as well as music generation model (see [this](https://github.com/PABannier/bark.cpp/issues/62)). This project is for educational purposes.
 
+Demo on [Google Colab](https://colab.research.google.com/drive/1JVtJ6CDwxtKfFmEd8J4FGY2lzdL0d0jT?usp=sharing) ([#95](https://github.com/PABannier/bark.cpp/issues/95))
+
 **Supported platforms:**
 
 - [X] Mac OS
