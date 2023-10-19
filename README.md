@@ -160,6 +160,11 @@ git clone https://github.com/PABannier/bark.cpp.git
 cd bark.cpp
 ```
 
+### Pull submodules (ggml)
+```bash
+git submodule update --recursive --remote
+```
+
 ### Build
 
 In order to build bark.cpp you must use `CMake`:
