@@ -162,7 +162,7 @@ cd bark.cpp
 
 ### Pull submodules (ggml)
 ```bash
-git submodule update --recursive --remote
+git submodule update --init --recursive
 ```
 
 ### Build
