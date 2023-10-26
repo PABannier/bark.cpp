@@ -1,15 +1,7 @@
-/*
-Port of Suno's Bark to C/C++.
-
-Author: Pierre-Antoine Bannier <pierreantoine.bannier@gmail.com>
-*/
+/* Port of Suno's Bark to C/C++. */
 #include "bark.h"
+#include "encodec.h"
 #include "ggml.h"
-#include "bark-util.h"
-
-// third-party utilities
-#define DR_WAV_IMPLEMENTATION
-#include "dr_wav.h"
 
 #include <cassert>
 #include <cmath>
@@ -24,10 +16,33 @@ Author: Pierre-Antoine Bannier <pierreantoine.bannier@gmail.com>
 #define BARK_DEBUG 0
 #define EPS_NORM 1e-8
 
+#define SAMPLE_RATE 24000
+
+#define CLS_TOKEN_ID 101
+#define SEP_TOKEN_ID 102
+
+#define TEXT_ENCODING_OFFSET 10048
+#define TEXT_PAD_TOKEN 129595
+
+#define CODEBOOK_SIZE 1024
+#define N_COARSE_CODEBOOKS 2
+#define N_FINE_CODEBOOKS 8
+
+#define SEMANTIC_PAD_TOKEN 10000
+#define SEMANTIC_INFER_TOKEN 129599
+#define SEMANTIC_VOCAB_SIZE 10000
+#define SEMANTIC_RATE_HZ 49.9
+
+#define COARSE_RATE_HZ 75
+#define COARSE_SEMANTIC_PAD_TOKEN 12048
+#define COARSE_INFER_TOKEN 12050
+
 typedef std::vector<int32_t> bark_sequence;
 typedef std::vector<float>   audio_arr_t;
 
 typedef std::vector<std::vector<int32_t>> bark_codes;
+
+static const size_t MB = 1024*1024;
 
 struct gpt_hparams {
     int32_t n_in_vocab;
@@ -179,6 +194,23 @@ struct bark_progress {
         }
     }
 };
+
+template<typename T>
+static void read_safe(std::ifstream& fin, T& dest) {
+    fin.read((char*)& dest, sizeof(T));
+}
+
+template<typename T>
+static void write_safe(std::ofstream& fout, T& dest) {
+    fout.write((char*)& dest, sizeof(T));
+}
+
+
+static size_t utf8_len(char src) {
+    const size_t lookup[] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 3, 4};
+    uint8_t highbits = static_cast<uint8_t>(src) >> 4;
+    return lookup[highbits];
+}
 
 struct bark_context * bark_new_context_with_model(
                 struct bark_model * model,
@@ -839,9 +871,9 @@ int ggml_common_quantize_0(
 }
 
 int bark_model_quantize(
-        const char * fname_inp,
-        const char * fname_out,
-        ggml_ftype   ftype) {
+                const char * fname_inp,
+                const char * fname_out,
+                ggml_ftype   ftype) {
     printf("%s: loading model from '%s'\n", __func__, fname_inp);
 
     gpt_model model;
@@ -934,7 +966,7 @@ int bark_model_quantize(
     return 0;
 }
 
-std::string strip_accents(const std::string &in_str) {
+std::string strip_accents(const std::string & in_str) {
     std::string out_str;
     std::map<std::string, char> accent_map = {{"À", 'A'},{"Á", 'A'},
         {"Â", 'A'},{"Ã", 'A'},{"Ä", 'A'},{"Å", 'A'},{"à", 'a'},{"á", 'a'},
@@ -1667,9 +1699,9 @@ void softmax(std::vector<float> & logits) {
 
 bark_token gpt_multinomial_sample(
         std::vector<float> & logits,
-        std::mt19937 & rng,
-        float temp,
-        float * eos_p) {
+              std::mt19937 & rng,
+                     float   temp,
+                     float * eos_p) {
     int n_logits = logits.size();
 
     for (int i = 0; i < n_logits; ++i)
@@ -2147,24 +2179,6 @@ void bark_forward_encodec(struct bark_context * ctx) {
     printf("%s:  predict time = %8.2f ms\n", __func__, model.t_predict_us/1000.0f);
     printf("%s:    total time = %8.2f ms\n", __func__, model.t_main_us/1000.0f);
     printf("\n");
-}
-
-int write_wav_on_disk(audio_arr_t& audio_arr, std::string dest_path) {
-    drwav_data_format format;
-    format.container     = drwav_container_riff;
-    format.format        = DR_WAVE_FORMAT_IEEE_FLOAT;
-    format.channels      = 1;
-    format.sampleRate    = SAMPLE_RATE;
-    format.bitsPerSample = 32;
-
-    drwav wav;
-    drwav_init_file_write(&wav, dest_path.c_str(), &format, NULL);
-    drwav_uint64 frames = drwav_write_pcm_frames(&wav, audio_arr.size(), audio_arr.data());
-    drwav_uninit(&wav);
-
-    fprintf(stderr, "Number of frames written = %lld.\n", frames);
-
-    return 0;
 }
 
 int bark_generate_audio(

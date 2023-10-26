@@ -1,7 +1,7 @@
 #ifndef BARK_H
 #define BARK_H
 
-#include "encodec.h"
+#include "ggml.h"
 
 #include <map>
 #include <random>
@@ -21,27 +21,6 @@
 #else
 #    define BARK_API
 #endif
-
-#define SAMPLE_RATE 24000
-
-#define CLS_TOKEN_ID 101
-#define SEP_TOKEN_ID 102
-
-#define TEXT_ENCODING_OFFSET 10048
-#define TEXT_PAD_TOKEN 129595
-
-#define CODEBOOK_SIZE 1024
-#define N_COARSE_CODEBOOKS 2
-#define N_FINE_CODEBOOKS 8
-
-#define SEMANTIC_PAD_TOKEN 10000
-#define SEMANTIC_INFER_TOKEN 129599
-#define SEMANTIC_VOCAB_SIZE 10000
-#define SEMANTIC_RATE_HZ 49.9
-
-#define COARSE_RATE_HZ 75
-#define COARSE_SEMANTIC_PAD_TOKEN 12048
-#define COARSE_INFER_TOKEN 12050
 
 
 #ifdef __cplusplus
