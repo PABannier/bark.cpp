@@ -24,7 +24,7 @@ option(BARK_BUILD_EXAMPLES             "bark: build examples" ${BARK_STANDALONE}
 set(BARK_LIB bark)
 
 add_subdirectory(ggml)
-add_subdirectory(encodec.cpp)
+# add_subdirectory(encodec.cpp)
 
 add_library(
         ${BARK_LIB}
