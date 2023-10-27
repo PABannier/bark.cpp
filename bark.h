@@ -120,6 +120,22 @@ struct bark_model {
     bark_vocab vocab;
 };
 
+struct bark_context_params {
+    uint32_t seed; // RNG seed
+
+    // Temperature for sampling (text and coarse encoders)
+    float temp;
+    // Temperature for sampling (fine encoder)
+    float fine_temp;
+
+    // Minimum probability for EOS token (text encoder)
+    float min_eos_p;
+    // Sliding window size for coarse encoder
+    int sliding_window_size;
+    // Max history for coarse encoder
+    int max_coarse_history;
+};
+
 struct bark_context {
     bark_model model;
 
@@ -148,25 +164,9 @@ struct bark_context {
 
 };
 
-struct bark_context_params {
-    uint32_t seed; // RNG seed
-
-    // Temperature for sampling (text and coarse encoders)
-    float temp;      
-    // Temperature for sampling (fine encoder)
-    float fine_temp; 
-
-    // Minimum probability for EOS token (text encoder)
-    float min_eos_p;         
-    // Sliding window size for coarse encoder
-    int sliding_window_size; 
-    // Max history for coarse encoder
-    int max_coarse_history;  
-};
-
 /**
  * @brief Returns the default parameters for a bark context.
- * 
+ *
  * @return bark_context_params The default parameters for a bark context.
  */
 BARK_API struct bark_context_params bark_context_default_params(void);
@@ -183,22 +183,22 @@ BARK_API struct bark_context * bark_load_model(
 
 /**
  * Generates an audio file from the given text using the specified Bark context.
- * 
+ *
  * @param bctx The Bark context to use for generating the audio.
  * @param text The text to generate audio from.
  * @param dest_wav_path The path to save the generated audio file.
  * @param n_threads The number of threads to use for generating the audio.
  * @return An integer indicating the success of the audio generation process.
  */
-BARK_API int bark_generate_audio(
-         struct bark_context * bctx,
-           const std::string & text,
-           const std::string & dest_wav_path,
+BARK_API bool bark_generate_audio(
+                bark_context * bctx,
+                 std::string & text,
+                 std::string & dest_wav_path,
                          int   n_threads);
 
 /**
  * @brief Frees the memory allocated for a bark context.
- * 
+ *
  * @param bctx The bark context to free.
  */
 BARK_API void bark_free(struct bark_context * bctx);

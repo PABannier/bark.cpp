@@ -42,7 +42,6 @@
 
 static const size_t MB = 1024*1024;
 
-
 struct bark_progress {
     float current = 0.0f;
     const char * func;
@@ -177,7 +176,7 @@ static bool bark_vocab_load(
                int32_t   expected_size) {
     auto fin = std::ifstream(fname, std::ios::binary);
     if (!fin) {
-        fprintf(stderr, "%s: faield to open '%s'\n", __func__, fname);
+        fprintf(stderr, "%s: failed to open '%s'\n", __func__, fname.c_str());
         return false;
     }
 
@@ -186,7 +185,7 @@ static bool bark_vocab_load(
         uint32_t magic;
         fin.read((char *) &magic, sizeof(magic));
         if (magic != GGML_FILE_MAGIC) {
-            fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname);
+            fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname.c_str());
             return false;
         }
     }
@@ -355,7 +354,7 @@ static void bark_tokenize_input(struct bark_context * ctx, const std::string & t
 
     ctx->tokens = tokens;
 
-    printf("%s: prompt: '%s'\n", __func__, text);
+    printf("%s: prompt: '%s'\n", __func__, text.c_str());
     printf("%s: number of tokens in prompt = %zu, first 8 tokens: ", __func__, ctx->tokens.size());
     for (int i = 0; i < std::min(8, (int) ctx->tokens.size()); i++) {
         printf("%d ", ctx->tokens[i]);
@@ -1145,7 +1144,7 @@ void bark_free(struct bark_context * bctx) {
 static struct bark_model * bark_load_model_from_file(
                          const std::string & dirname,
                          struct bark_model * model) {
-    printf("%s: loading model from '%s'\n", __func__, dirname);
+    printf("%s: loading model from '%s'\n", __func__, dirname.c_str());
 
     // text
     {
