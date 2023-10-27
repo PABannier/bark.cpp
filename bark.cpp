@@ -42,131 +42,6 @@
 
 static const size_t MB = 1024*1024;
 
-typedef std::vector<int32_t> bark_sequence;
-typedef std::vector<std::vector<int32_t>> bark_codes;
-
-struct gpt_hparams {
-    int32_t n_in_vocab;
-    int32_t n_out_vocab;
-    int32_t n_layer;
-    int32_t n_head;
-    int32_t n_embd;
-    int32_t block_size;
-    int32_t n_lm_heads;
-    int32_t n_wtes;
-    int32_t ftype;
-
-    int32_t n_codes_given = 1;
-};
-
-struct bark_vocab {
-    using id    = int32_t;
-    using token = std::string;
-
-    std::map<token, id> token_to_id;
-    std::map<id, token> id_to_token;
-};
-
-struct gpt_layer {
-    // normalization
-    struct ggml_tensor * ln_1_g;
-    struct ggml_tensor * ln_1_b;
-
-    struct ggml_tensor * ln_2_g;
-    struct ggml_tensor * ln_2_b;
-
-    // attention
-    struct ggml_tensor * c_attn_attn_w;
-    struct ggml_tensor * c_attn_attn_b;
-
-    struct ggml_tensor * c_attn_proj_w;
-    struct ggml_tensor * c_attn_proj_b;
-
-    // mlp
-    struct ggml_tensor * c_mlp_fc_w;
-    struct ggml_tensor * c_mlp_fc_b;
-
-    struct ggml_tensor * c_mlp_proj_w;
-    struct ggml_tensor * c_mlp_proj_b;
-};
-
-struct gpt_model {
-    gpt_hparams hparams;
-
-    // normalization
-    struct ggml_tensor * ln_f_g;
-    struct ggml_tensor * ln_f_b;
-
-    struct ggml_tensor * wpe;                       //  position embedding
-    std::vector<struct ggml_tensor *> wtes;         //     token embedding
-    std::vector<struct ggml_tensor *> lm_heads;     // language model head
-
-    std::vector<gpt_layer> layers;
-
-    // key + value memory
-    struct ggml_tensor * memory_k;
-    struct ggml_tensor * memory_v;
-
-    struct ggml_context * ctx;
-
-    ggml_backend_t backend = NULL;
-
-    ggml_backend_buffer_t buffer_w;
-    ggml_backend_buffer_t buffer_kv;
-
-    std::map<std::string, struct ggml_tensor *> tensors;
-
-    //
-    int64_t t_sample_us  = 0;
-    int64_t t_predict_us = 0;
-    int64_t t_main_us    = 0;
-
-    //
-    int64_t n_sample  = 0;
-    int64_t n_predict = 0;
-
-    //
-    int64_t memsize = 0;
-    size_t mem_per_token = 0;
-};
-
-struct bark_model {
-    // encoder
-    gpt_model coarse_model;
-    gpt_model   fine_model;
-    gpt_model   text_model;
-
-    // vocab
-    bark_vocab vocab;
-};
-
-struct bark_context {
-    bark_model model;
-
-    // buffer for model evaluation
-    ggml_backend_buffer_t buf_compute;
-
-    // custom allocator
-    struct ggml_allocr * allocr = NULL;
-
-    std::mt19937 rng;
-
-    bark_sequence tokens;
-    bark_sequence semantic_tokens;
-
-    bark_codes coarse_tokens;
-    bark_codes fine_tokens;
-
-    std::vector<float> audio_arr;
-
-    // hyperparameters
-    bark_context_params params;
-
-    // statistics
-    int64_t t_load_us  = 0;
-    int64_t t_start_us = 0;
-
-};
 
 struct bark_progress {
     float current = 0.0f;
@@ -1330,9 +1205,7 @@ struct bark_context_params bark_context_default_params() {
     return result;
 }
 
-struct bark_context * bark_load_model(
-                            const std::string & model_path,
-                    const bark_context_params & params) {
+struct bark_context * bark_load_model(const std::string & model_path) {
     int64_t t_load_start_us = ggml_time_us();
 
     struct bark_context * bctx = new bark_context();
@@ -1343,6 +1216,7 @@ struct bark_context * bark_load_model(
         return {};
     }
 
+    bark_context_params params = bark_context_default_params();
     bctx->rng = std::mt19937(params.seed);
 
     bctx->params = params;
