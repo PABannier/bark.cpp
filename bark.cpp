@@ -24,21 +24,21 @@
 #define CLS_TOKEN_ID 101
 #define SEP_TOKEN_ID 102
 
-#define TEXT_ENCODING_OFFSET 10048
 #define TEXT_PAD_TOKEN 129595
+#define TEXT_ENCODING_OFFSET 10048
 
+#define N_FINE_CODEBOOKS 8
 #define CODEBOOK_SIZE 1024
 #define N_COARSE_CODEBOOKS 2
-#define N_FINE_CODEBOOKS 8
 
-#define SEMANTIC_PAD_TOKEN 10000
-#define SEMANTIC_INFER_TOKEN 129599
-#define SEMANTIC_VOCAB_SIZE 10000
 #define SEMANTIC_RATE_HZ 49.9
+#define SEMANTIC_PAD_TOKEN 10000
+#define SEMANTIC_VOCAB_SIZE 10000
+#define SEMANTIC_INFER_TOKEN 129599
 
 #define COARSE_RATE_HZ 75
-#define COARSE_SEMANTIC_PAD_TOKEN 12048
 #define COARSE_INFER_TOKEN 12050
+#define COARSE_SEMANTIC_PAD_TOKEN 12048
 
 static const size_t MB = 1024*1024;
 
@@ -710,7 +710,6 @@ static struct ggml_cgraph * bark_build_gpt_graph(
                 gpt_model * model,
               ggml_allocr * allocr,
             bark_sequence & tokens,
-       std::vector<float> & logits,
                       int * n_past,
                      bool   merge_ctx,
                       int   n_threads) {
@@ -952,10 +951,6 @@ static struct ggml_cgraph * bark_build_gpt_graph(
 
     ggml_build_forward_expand(gf, inpL);
 
-    // updating n_past with N (-256 if merge_ctx)
-    if (n_past)
-        *n_past += N;
-
     ggml_free(ctx0);
 
     return gf;
@@ -968,14 +963,19 @@ static bool bark_eval_text_encoder_internal(
                                           int * n_past,
                                          bool   merge_ctx,
                                           int   n_threads) {
-    auto & model  = bctx->model.text_model;
-    auto & allocr = bctx->allocr;
+    const int N = input.size();
+
+    auto & model   = bctx->model.text_model;
+    auto & allocr  = bctx->allocr;
+    auto & hparams = model.hparams;
+
+    const int n_vocab = hparams.n_out_vocab;
 
     // reset the allocator to free all the memory allocated during the previous inference
     ggml_allocr_reset(allocr);
 
     struct ggml_cgraph * gf = bark_build_gpt_graph(
-        &model, allocr, input, logits, n_past, merge_ctx, n_threads);
+        &model, allocr, input, n_past, merge_ctx, n_threads);
 
     // allocate tensors
     ggml_allocr_alloc_graph(allocr, gf);
@@ -986,6 +986,16 @@ static bool bark_eval_text_encoder_internal(
     }
 
     ggml_backend_graph_compute(model.backend, gf);
+
+    struct ggml_tensor * inpL = gf->nodes[gf->n_nodes - 1];
+
+    logits.resize(n_vocab);
+    ggml_backend_tensor_get(inpL, logits.data(), (n_vocab*(N-1))*sizeof(float), sizeof(float)*n_vocab);
+
+    // updating n_past with N (-256 if merge_ctx)
+    if (n_past) {
+        *n_past += N;
+    }
 
     return true;
 }
@@ -1011,6 +1021,8 @@ static bool bark_eval_text_encoder(struct bark_context * bctx, int n_threads) {
     int n_past = 0;
 
     for (int i = 0; i < 768; i++) {
+        printf("i = %d; n_past: %d\n", i, n_past);
+
         if (!bark_eval_text_encoder_internal(bctx, input, logits, &n_past, true, n_threads)) {
             fprintf(stderr, "%s: Could not generate token\n", __func__);
             return false;
@@ -1044,6 +1056,7 @@ static bool bark_forward_text_encoder(struct bark_context * bctx, int n_threads)
 
     auto & model  = bctx->model.text_model;
     auto & allocr = bctx->allocr;
+    auto & hparams = model.hparams;
 
     // allocate the compute buffer
     {
@@ -1051,10 +1064,11 @@ static bool bark_forward_text_encoder(struct bark_context * bctx, int n_threads)
         size_t align = ggml_backend_get_alignment(model.backend);
         bctx->allocr = ggml_allocr_new_measure(align);
 
-        // create the graph for memory usage estimation
-        std::vector<float> logits;
+        // create the worst-case graph for memory usage estimation
+        int n_past = 0;
+        std::vector<bark_vocab::id> decoy_tokens(256+256+1, 0);
         struct ggml_cgraph * gf = bark_build_gpt_graph(
-            &model, allocr, bctx->tokens, logits, nullptr, false, n_threads);
+            &model, allocr, decoy_tokens, &n_past, true /* merge_ctx */, n_threads);
 
         // compute the required memory
         size_t mem_size = ggml_allocr_alloc_graph(bctx->allocr, gf);
@@ -1150,7 +1164,7 @@ static struct bark_model * bark_load_model_from_file(
     {
         printf("%s: reading bark text model\n", __func__);
         const std::string fname = std::string(dirname) + "/ggml_weights_text.bin";
-        if (gpt_load_model_weights(fname, model->text_model)) {
+        if (!gpt_load_model_weights(fname, model->text_model)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
             return nullptr;
         }
@@ -1187,6 +1201,8 @@ static struct bark_model * bark_load_model_from_file(
             return nullptr;
         }
     }
+
+    printf("\n");
 
     return model;
 }
