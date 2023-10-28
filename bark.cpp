@@ -16,8 +16,11 @@
 #include <regex>
 #include <string>
 
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+
 #define BARK_DEBUG 0
-#define EPS_NORM 1e-8
+#define EPS_NORM 1e-5
 
 #define SAMPLE_RATE 24000
 
@@ -41,6 +44,51 @@
 #define COARSE_SEMANTIC_PAD_TOKEN 12048
 
 static const size_t MB = 1024*1024;
+
+void print_tensor(struct ggml_tensor * a) {
+    float sum = 0;
+    float maxv = -INFINITY;
+    float minv = INFINITY;
+    if (a) {
+        for (int i = 0; i < a->ne[3]; i++) {
+            for (int j = 0; j < a->ne[2]; j++) {
+                for (int k = 0; k < a->ne[1]; k++) {
+                    for (int l = 0; l < a->ne[0]; l++) {
+                        if (a->type == GGML_TYPE_F32) {
+                            float * aval = (float *) (
+                                (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
+                            sum += *aval;
+                            maxv = MAX(*aval, maxv);
+                            minv = MIN(*aval, minv);
+                            // printf("%.4f ", *aval);
+                        } else if (a->type == GGML_TYPE_F16) {
+                            ggml_fp16_t * tmp = (ggml_fp16_t *) (
+                                (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
+                            float aval = ggml_fp16_to_fp32(*tmp);
+                            sum += aval;
+                            maxv = MAX(aval, maxv);
+                            minv = MIN(aval, minv);
+                            // printf("%.4f ", aval);
+                        } else if (a->type == GGML_TYPE_I32) {
+                            int32_t * aval = (int32_t *) (
+                                (char *) a->data + i*a->nb[3] + j*a->nb[2] + k*a->nb[1] + l*a->nb[0]);
+                            sum += (float) *aval;
+                            maxv = MAX((float) *aval, maxv);
+                            minv = MIN((float) *aval, minv);
+                            // printf("%d ", *aval);
+                        } else {
+                            throw std::runtime_error("Wrong tensor type.");
+                        }
+                    }
+                    // printf("\n");
+                }
+                // printf("\n\n");
+            }
+        }
+        printf("sum=%.2f; max=%.2f; min=%.2f\n", sum, maxv, minv);
+        printf("shape=[%lld, %lld, %lld, %lld]\n", a->ne[0], a->ne[1], a->ne[2], a->ne[3]);
+    }
+}
 
 struct bark_progress {
     float current = 0.0f;
@@ -955,7 +1003,9 @@ static struct ggml_cgraph * bark_build_gpt_graph(
         }
     }
 
-    inpL = ggml_mul_mat(ctx0, model->lm_heads[0], inpL);
+    inpL = ggml_mul_mat(ctx0,
+            model->lm_heads[0],
+            ggml_view_1d(ctx0, inpL, inpL->ne[0], (inpL->ne[1]-1)*inpL->nb[1]));
 
     ggml_build_forward_expand(gf, inpL);
 
@@ -971,13 +1021,13 @@ static bool bark_eval_text_encoder_internal(
                                           int * n_past,
                                          bool   merge_ctx,
                                           int   n_threads) {
-    const int N = input.size();
-
     auto & model   = bctx->model.text_model;
     auto & allocr  = bctx->allocr;
     auto & hparams = model.hparams;
 
     const int n_vocab = hparams.n_out_vocab;
+
+    const int64_t t_predict_us_start = ggml_time_us();
 
     // reset the allocator to free all the memory allocated during the previous inference
     ggml_allocr_reset(allocr);
@@ -997,13 +1047,20 @@ static bool bark_eval_text_encoder_internal(
 
     struct ggml_tensor * inpL = gf->nodes[gf->n_nodes - 1];
 
-    // logits.resize(n_vocab);
-    // ggml_backend_tensor_get(inpL, logits.data(), (n_vocab*(N-1))*sizeof(float), sizeof(float)*n_vocab);
+    int N = input.size();
+    if (merge_ctx && *n_past == 0) {
+        N -= 256;
+    }
+
+    logits.resize(n_vocab);
+    ggml_backend_tensor_get(inpL, logits.data(), 0, sizeof(float)*n_vocab);
 
     // updating n_past with N (-256 if merge_ctx)
     if (n_past) {
         *n_past += N;
     }
+
+    bctx->model.text_model.t_predict_us += ggml_time_us() - t_predict_us_start;
 
     return true;
 }
