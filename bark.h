@@ -35,6 +35,7 @@ struct gpt_hparams {
     int32_t n_lm_heads;
     int32_t n_wtes;
     int32_t ftype;
+    int32_t bias;
 
     int32_t n_codes_given = 1;
 };
@@ -82,10 +83,6 @@ struct gpt_model {
     std::vector<struct ggml_tensor *> lm_heads;     // language model head
 
     std::vector<gpt_layer> layers;
-
-    // The text model does not have a bias neither for the layer norm layers,
-    // nor for the attention projection matrices.
-    bool has_bias = true;
 
     // key + value memory
     struct ggml_tensor * memory_k;

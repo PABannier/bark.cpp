@@ -43,6 +43,7 @@ def parse_hparams(hparams, outfile, use_f16):
     outfile.write(struct.pack("i", hparams["n_head"]))
     outfile.write(struct.pack("i", hparams["n_embd"]))
     outfile.write(struct.pack("i", hparams["block_size"]))
+    outfile.write(struct.pack("i", int(hparams["bias"])))
 
     try:
         outfile.write(struct.pack("ii", hparams["vocab_size"], hparams["vocab_size"]))

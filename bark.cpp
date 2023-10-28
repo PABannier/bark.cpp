@@ -389,6 +389,7 @@ static bool gpt_load_model_weights(const std::string & fname, gpt_model & model)
         read_safe(fin, hparams.n_head);
         read_safe(fin, hparams.n_embd);
         read_safe(fin, hparams.block_size);
+        read_safe(fin, hparams.bias);
         read_safe(fin, hparams.n_in_vocab);
         read_safe(fin, hparams.n_out_vocab);
         read_safe(fin, hparams.n_lm_heads);
@@ -400,6 +401,7 @@ static bool gpt_load_model_weights(const std::string & fname, gpt_model & model)
         printf("%s: n_in_vocab  = %d\n", __func__, hparams.n_in_vocab);
         printf("%s: n_out_vocab = %d\n", __func__, hparams.n_out_vocab);
         printf("%s: block_size  = %d\n", __func__, hparams.block_size);
+        printf("%s: bias        = %d\n", __func__, hparams.bias);
         printf("%s: n_embd      = %d\n", __func__, hparams.n_embd);
         printf("%s: n_head      = %d\n", __func__, hparams.n_head);
         printf("%s: n_layer     = %d\n", __func__, hparams.n_layer);
@@ -436,43 +438,52 @@ static bool gpt_load_model_weights(const std::string & fname, gpt_model & model)
         const int n_out_vocab = hparams.n_out_vocab;
         const int n_lm_heads  = hparams.n_lm_heads;
         const int n_wtes      = hparams.n_wtes;
+        const int bias        = hparams.bias;
 
         buffer_size += n_embd * ggml_type_size(GGML_TYPE_F32); // ln_f_g
-        buffer_size += n_embd * ggml_type_size(GGML_TYPE_F32); // ln_f_b
 
         buffer_size += n_wtes * n_in_vocab * n_embd * ggml_type_size(wtype);      // wte
         buffer_size += block_size * n_embd * ggml_type_size(GGML_TYPE_F32);       // wpe
         buffer_size += n_lm_heads * n_out_vocab * n_embd * ggml_type_size(wtype); // lm_head
 
         buffer_size += n_layer * (n_embd * ggml_type_size(GGML_TYPE_F32)); // ln_1_g
-        buffer_size += n_layer * (n_embd * ggml_type_size(GGML_TYPE_F32)); // ln_1_b
-
         buffer_size += n_layer * (n_embd * ggml_type_size(GGML_TYPE_F32)); // ln_2_g
-        buffer_size += n_layer * (n_embd * ggml_type_size(GGML_TYPE_F32)); // ln_2_b
 
-        buffer_size += n_layer * (3 * n_embd * n_embd * ggml_type_size(wtype));         // c_attn_attn_w
-        buffer_size += n_layer * (3 * n_embd           *ggml_type_size(GGML_TYPE_F32)); // c_attn_attn_b
+        buffer_size += n_layer * (3 * n_embd * n_embd * ggml_type_size(wtype)); // c_attn_attn_w
+        buffer_size += n_layer * (    n_embd * n_embd * ggml_type_size(wtype)); // c_attn_proj_w
 
-        buffer_size += n_layer * (n_embd * n_embd * ggml_type_size(wtype));             // c_attn_proj_w
-        buffer_size += n_layer * (         n_embd * ggml_type_size(GGML_TYPE_F32));     // c_attn_proj_b
+        buffer_size += n_layer * (4 * n_embd * n_embd * ggml_type_size(wtype)); // c_mlp_fc_w
+        buffer_size += n_layer * (4 * n_embd * n_embd * ggml_type_size(wtype)); // c_mlp_proj_w
 
-        buffer_size += n_layer * (4 * n_embd * n_embd * ggml_type_size(wtype));         // c_mlp_fc_w
-        buffer_size += n_layer * (4          * n_embd * ggml_type_size(GGML_TYPE_F32)); // c_mlp_fc_b
+        if (bias) {
+            buffer_size += n_embd * ggml_type_size(GGML_TYPE_F32); // ln_f_b
 
-        buffer_size += n_layer * (4 * n_embd * n_embd * ggml_type_size(wtype));         // c_mlp_proj_w
-        buffer_size += n_layer * (             n_embd * ggml_type_size(GGML_TYPE_F32)); // c_mlp_proj_b
+            buffer_size += n_layer * (n_embd * ggml_type_size(GGML_TYPE_F32)); // ln_1_b
+            buffer_size += n_layer * (n_embd * ggml_type_size(GGML_TYPE_F32)); // ln_2_b
+
+            buffer_size += n_layer * (3 * n_embd * ggml_type_size(GGML_TYPE_F32)); // c_attn_attn_b
+            buffer_size += n_layer * (    n_embd * ggml_type_size(GGML_TYPE_F32)); // c_attn_proj_b
+
+            buffer_size += n_layer * (4 * n_embd * ggml_type_size(GGML_TYPE_F32)); // c_mlp_fc_b
+            buffer_size += n_layer * (    n_embd * ggml_type_size(GGML_TYPE_F32)); // c_mlp_proj_b
+        }
 
         buffer_size += 10ull*MB;    // object overhead
 
         n_tensors = (
-            2           + // ln_f_g, ln_f_b
+            1           + // ln_f_g
             n_wtes + 1  + // wte, wpe
-            4 * n_layer + // ln_1_g, ln_1_b, ln_2_g, ln_2_b
-            4 * n_layer + // c_attn_attn_w, c_attn_attn_b, c_attn_proj_w, c_attn_proj_b
-            4 * n_layer + // c_mlp_fc_w, c_mlp_fc_b, c_mlp_proj_w, c_mlp_proj_b
-            2 * n_layer + // memory_k, memory_v
-            n_lm_heads    // lm_head
+            2 * n_layer + // ln_1_g, ln_2_g
+            2 * n_layer + // c_attn_attn_w, c_attn_proj_w
+            2 * n_layer + // c_mlp_fc_w, c_mlp_proj_w
+            n_lm_heads  + // lm_head
+            2             // memory_k, memory_v
         );
+
+        if (bias) {
+            n_tensors += 3;  // ln_f_b, ln_1_b, ln_2_b
+            n_tensors += 4;  // c_attn_attn_b, c_attn_proj_b, c_mlp_fc_b, c_mlp_proj_b
+        }
 
         printf("%s: ggml tensor size = %d bytes\n", __func__, (int) sizeof(ggml_tensor));
         printf("%s: ggml ctx size = %6.2f MB\n", __func__, buffer_size/(1024.0*1024.0));
@@ -518,15 +529,19 @@ static bool gpt_load_model_weights(const std::string & fname, gpt_model & model)
         const int n_out_vocab = hparams.n_out_vocab;
         const int n_lm_heads  = hparams.n_lm_heads;
         const int n_wtes      = hparams.n_wtes;
+        const int bias        = hparams.bias;
 
         model.layers.resize(n_layer);
         model.lm_heads.resize(n_lm_heads);
         model.wtes.resize(n_wtes);
 
         model.ln_f_g = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, n_embd);
-        model.ln_f_b = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, n_embd);
 
-        model.wpe    = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, n_embd, block_size);
+        if (bias) {
+            model.ln_f_b = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, n_embd);
+        }
+
+        model.wpe = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, n_embd, block_size);
 
         for (int i = 0; i < n_wtes; i++) {
             model.wtes[i] = ggml_new_tensor_2d(ctx, wtype, n_embd, n_in_vocab);
@@ -547,22 +562,24 @@ static bool gpt_load_model_weights(const std::string & fname, gpt_model & model)
             auto & layer = model.layers[i];
 
             layer.ln_1_g        = ggml_new_tensor_1d(ctx, GGML_TYPE_F32,   n_embd);
-            layer.ln_1_b        = ggml_new_tensor_1d(ctx, GGML_TYPE_F32,   n_embd);
-
             layer.ln_2_g        = ggml_new_tensor_1d(ctx, GGML_TYPE_F32,   n_embd);
-            layer.ln_2_b        = ggml_new_tensor_1d(ctx, GGML_TYPE_F32,   n_embd);
 
-            layer.c_attn_attn_w = ggml_new_tensor_2d(ctx, wtype,           n_embd, 3*n_embd);
-            layer.c_attn_attn_b = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, 3*n_embd);
+            layer.c_attn_attn_w = ggml_new_tensor_2d(ctx, wtype, n_embd, 3*n_embd);
+            layer.c_attn_proj_w = ggml_new_tensor_2d(ctx, wtype, n_embd, n_embd);
 
-            layer.c_attn_proj_w = ggml_new_tensor_2d(ctx, wtype,           n_embd, n_embd);
-            layer.c_attn_proj_b = ggml_new_tensor_1d(ctx, GGML_TYPE_F32,   n_embd);
+            layer.c_mlp_fc_w    = ggml_new_tensor_2d(ctx, wtype, n_embd, 4*n_embd);
+            layer.c_mlp_proj_w  = ggml_new_tensor_2d(ctx, wtype, 4*n_embd, n_embd);
 
-            layer.c_mlp_fc_w    = ggml_new_tensor_2d(ctx, wtype,           n_embd, 4*n_embd);
-            layer.c_mlp_fc_b    = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, 4*n_embd);
+            if (bias) {
+                layer.ln_1_b        = ggml_new_tensor_1d(ctx, GGML_TYPE_F32,   n_embd);
+                layer.ln_2_b        = ggml_new_tensor_1d(ctx, GGML_TYPE_F32,   n_embd);
 
-            layer.c_mlp_proj_w  = ggml_new_tensor_2d(ctx, wtype,         4*n_embd, n_embd);
-            layer.c_mlp_proj_b  = ggml_new_tensor_1d(ctx, GGML_TYPE_F32,   n_embd);
+                layer.c_attn_attn_b = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, 3*n_embd);
+                layer.c_attn_proj_b = ggml_new_tensor_1d(ctx, GGML_TYPE_F32,   n_embd);
+
+                layer.c_mlp_fc_b    = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, 4*n_embd);
+                layer.c_mlp_proj_b  = ggml_new_tensor_1d(ctx, GGML_TYPE_F32,   n_embd);
+            }
 
             // map by name
             model.tensors["model/h" + std::to_string(i) + "/ln_1/g"]        = layer.ln_1_g;
@@ -724,8 +741,7 @@ static struct ggml_cgraph * bark_build_gpt_graph(
     const int n_ctx   = hparams.block_size;
     const int n_head  = hparams.n_head;
     const int n_vocab = hparams.n_out_vocab;
-
-    const bool has_bias = model->has_bias;
+    const int bias    = hparams.bias;
 
     static size_t buf_size = ggml_tensor_overhead()*GGML_MAX_NODES + ggml_graph_overhead();
     static std::vector<uint8_t> buf(buf_size);
@@ -807,7 +823,7 @@ static struct ggml_cgraph * bark_build_gpt_graph(
             // cur = ln_1_g*cur + ln_1_b
             cur = ggml_mul(ctx0, cur, model->layers[il].ln_1_g);
 
-            if (has_bias) {
+            if (bias) {
                 cur = ggml_add(ctx0, cur, model->layers[il].ln_1_b);
             }
         }
@@ -818,7 +834,7 @@ static struct ggml_cgraph * bark_build_gpt_graph(
                     model->layers[il].c_attn_attn_w,
                     cur);
 
-            if (has_bias) {
+            if (bias) {
                 cur = ggml_add(ctx0, cur, model->layers[il].c_attn_attn_b);
             }
         }
@@ -882,7 +898,7 @@ static struct ggml_cgraph * bark_build_gpt_graph(
         {
             cur = ggml_mul_mat(ctx0, model->layers[il].c_attn_proj_w, cur);
 
-            if (has_bias) {
+            if (bias) {
                 cur = ggml_add(ctx0, cur, model->layers[il].c_attn_proj_b);
             }
         }
@@ -901,7 +917,7 @@ static struct ggml_cgraph * bark_build_gpt_graph(
                 // cur = ln_2_g*cur + ln_2_b
                 cur = ggml_mul(ctx0, cur, model->layers[il].ln_2_g);
 
-                if (has_bias) {
+                if (bias) {
                     cur = ggml_add(ctx0, cur, model->layers[il].ln_2_b);
                 }
             }
@@ -909,7 +925,7 @@ static struct ggml_cgraph * bark_build_gpt_graph(
             // cur = fc_w*cur + fc_b
             cur = ggml_mul_mat(ctx0, model->layers[il].c_mlp_fc_w, cur);
 
-            if (has_bias) {
+            if (bias) {
                 cur = ggml_add(ctx0, cur, model->layers[il].c_mlp_fc_b);
             }
 
@@ -918,7 +934,7 @@ static struct ggml_cgraph * bark_build_gpt_graph(
             // projection
             cur = ggml_mul_mat(ctx0, model->layers[il].c_mlp_proj_w, cur);
 
-            if (has_bias) {
+            if (bias) {
                 cur = ggml_add(ctx0, cur, model->layers[il].c_mlp_proj_b);
             }
         }
@@ -934,7 +950,7 @@ static struct ggml_cgraph * bark_build_gpt_graph(
         // inpL = ln_f_g*inpL + ln_f_b
         inpL = ggml_mul(ctx0, inpL, model->ln_f_g);
 
-        if (has_bias) {
+        if (bias) {
             inpL = ggml_add(ctx0, inpL, model->ln_f_b);
         }
     }
@@ -1162,7 +1178,6 @@ static struct bark_model * bark_load_model_from_file(
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
             return nullptr;
         }
-        model->text_model.has_bias = false;  // TODO: to move in convert.py hparams
     }
 
     // vocab
