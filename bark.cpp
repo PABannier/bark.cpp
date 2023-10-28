@@ -1060,7 +1060,48 @@ static bool bark_eval_text_encoder_internal(
         *n_past += N;
     }
 
-    bctx->model.text_model.t_predict_us += ggml_time_us() - t_predict_us_start;
+    model.t_predict_us += ggml_time_us() - t_predict_us_start;
+
+    return true;
+}
+
+static bool bark_eval_coarse_encoder_internal(
+                          struct bark_context * bctx,
+                                bark_sequence & input,
+                           std::vector<float> & logits,
+                                          int * n_past,
+                                         bool   merge_ctx,
+                                          int   n_threads) {
+    auto & model   = bctx->model.coarse_model;
+    auto & allocr  = bctx->allocr;
+    auto & hparams = model.hparams;
+
+    const int n_vocab = hparams.n_out_vocab;
+
+    const int64_t t_predict_us_start = ggml_time_us();
+
+    // reset the allocator to free all the memory allocated during the previous inference
+    ggml_allocr_reset(allocr);
+
+    struct ggml_cgraph * gf = bark_build_gpt_graph(
+        &model, allocr, input, n_past, merge_ctx, n_threads);
+
+    // allocate tensors
+    ggml_allocr_alloc_graph(allocr, gf);
+
+    // run the computation
+    if (ggml_backend_is_cpu(model.backend)) {
+        ggml_backend_cpu_set_n_threads(model.backend, n_threads);
+    }
+
+    ggml_backend_graph_compute(model.backend, gf);
+
+    struct ggml_tensor * inpL = gf->nodes[gf->n_nodes - 1];
+
+    logits.resize(n_vocab);
+    ggml_backend_tensor_get(inpL, logits.data(), 0, sizeof(float)*n_vocab);
+
+    model.t_predict_us += ggml_time_us() - t_predict_us_start;
 
     return true;
 }
@@ -1114,6 +1155,117 @@ static bool bark_eval_text_encoder(struct bark_context * bctx, int n_threads) {
     return true;
 }
 
+static bool bark_eval_coarse_encoder(struct bark_context * bctx, int n_threads) {
+    bark_codes out_coarse;
+    bark_sequence out;
+
+    bark_progress progress(__func__);
+
+    auto & model   = bctx->model.coarse_model;
+    auto & hparams = model.hparams;
+
+    const int n_vocab = hparams.n_out_vocab;
+
+    int max_coarse_history  = bctx->params.max_coarse_history;
+    int sliding_window_size = bctx->params.sliding_window_size;
+
+    float temp = bctx->params.temp;
+
+    float stc_ratio = COARSE_RATE_HZ / SEMANTIC_RATE_HZ * N_COARSE_CODEBOOKS;
+    int max_history = floorf(max_coarse_history / stc_ratio);
+
+    int n_steps = floorf(bctx->semantic_tokens.size() * stc_ratio / N_COARSE_CODEBOOKS) * N_COARSE_CODEBOOKS;
+    assert(n_steps > 0);
+    assert(n_steps % N_COARSE_CODEBOOKS == 0);
+
+    int n_window_steps = ceilf(static_cast<float>(n_steps) / sliding_window_size);
+
+    int step_idx = 0;
+
+    bark_sequence input = bctx->semantic_tokens;
+
+    std::vector<float> logits;
+    logits.resize(n_vocab);
+
+    for (int i = 0; i < n_window_steps; i++) {
+        int semantic_idx = roundf(n_steps / stc_ratio);
+
+        bark_sequence input_in(
+            input.begin() + std::max(semantic_idx - max_history, 0),
+            input.end()
+        );
+
+        size_t original_size = input_in.size();
+        input_in.resize(256);
+
+        // padding from the right side
+        for (int ix = original_size; ix < 256; ix++) {
+                input_in[ix] = COARSE_SEMANTIC_PAD_TOKEN;
+        }
+        input_in.push_back(COARSE_INFER_TOKEN);
+
+        // concatenate input_in and input_coarse
+        input_in.insert(
+            input_in.end(),
+            std::make_move_iterator(out.end() - std::min(max_coarse_history, (int) out.size())),
+            std::make_move_iterator(out.end())
+        );
+
+        int n_past = 0;
+
+        for (int j = 0; j < sliding_window_size; j++) {
+            if (step_idx >= n_steps) {
+                continue;
+            }
+
+            if (!bark_eval_coarse_encoder_internal(bctx, input_in, logits, &n_past, false, n_threads)) {
+                fprintf(stderr, "%s: Could not generate token\n", __func__);
+                return false;
+            }
+
+            input_in.clear();
+
+            bool is_major = step_idx % N_COARSE_CODEBOOKS == 0;
+            int start_idx = SEMANTIC_VOCAB_SIZE + (1 - is_major) * CODEBOOK_SIZE;
+            int end_idx   = SEMANTIC_VOCAB_SIZE + (2 - is_major) * CODEBOOK_SIZE;
+
+            std::vector<float> relevant_logits(
+                    logits.begin() + start_idx,
+                    logits.begin() + end_idx
+            );
+
+            bark_token next = gpt_sample(
+                relevant_logits, bctx->rng, temp, NULL, &model.t_sample_us, &model.n_sample);
+
+            next += start_idx;
+
+            input_in.push_back(next);
+            out.push_back(next);
+
+            step_idx += 1;
+
+            progress.callback((float) (i*sliding_window_size+j)/n_steps);
+        }
+    }
+
+    assert((int) out.size() == n_steps);
+    assert(out.size() % N_COARSE_CODEBOOKS == 0);
+
+    // out_coarse: [seq_length, n_codes]
+    for (int i = 0; i < (int) out.size(); i += N_COARSE_CODEBOOKS) {
+        // this assumes N_COARSE_CODEBOOKS = 2
+        bark_sequence _tmp = {
+            out[i] - SEMANTIC_VOCAB_SIZE,
+            out[i+1] - SEMANTIC_VOCAB_SIZE - CODEBOOK_SIZE
+        };
+        out_coarse.push_back(_tmp);
+    }
+
+    bctx->coarse_tokens = out_coarse;
+
+    return true;
+}
+
 static bool bark_forward_text_encoder(struct bark_context * bctx, int n_threads) {
     const int64_t t_main_start_us = ggml_time_us();
 
@@ -1138,7 +1290,7 @@ static bool bark_forward_text_encoder(struct bark_context * bctx, int n_threads)
 
         // recreate the allocator with the required memory
         ggml_allocr_free(bctx->allocr);
-        bctx->buf_compute = ggml_backend_alloc_buffer(bctx->model.text_model.backend, mem_size);
+        bctx->buf_compute = ggml_backend_alloc_buffer(model.backend, mem_size);
         bctx->allocr = ggml_allocr_new_from_buffer(bctx->buf_compute);
 
         fprintf(stderr, "%s: compute buffer size: %.2f MB\n\n", __func__, mem_size/1024.0/1024.0);
@@ -1159,11 +1311,61 @@ static bool bark_forward_text_encoder(struct bark_context * bctx, int n_threads)
     return true;
 }
 
+static bool bark_forward_coarse_encoder(struct bark_context * bctx, int n_threads) {
+    const int64_t t_main_start_us = ggml_time_us();
+
+    auto & model  = bctx->model.coarse_model;
+    auto & allocr = bctx->allocr;
+    auto & hparams = model.hparams;
+
+    // allocate the compute buffer
+    {
+        // alignment required by the backend
+        size_t align = ggml_backend_get_alignment(model.backend);
+        bctx->allocr = ggml_allocr_new_measure(align);
+
+        // create the worst-case graph for memory usage estimation
+        int n_past = 0;
+        std::vector<bark_vocab::id> decoy_tokens(hparams.block_size, 0);
+        struct ggml_cgraph * gf = bark_build_gpt_graph(
+            &model, allocr, decoy_tokens, &n_past, false /* merge_ctx */, n_threads);
+
+        // compute the required memory
+        size_t mem_size = ggml_allocr_alloc_graph(bctx->allocr, gf);
+
+        // recreate the allocator with the required memory
+        ggml_allocr_free(bctx->allocr);
+        bctx->buf_compute = ggml_backend_alloc_buffer(model.backend, mem_size);
+        bctx->allocr = ggml_allocr_new_from_buffer(bctx->buf_compute);
+
+        fprintf(stderr, "%s: compute buffer size: %.2f MB\n\n", __func__, mem_size/1024.0/1024.0);
+    }
+
+    if (!bark_eval_coarse_encoder(bctx, n_threads)) {
+        fprintf(stderr, "%s: failed to forward coarse encoder\n", __func__);
+        return false;
+    }
+
+    model.t_main_us = ggml_time_us() - t_main_start_us;
+
+    bark_print_statistics(&model);
+
+    // TODO: clean allocr and buf_compute in the end
+    ggml_backend_buffer_free(bctx->buf_compute);
+
+    return true;
+}
+
 static bool bark_forward_eval(
         struct bark_context * bctx,
                         int   n_threads) {
     if (!bark_forward_text_encoder(bctx, n_threads)) {
         fprintf(stderr, "%s: failed to forward text encoder\n", __func__);
+        return false;
+    }
+
+    if (!bark_forward_coarse_encoder(bctx, n_threads)) {
+        fprintf(stderr, "%s: failed to forward coarse encoder\n", __func__);
         return false;
     }
 
@@ -1249,15 +1451,15 @@ static struct bark_model * bark_load_model_from_file(
         }
     }
 
-    // // coarse
-    // {
-    //     printf("\n%s: reading bark coarse model\n", __func__);
-    //     const std::string fname = std::string(dirname) + "/ggml_weights_coarse.bin";
-    //     if (!gpt_load_model_weights(fname, model->coarse_model)) {
-    //         fprintf(stderr, "%s: invalid model file '%s' (bad coarse)\n", __func__, fname.c_str());
-    //         return nullptr;
-    //     }
-    // }
+    // coarse
+    {
+        printf("\n%s: reading bark coarse model\n", __func__);
+        const std::string fname = std::string(dirname) + "/ggml_weights_coarse.bin";
+        if (!gpt_load_model_weights(fname, model->coarse_model)) {
+            fprintf(stderr, "%s: invalid model file '%s' (bad coarse)\n", __func__, fname.c_str());
+            return nullptr;
+        }
+    }
 
     // // fine
     // {
