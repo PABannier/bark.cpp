@@ -83,6 +83,10 @@ struct gpt_model {
 
     std::vector<gpt_layer> layers;
 
+    // The text model does not have a bias neither for the layer norm layers,
+    // nor for the attention projection matrices.
+    bool has_bias = true;
+
     // key + value memory
     struct ggml_tensor * memory_k;
     struct ggml_tensor * memory_v;

@@ -462,9 +462,6 @@ static bool gpt_load_model_weights(const std::string & fname, gpt_model & model)
         buffer_size += n_layer * (4 * n_embd * n_embd * ggml_type_size(wtype));         // c_mlp_proj_w
         buffer_size += n_layer * (             n_embd * ggml_type_size(GGML_TYPE_F32)); // c_mlp_proj_b
 
-        // buffer_size += n_layer * block_size * n_embd * ggml_type_size(GGML_TYPE_F32); // memory_k
-        // buffer_size += n_layer * block_size * n_embd * ggml_type_size(GGML_TYPE_F32); // memory_v
-
         buffer_size += 10ull*MB;    // object overhead
 
         n_tensors = (
@@ -544,7 +541,7 @@ static bool gpt_load_model_weights(const std::string & fname, gpt_model & model)
         model.tensors["model/ln_f/g"] = model.ln_f_g;
         model.tensors["model/ln_f/b"] = model.ln_f_b;
 
-        model.tensors["model/wpe"]     = model.wpe;
+        model.tensors["model/wpe"]    = model.wpe;
 
         for (int i = 0; i < n_layer; ++i) {
             auto & layer = model.layers[i];
@@ -728,6 +725,8 @@ static struct ggml_cgraph * bark_build_gpt_graph(
     const int n_head  = hparams.n_head;
     const int n_vocab = hparams.n_out_vocab;
 
+    const bool has_bias = model->has_bias;
+
     static size_t buf_size = ggml_tensor_overhead()*GGML_MAX_NODES + ggml_graph_overhead();
     static std::vector<uint8_t> buf(buf_size);
 
@@ -806,11 +805,11 @@ static struct ggml_cgraph * bark_build_gpt_graph(
             cur = ggml_norm(ctx0, inpL, EPS_NORM);
 
             // cur = ln_1_g*cur + ln_1_b
-            cur = ggml_add(ctx0,
-                    ggml_mul(ctx0,
-                        ggml_repeat(ctx0, model->layers[il].ln_1_g, cur),
-                        cur),
-                    ggml_repeat(ctx0, model->layers[il].ln_1_b, cur));
+            cur = ggml_mul(ctx0, cur, model->layers[il].ln_1_g);
+
+            if (has_bias) {
+                cur = ggml_add(ctx0, cur, model->layers[il].ln_1_b);
+            }
         }
 
         // attn
@@ -819,9 +818,9 @@ static struct ggml_cgraph * bark_build_gpt_graph(
                     model->layers[il].c_attn_attn_w,
                     cur);
 
-            cur = ggml_add(ctx0,
-                    ggml_repeat(ctx0, model->layers[il].c_attn_attn_b, cur),
-                    cur);
+            if (has_bias) {
+                cur = ggml_add(ctx0, cur, model->layers[il].c_attn_attn_b);
+            }
         }
 
         // self-attention
@@ -881,13 +880,11 @@ static struct ggml_cgraph * bark_build_gpt_graph(
 
         // projection
         {
-            cur = ggml_mul_mat(ctx0,
-                    model->layers[il].c_attn_proj_w,
-                    cur);
+            cur = ggml_mul_mat(ctx0, model->layers[il].c_attn_proj_w, cur);
 
-            cur = ggml_add(ctx0,
-                    ggml_repeat(ctx0, model->layers[il].c_attn_proj_b, cur),
-                    cur);
+            if (has_bias) {
+                cur = ggml_add(ctx0, cur, model->layers[il].c_attn_proj_b);
+            }
         }
 
         // add the input
@@ -902,33 +899,28 @@ static struct ggml_cgraph * bark_build_gpt_graph(
                 cur = ggml_norm(ctx0, inpFF, EPS_NORM);
 
                 // cur = ln_2_g*cur + ln_2_b
-                // [ 768, N]
-                cur = ggml_add(ctx0,
-                        ggml_mul(ctx0,
-                            ggml_repeat(ctx0, model->layers[il].ln_2_g, cur),
-                            cur),
-                        ggml_repeat(ctx0, model->layers[il].ln_2_b, cur));
+                cur = ggml_mul(ctx0, cur, model->layers[il].ln_2_g);
+
+                if (has_bias) {
+                    cur = ggml_add(ctx0, cur, model->layers[il].ln_2_b);
+                }
             }
 
             // cur = fc_w*cur + fc_b
-            cur = ggml_mul_mat(ctx0,
-                    model->layers[il].c_mlp_fc_w,
-                    cur);
+            cur = ggml_mul_mat(ctx0, model->layers[il].c_mlp_fc_w, cur);
 
-            cur = ggml_add(ctx0,
-                    ggml_repeat(ctx0, model->layers[il].c_mlp_fc_b, cur),
-                    cur);
+            if (has_bias) {
+                cur = ggml_add(ctx0, cur, model->layers[il].c_mlp_fc_b);
+            }
 
             cur = ggml_gelu(ctx0, cur);
 
             // projection
-            cur = ggml_mul_mat(ctx0,
-                    model->layers[il].c_mlp_proj_w,
-                    cur);
+            cur = ggml_mul_mat(ctx0, model->layers[il].c_mlp_proj_w, cur);
 
-            cur = ggml_add(ctx0,
-                    ggml_repeat(ctx0, model->layers[il].c_mlp_proj_b, cur),
-                    cur);
+            if (has_bias) {
+                cur = ggml_add(ctx0, cur, model->layers[il].c_mlp_proj_b);
+            }
         }
 
         // input for next layer
@@ -940,11 +932,11 @@ static struct ggml_cgraph * bark_build_gpt_graph(
         inpL = ggml_norm(ctx0, inpL, EPS_NORM);
 
         // inpL = ln_f_g*inpL + ln_f_b
-        inpL = ggml_add(ctx0,
-                ggml_mul(ctx0,
-                    ggml_repeat(ctx0, model->ln_f_g, inpL),
-                    inpL),
-                ggml_repeat(ctx0, model->ln_f_b, inpL));
+        inpL = ggml_mul(ctx0, inpL, model->ln_f_g);
+
+        if (has_bias) {
+            inpL = ggml_add(ctx0, inpL, model->ln_f_b);
+        }
     }
 
     inpL = ggml_mul_mat(ctx0, model->lm_heads[0], inpL);
@@ -989,8 +981,8 @@ static bool bark_eval_text_encoder_internal(
 
     struct ggml_tensor * inpL = gf->nodes[gf->n_nodes - 1];
 
-    logits.resize(n_vocab);
-    ggml_backend_tensor_get(inpL, logits.data(), (n_vocab*(N-1))*sizeof(float), sizeof(float)*n_vocab);
+    // logits.resize(n_vocab);
+    // ggml_backend_tensor_get(inpL, logits.data(), (n_vocab*(N-1))*sizeof(float), sizeof(float)*n_vocab);
 
     // updating n_past with N (-256 if merge_ctx)
     if (n_past) {
@@ -1021,8 +1013,6 @@ static bool bark_eval_text_encoder(struct bark_context * bctx, int n_threads) {
     int n_past = 0;
 
     for (int i = 0; i < 768; i++) {
-        printf("i = %d; n_past: %d\n", i, n_past);
-
         if (!bark_eval_text_encoder_internal(bctx, input, logits, &n_past, true, n_threads)) {
             fprintf(stderr, "%s: Could not generate token\n", __func__);
             return false;
@@ -1117,6 +1107,8 @@ bool bark_generate_audio(
         return false;
     }
 
+    int64_t t_start_eval_us = ggml_time_us();
+
     bark_tokenize_input(bctx, text);
 
     if (!bark_forward_eval(bctx, n_threads)) {
@@ -1126,6 +1118,8 @@ bool bark_generate_audio(
 
     // TODO: codes might need to get transposed...
     // TODO: call encodec API (decompress_audio)
+
+    bctx->t_eval_us = ggml_time_us() - t_start_eval_us;
 
     return true;
 }
@@ -1168,6 +1162,7 @@ static struct bark_model * bark_load_model_from_file(
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
             return nullptr;
         }
+        model->text_model.has_bias = false;  // TODO: to move in convert.py hparams
     }
 
     // vocab
@@ -1182,25 +1177,25 @@ static struct bark_model * bark_load_model_from_file(
         }
     }
 
-    // coarse
-    {
-        printf("\n%s: reading bark coarse model\n", __func__);
-        const std::string fname = std::string(dirname) + "/ggml_weights_coarse.bin";
-        if (!gpt_load_model_weights(fname, model->coarse_model)) {
-            fprintf(stderr, "%s: invalid model file '%s' (bad coarse)\n", __func__, fname.c_str());
-            return nullptr;
-        }
-    }
+    // // coarse
+    // {
+    //     printf("\n%s: reading bark coarse model\n", __func__);
+    //     const std::string fname = std::string(dirname) + "/ggml_weights_coarse.bin";
+    //     if (!gpt_load_model_weights(fname, model->coarse_model)) {
+    //         fprintf(stderr, "%s: invalid model file '%s' (bad coarse)\n", __func__, fname.c_str());
+    //         return nullptr;
+    //     }
+    // }
 
-    // fine
-    {
-        printf("\n%s: reading bark fine model\n", __func__);
-        const std::string fname = std::string(dirname) + "/ggml_weights_fine.bin";
-        if (!gpt_load_model_weights(fname, model->fine_model)) {
-            fprintf(stderr, "%s: invalid model file '%s' (bad fine)\n", __func__, fname.c_str());
-            return nullptr;
-        }
-    }
+    // // fine
+    // {
+    //     printf("\n%s: reading bark fine model\n", __func__);
+    //     const std::string fname = std::string(dirname) + "/ggml_weights_fine.bin";
+    //     if (!gpt_load_model_weights(fname, model->fine_model)) {
+    //         fprintf(stderr, "%s: invalid model file '%s' (bad fine)\n", __func__, fname.c_str());
+    //         return nullptr;
+    //     }
+    // }
 
     printf("\n");
 
