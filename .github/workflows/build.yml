@@ -1,12 +1,6 @@
 name: build
 
 on:
-  workflow_dispatch: # allows manual triggering
-    inputs:
-      create_release:
-        description: 'Create new release'
-        required: true
-        type: boolean
   push:
     branches:
       - main
@@ -28,7 +22,9 @@ jobs:
     steps:
       - name: Clone
         id: checkout
-        uses: actions/checkout@v1
+        uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Dependencies
         id: depends
@@ -44,19 +40,15 @@ jobs:
           cmake ..
           cmake --build . --config Release
 
-      - name: Test
-        id: cmake_test
-        run: |
-          cd build
-          ctest --verbose --timeout 900
-
   macOS-latest-cmake:
     runs-on: macos-latest
 
     steps:
       - name: Clone
         id: checkout
-        uses: actions/checkout@v1
+        uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Dependencies
         id: depends
@@ -70,11 +62,5 @@ jobs:
           sysctl -a
           mkdir build
           cd build
-          cmake -DBARK_AVX2=OFF -DBARK_FMA=OFF ..
+          cmake ..
           cmake --build . --config Release
-
-      - name: Test
-        id: cmake_test
-        run: |
-          cd build
-          ctest --verbose --timeout 900

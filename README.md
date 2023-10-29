@@ -1,6 +1,6 @@
 # bark.cpp
 
-![bark.cpp](./assets/banner.jpeg)
+![bark.cpp](./assets/banner.png)
 
 [![Actions Status](https://github.com/PABannier/bark.cpp/actions/workflows/build.yml/badge.svg)](https://github.com/PABannier/bark.cpp/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -156,7 +156,7 @@ Here are the steps for the bark model.
 ### Get the code
 
 ```bash
-git clone https://github.com/PABannier/bark.cpp.git
+git clone --recursive https://github.com/PABannier/bark.cpp.git
 cd bark.cpp
 ```
 
