@@ -1,11 +1,9 @@
+#include <cmath>
 #include <fstream>
-#include <vector>
 #include <tuple>
+#include <vector>
 
-#include "bark-util.h"
 #include "common.h"
-
-#define BARK_API_INTERNAL
 
 int64_t bytes_left(std::ifstream & f) {
     // utils to check all bytes are read from stream
@@ -14,6 +12,11 @@ int64_t bytes_left(std::ifstream & f) {
     int64_t file_size = f.tellg();
     int64_t bytes_left_to_read = file_size - curr_pos;
     return bytes_left_to_read;
+}
+
+template<typename T>
+static void read_safe(std::ifstream& fin, T& dest) {
+    fin.read((char*)& dest, sizeof(T));
 }
 
 template <typename T, typename U>

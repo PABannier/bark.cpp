@@ -220,7 +220,7 @@ static bark_token gpt_sample(
     return res;
 }
 
-static bool bark_vocab_load(
+bool bark_vocab_load(
      const std::string & fname,
             bark_vocab * vocab,
                int32_t   expected_size) {
@@ -308,7 +308,7 @@ static std::string strip_accents(const std::string & in_str) {
     return out_str;
 }
 
-static void bert_tokenize(
+void bert_tokenize(
         const bark_vocab * vocab,
               const char * text,
                  int32_t * tokens,
@@ -1808,7 +1808,7 @@ static bool bark_eval_fine_encoder(struct bark_context * bctx, int n_threads) {
     return true;
 }
 
-static bool bark_forward_text_encoder(struct bark_context * bctx, int n_threads) {
+bool bark_forward_text_encoder(struct bark_context * bctx, int n_threads) {
     const int64_t t_main_start_us = ggml_time_us();
 
     auto & model  = bctx->model.text_model;

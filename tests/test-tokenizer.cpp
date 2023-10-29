@@ -1,18 +1,15 @@
+/* Usage:
+
+```bash
+    ./bin/test-tokenizer ../ggml_weights/ggml_vocab.bin
+```
+*/
 #include <cstdio>
 #include <string>
 #include <map>
 #include <vector>
 
-#define BARK_API_INTERNAL 
 #include "bark.h"
-
-struct bark_vocab {
-    using id    = int32_t;
-    using token = std::string;
-
-    std::map<token, id> token_to_id;
-    std::map<id, token> id_to_token;
-};
 
 static const std::map<std::string, bark_sequence> & k_tests()
 {
@@ -39,9 +36,9 @@ int main(int argc, char **argv) {
     bark_vocab vocab;
     int max_ctx_size = 256;
 
-    if (bark_vocab_load(fname.c_str(), &vocab, 119547) > 0) {
+    if (!bark_vocab_load(fname.c_str(), &vocab, 119547)) {
         fprintf(stderr, "%s: invalid vocab file '%s'\n", __func__, fname.c_str());
-        return 1;
+        exit(1);
     }
 
     for (const auto & test_kv : k_tests()) {

@@ -1,13 +1,24 @@
-function(bark_add_test source)
-    get_filename_component(TEST_TARGET ${source} NAME_WE)
-    add_executable(${TEST_TARGET} ${source})
-    install(TARGETS ${TEST_TARGET} RUNTIME)
-    target_link_libraries(${TEST_TARGET} PRIVATE bark ${CMAKE_THREAD_LIBS_INIT})
-    target_compile_features(${TEST_TARGET} PRIVATE cxx_std_11)
-    add_test(NAME ${TEST_TARGET} COMMAND $<TARGET_FILE:${TEST_TARGET}> ${ARGN})
-endfunction()
+add_library(test_utils STATIC common.cpp)
+target_include_directories(test_utils PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_features(test_utils PRIVATE cxx_std_11)
 
-bark_add_test(test-tokenizer.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../ggml_weights/ggml_vocab.bin)
-# bark_add_test(test-forward-semantic.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../ggml_weights/ggml_weights_text.bin)
-bark_add_test(test-forward-coarse.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../ggml_weights/ggml_weights_text.bin)
-# bark_add_test(test-forward-fine.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../ggml_weights/ggml_weights_fine.bin)
+#
+# test-tokenizer
+
+set(TEST_TARGET test-tokenizer)
+add_executable(${TEST_TARGET} ${TEST_TARGET}.cpp)
+target_link_libraries(${TEST_TARGET} PRIVATE bark)
+
+#
+# test-gpt-eval
+
+# set(TEST_TARGET test-gpt-eval)
+# add_executable(${TEST_TARGET} ${TEST_TARGET}.cpp)
+# target_link_libraries(${TEST_TARGET} PRIVATE bark)
+
+#
+# test-forward-semantic
+
+set(TEST_TARGET test-forward-semantic)
+add_executable(${TEST_TARGET} ${TEST_TARGET}.cpp)
+target_link_libraries(${TEST_TARGET} PRIVATE bark test_utils)

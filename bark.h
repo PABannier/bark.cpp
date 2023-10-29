@@ -217,3 +217,44 @@ BARK_API bool bark_model_quantize(
  */
 BARK_API void bark_free(
         struct bark_context * bctx);
+
+/**
+ * Loads a vocabulary from a file.
+ *
+ * @param fname The name of the file to load the vocabulary from.
+ * @param vocab A pointer to the bark_vocab struct to store the loaded vocabulary in.
+ * @param expected_size The expected size of the vocabulary.
+ * @return true if the vocabulary was loaded successfully, false otherwise.
+ */
+bool bark_vocab_load(
+     const std::string & fname,
+            bark_vocab * vocab,
+               int32_t   expected_size);
+
+/**
+ * Tokenizes the input text using the provided vocabulary.
+ *
+ * @param vocab Pointer to the vocabulary to use for tokenization.
+ * @param text The input text to tokenize.
+ * @param tokens Pointer to an array where the resulting tokens will be stored.
+ * @param n_tokens Pointer to an integer where the number of resulting tokens will be stored.
+ * @param n_max_tokens The maximum number of tokens that can be stored in the tokens array.
+ */
+void bert_tokenize(
+        const bark_vocab * vocab,
+              const char * text,
+                 int32_t * tokens,
+                 int32_t * n_tokens,
+                 int32_t   n_max_tokens);
+
+
+/**
+ * Encodes the input text using the forward algorithm.
+ * 
+ * @param bctx A pointer to the bark context struct.
+ * @param n_threads The number of threads to use for encoding.
+ * @return Returns true if the encoding was successful, false otherwise.
+ */
+bool bark_forward_text_encoder(
+     struct bark_context * bctx, 
+                     int   n_threads);

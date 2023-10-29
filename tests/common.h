@@ -1,5 +1,4 @@
 #pragma once
-#include "bark.h"
 
 #include <tuple>
 #include <vector>
@@ -8,6 +7,8 @@
 
 typedef std::vector<float> logit_sequence;
 typedef std::vector<std::vector<float>> logit_matrix;
+
+typedef std::vector<std::vector<int32_t>> bark_codes;
 
 /* Comparison utils */
 template <typename T, typename U>

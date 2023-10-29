@@ -6,33 +6,30 @@
 #include "bark.h"
 #include "common.h"
 
-static const std::vector<std::string> test_data = {
-    "./data/semantic/test_pass_semantic_1.bin",   // prompt: Ceci est un texte en français pour tester le bon fonctionnement de bark.
-    "./data/semantic/test_pass_semantic_2.bin",   // prompt: Sometimes the heart sees what is invisible to the eye
-    "./data/semantic/test_pass_semantic_3.bin",   // prompt: El Arte de Vencer se Aprende en las Derrotas
+const std::vector<std::string> test_data = {
+    "../tests/data/semantic/test_pass_semantic_1.bin",   // prompt: Ceci est un texte en français pour tester le bon fonctionnement de bark.
+    "../tests/data/semantic/test_pass_semantic_2.bin",   // prompt: Sometimes the heart sees what is invisible to the eye
+    "../tests/data/semantic/test_pass_semantic_3.bin",   // prompt: El Arte de Vencer se Aprende en las Derrotas
 };
 
-static const int   n_threads = 4;
-static const float min_eos_p = 0.2;
-static const float temp      = 0.0f;  // deterministic sampling
+const int   n_threads = 4;
+const float min_eos_p = 0.2;
+const float temp      = 0.0f;  // deterministic sampling
 
 int main() {
-    const std::string fname = "../ggml_weights/ggml_weights_text.bin";
+    const std::string dirname = "../ggml_weights/";
+
+    bark_sequence input, gt_tokens;
 
     std::mt19937 rng(0);
 
-    bark_model model;
-
-    if (gpt_model_load(fname, model.text_model) > 0) {
-        fprintf(stderr, "%s: invalid model file '%s'\n", __func__, fname.c_str());
-        return 1;
+    // initialize bark context
+    struct bark_context * bctx = bark_load_model(dirname);
+    if (!bctx) {
+        fprintf(stderr, "%s: Could not load model\n", __func__);
+        exit(1);
     }
-
-    bark_context * ctx = bark_new_context_with_model(&model);
-    ctx->rng = rng;
-
-    bark_sequence input;
-    bark_sequence gt_tokens;
+    bctx->rng = rng;
 
     for (int i = 0; i < (int) test_data.size(); i++) {
         input.clear();
@@ -40,20 +37,23 @@ int main() {
 
         std::string path = test_data[i];
         load_test_data(path, input, gt_tokens);
-        ctx->tokens = input;
+        bctx->tokens = input;
 
-        bark_forward_text_encoder(ctx, temp, min_eos_p, n_threads);
+        if (!bark_forward_text_encoder(bctx, n_threads)) {
+            fprintf(stderr, "%s: failed to forward text encoder\n", __func__);
+            exit(1);
+        }
 
         printf("\n");
         printf("%s: %s\n", __func__, path.c_str());
-        if (!run_test(gt_tokens, ctx->semantic_tokens)) {
+        if (!run_test(gt_tokens, bctx->semantic_tokens)) {
             printf("%s:     test %d failed.\n", __func__, i+1);
         } else {
             printf("%s:     test %d passed.\n", __func__, i+1);
         }
     }
 
-    bark_free(ctx);
+    bark_free(bctx);
 
     return 0;
 }
