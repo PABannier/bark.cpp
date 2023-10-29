@@ -156,7 +156,7 @@ Here are the steps for the bark model.
 ### Get the code
 
 ```bash
-git clone https://github.com/PABannier/bark.cpp.git
+git clone --recursive https://github.com/PABannier/bark.cpp.git
 cd bark.cpp
 ```
 
