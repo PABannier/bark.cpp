@@ -810,7 +810,7 @@ static bool ggml_quantize_weights(
 
     if (!ggml_is_quantized(qtype)) {
         fprintf(stderr, "%s: invalid quantization type %d (%s)\n", __func__, qtype, ggml_type_name(qtype));
-        return 1;
+        return false;
     }
 
     size_t total_size_org = 0;
@@ -899,7 +899,6 @@ static bool ggml_quantize_weights(
         write_safe(fout, n_dims);
         write_safe(fout, length);
         write_safe(fout, ttype);
-
         for (int i = 0; i < n_dims; ++i) {
             write_safe(fout, ne[i]);
         }
