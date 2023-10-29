@@ -198,8 +198,22 @@ BARK_API bool bark_generate_audio(
                          int   n_threads);
 
 /**
+ * Quantizes a bark model and saves the result to a file.
+ *
+ * @param fname_inp The name of the input file containing the BARK model.
+ * @param fname_out The name of the output file to save the quantized model to.
+ * @param ftype The type of the model's floating-point values.
+ * @return True if the model was successfully quantized and saved, false otherwise.
+ */
+BARK_API bool bark_model_quantize(
+           const std::string & fname_inp,
+           const std::string & fname_out,
+                  ggml_ftype   ftype);
+
+/**
  * @brief Frees the memory allocated for a bark context.
  *
  * @param bctx The bark context to free.
  */
-BARK_API void bark_free(struct bark_context * bctx);
+BARK_API void bark_free(
+        struct bark_context * bctx);
