@@ -1,4 +1,4 @@
-/*This script quantizes the weights of the 3 GPT encoders. 5 quantization types are
+/* This script quantizes the weights of the 3 GPT encoders. 5 quantization types are
 available:
     - q4_0
     - q4_1
@@ -7,14 +7,15 @@ available:
     - q8_0
 
 Usage:
+```bash
     ./quantize \
         ./ggml_weights/ggml_weights_text.bin \
         ./ggml_weights_q4/ggml_weights_text_quant.bin \
-        type
+        q4_0
+```
 */
 #include "ggml.h"
 #include "bark.h"
-#include "bark-util.h"
 
 #include <cassert>
 #include <cmath>
