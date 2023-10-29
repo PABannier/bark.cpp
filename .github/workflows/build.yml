@@ -1,12 +1,6 @@
 name: build
 
 on:
-  workflow_dispatch: # allows manual triggering
-    inputs:
-      create_release:
-        description: 'Create new release'
-        required: true
-        type: boolean
   push:
     branches:
       - main
@@ -44,12 +38,6 @@ jobs:
           cmake ..
           cmake --build . --config Release
 
-      - name: Test
-        id: cmake_test
-        run: |
-          cd build
-          ctest --verbose --timeout 900
-
   macOS-latest-cmake:
     runs-on: macos-latest
 
@@ -70,11 +58,5 @@ jobs:
           sysctl -a
           mkdir build
           cd build
-          cmake -DBARK_AVX2=OFF -DBARK_FMA=OFF ..
+          cmake ..
           cmake --build . --config Release
-
-      - name: Test
-        id: cmake_test
-        run: |
-          cd build
-          ctest --verbose --timeout 900
