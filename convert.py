@@ -37,13 +37,15 @@ parser.add_argument("--out-dir", type=str, required=True)
 parser.add_argument("--use-f16", action="store_true")
 
 
-def parse_hparams(hparams, outfile, use_f16):
+def parse_hparams(hparams, outfile, use_f16, overwrite_bias):
     """Parse GPT hyperparameters."""
     outfile.write(struct.pack("i", hparams["n_layer"]))
     outfile.write(struct.pack("i", hparams["n_head"]))
     outfile.write(struct.pack("i", hparams["n_embd"]))
     outfile.write(struct.pack("i", hparams["block_size"]))
-    outfile.write(struct.pack("i", int(hparams["bias"])))
+
+    bias = 1 if overwrite_bias else hparams["bias"]
+    outfile.write(struct.pack("i", int(bias)))
 
     try:
         outfile.write(struct.pack("ii", hparams["vocab_size"], hparams["vocab_size"]))
@@ -159,12 +161,12 @@ def parse_text_models(checkpoint, outfile, use_f16):
 
         var_data.tofile(outfile)
 
-def generate_file(in_file, out_dir, use_f16):
+def generate_file(in_file, out_dir, use_f16, overwrite_bias=False):
     with open(out_dir, "wb") as fout:
         fout.write(struct.pack("i", 0x67676d6c))  # ggml magic
 
         checkpoint = torch.load(in_file, map_location="cpu")
-        parse_hparams(checkpoint["model_args"], fout, use_f16)
+        parse_hparams(checkpoint["model_args"], fout, use_f16, overwrite_bias)
         parse_text_models(checkpoint["model"], fout, use_f16)
 
 def generate_vocab_file(dir_model, out_dir):
@@ -202,7 +204,9 @@ if __name__ == "__main__":
     generate_file(dir_model / "coarse_2.pt", out_dir / "ggml_weights_coarse.bin", args.use_f16)
     print(" Coarse model loaded.")
 
-    generate_file(dir_model / "fine_2.pt", out_dir / "ggml_weights_fine.bin", args.use_f16)
+    # overwrite_bias set to True since the fine model has biases and current config file
+    # has bias set to False
+    generate_file(dir_model / "fine_2.pt", out_dir / "ggml_weights_fine.bin", args.use_f16, overwrite_bias=True)
     print(" Fine model loaded.")
 
     print("Done.")
