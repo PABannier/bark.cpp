@@ -4,3 +4,4 @@ target_compile_features(common PRIVATE cxx_std_11)
 
 add_subdirectory(main)
 add_subdirectory(quantize)
+add_subdirectory(fast_text_encoder)
