@@ -1,6 +1,7 @@
 [submodule "ggml"]
 	path = ggml
 	url = https://github.com/ggerganov/ggml.git
+
 [submodule "encodec.cpp"]
 	path = encodec.cpp
 	url = https://github.com/PABannier/encodec.cpp.git
