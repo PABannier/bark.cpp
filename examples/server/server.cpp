@@ -96,23 +96,13 @@ int main(int argc, char ** argv) {
 
     bark_params_parse(argc, argv, params);
 
-    // create model
-    bark_model * model = bark_load_model_from_file(params.model_path.c_str());
-    if (model == NULL) {
-        fprintf(stderr, "%s: error: failed to load model '%s'\n", __func__, params.model_path.c_str());
+    struct bark_context * bctx = bark_load_model(params.model_path.c_str());
+    if (!bctx) {
+        fprintf(stderr, "%s: Could not load model\n", __func__);
         return 1;
     }
 
-    // create params
-    bark_context_params bctx_params = bark_context_default_params();
-    bark_context * bctx = bark_new_context_with_model(model, bctx_params);
-    if (bctx == NULL) {
-        fprintf(stderr, "%s: error: failed to create context with model '%s'\n", __func__, params.model_path.c_str());
-        bark_free_model(model);
-        return 1;
-    }
-
-    bark_seed_rng(bctx, params.seed);
+    // bark_seed_rng(bctx, params.seed);
 
     std::mutex bark_mutex;
 
@@ -135,13 +125,13 @@ int main(int argc, char ** argv) {
         std::string text = jreq.at("text");
 
         // generate audio
-        bark_generate_audio(bctx, text.c_str(), "/tmp/bark_tmp.wav", params.n_threads);
+        std::string dest_wav_path = "/tmp/bark_tmp.wav";
+        bark_generate_audio(bctx, text, dest_wav_path, params.n_threads);
 
         // read audio as binary
         std::ifstream wav_file("/tmp/bark_tmp.wav", std::ios::binary);
 
-        if (wav_file.is_open())
-        {
+        if (wav_file.is_open()) {
             // Read the contents of the WAV file
             std::string wav_contents((std::istreambuf_iterator<char>(wav_file)),
                                      std::istreambuf_iterator<char>());
@@ -152,8 +142,7 @@ int main(int argc, char ** argv) {
             // Set the response body to the WAV file contents
             res.set_content(wav_contents, "audio/wav");
         }
-        else
-        {
+        else {
             // If the file cannot be opened, set a 500 Internal Server Error response
             res.status = 500;
             res.set_content("Internal Server Error", "text/plain");
@@ -169,8 +158,7 @@ int main(int argc, char ** argv) {
     svr.set_read_timeout(params.sparams.read_timeout);
     svr.set_write_timeout(params.sparams.write_timeout);
 
-    if (!svr.bind_to_port(params.sparams.hostname, params.sparams.port))
-    {
+    if (!svr.bind_to_port(params.sparams.hostname, params.sparams.port)) {
         fprintf(stderr, "\ncouldn't bind to server socket: hostname=%s port=%d\n\n",
                 params.sparams.hostname.c_str(), params.sparams.port);
         return 1;
@@ -183,8 +171,7 @@ int main(int argc, char ** argv) {
     printf("\nbark server listening at http://%s:%d\n\n",
            params.sparams.hostname.c_str(), params.sparams.port);
 
-    if (!svr.listen_after_bind())
-    {
+    if (!svr.listen_after_bind()) {
         return 1;
     }
 
