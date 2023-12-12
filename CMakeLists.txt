@@ -10,6 +10,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set(BARK_STANDALONE ON)
 else()
@@ -26,12 +28,7 @@ set(BARK_LIB bark)
 add_subdirectory(ggml)
 # add_subdirectory(encodec.cpp)
 
-add_library(
-        ${BARK_LIB}
-        bark
-        bark.cpp
-        bark.h
-)
+add_library(${BARK_LIB} bark bark.cpp bark.h)
 
 if (BARK_BUILD_EXAMPLES)
     add_subdirectory(examples)
