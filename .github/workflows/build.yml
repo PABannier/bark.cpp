@@ -35,6 +35,7 @@ jobs:
       - name: Build
         id: cmake_build
         run: |
+          cd bark
           mkdir build
           cd build
           cmake ..
@@ -60,6 +61,7 @@ jobs:
         id: cmake_build
         run: |
           sysctl -a
+          cd bark
           mkdir build
           cd build
           cmake ..
