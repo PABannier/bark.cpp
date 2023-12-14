@@ -78,5 +78,6 @@
         "set": "cpp",
         "span": "cpp",
         "valarray": "cpp"
-    }
+    },
+    "cmake.sourceDirectory": "/Users/pbannier/Documents/bark.cpp/bark"
 }

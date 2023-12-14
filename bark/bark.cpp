@@ -4,7 +4,7 @@
 #include "ggml-backend.h"
 
 #include "bark.h"
-// #include "encodec.h"
+#include "encodec.h"
 
 #include <cassert>
 #include <cmath>
@@ -23,6 +23,7 @@
 #define EPS_NORM 1e-5
 
 #define SAMPLE_RATE 24000
+#define TARGET_BANDWIDTH 12
 
 #define CLS_TOKEN_ID 101
 #define SEP_TOKEN_ID 102
@@ -45,7 +46,7 @@
 #define COARSE_INFER_TOKEN 12050
 #define COARSE_SEMANTIC_PAD_TOKEN 12048
 
-static const size_t MB = 1024*1024;
+// static const size_t MB = 1024*1024;
 
 void print_tensor(struct ggml_tensor * a) {
     float sum = 0;
@@ -122,6 +123,16 @@ static void read_safe(std::ifstream& fin, T& dest) {
 template<typename T>
 static void write_safe(std::ofstream& fout, T& dest) {
     fout.write((char*)& dest, sizeof(T));
+}
+
+template <typename E,typename X>
+void unroll(const std::vector<E>& v,std::vector<X>& out){
+    out.insert(out.end(), v.begin(), v.end());
+}
+
+template <typename V,typename X>
+void unroll(const std::vector<std::vector<V>>& v,std::vector<X>& out) {
+    for (const auto& e : v) unroll(e, out);
 }
 
 static void bark_print_statistics(gpt_model * model) {
@@ -1982,8 +1993,31 @@ bool bark_generate_audio(
         return false;
     }
 
-    // TODO: codes might need to get transposed...
-    // TODO: call encodec API (decompress_audio)
+    // Calling Encodec API to generate audio wavefrom from tokens
+    const int n_gpu_layers = 0;
+    const std::string encodec_model_path = "";
+
+    struct encodec_context * ectx = encodec_load_model(encodec_model_path, n_gpu_layers);
+    if (!ectx) {
+        printf("%s: error during loading encodec model\n", __func__);
+        return 1;
+    }
+
+    encodec_set_target_bandwidth(ectx, TARGET_BANDWIDTH);
+
+    // TODO: fine_tokens might need to get transposed
+    // TODO: dirty solution, can be improved
+    std::vector<bark_vocab::id> out_tokens;
+    unroll(bctx->fine_tokens, out_tokens);
+
+    if (!encodec_decompress_audio(ectx, out_tokens, n_threads)) {
+        printf("%s: error during audio generation\n", __func__);
+        return 1;
+    }
+
+    bctx->audio_arr = ectx->out_audio;
+
+    encodec_free(ectx);
 
     bctx->t_eval_us = ggml_time_us() - t_start_eval_us;
 
