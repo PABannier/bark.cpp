@@ -20,6 +20,12 @@
 #    define BARK_API
 #endif
 
+enum VerbosityLevel {
+    LOW = 0,
+    MEDIUM = 1,
+    HIGH = 2,
+};
+
 typedef int32_t bark_token;
 
 typedef std::vector<int32_t> bark_sequence;
@@ -122,7 +128,8 @@ struct bark_model {
 };
 
 struct bark_context_params {
-    uint32_t seed; // RNG seed
+    // RNG seed
+    uint32_t seed;
 
     // Temperature for sampling (text and coarse encoders)
     float temp;
@@ -135,6 +142,9 @@ struct bark_context_params {
     int sliding_window_size;
     // Max history for coarse encoder
     int max_coarse_history;
+
+    // Verbosity level
+    VerbosityLevel verbosity;
 };
 
 struct bark_context {
@@ -176,11 +186,12 @@ BARK_API struct bark_context_params bark_context_default_params(void);
  * Loads a BARK model from the specified file path with the given parameters.
  *
  * @param model_path The directory path of the bark model to load.
- * @param params The parameters to use when loading the bark model.
+ * @param verbosity  The verbosity level when loading the model.
  * @return A pointer to the loaded bark model context.
  */
 BARK_API struct bark_context * bark_load_model(
-           const std::string & model_path);
+           const std::string & model_path,
+              VerbosityLevel   verbosity);
 
 /**
  * Generates an audio file from the given text using the specified Bark context.
@@ -250,11 +261,11 @@ void bert_tokenize(
 
 /**
  * Encodes the input text using the forward algorithm.
- * 
+ *
  * @param bctx A pointer to the bark context struct.
  * @param n_threads The number of threads to use for encoding.
  * @return Returns true if the encoding was successful, false otherwise.
  */
 bool bark_forward_text_encoder(
-     struct bark_context * bctx, 
+     struct bark_context * bctx,
                      int   n_threads);

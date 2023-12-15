@@ -1,3 +1,4 @@
+#include <iostream>
 #include <tuple>
 
 #include "ggml.h"
@@ -16,8 +17,16 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    std::cout << R"(    __               __                          )" << "\n"
+              << R"(   / /_  ____ ______/ /__        _________  ____ )" << "\n"
+              << R"(  / __ \/ __ `/ ___/ //_/       / ___/ __ \/ __ \)" << "\n"
+              << R"( / /_/ / /_/ / /  / ,<    _    / /__/ /_/ / /_/ /)" << "\n"
+              << R"(/_.___/\__,_/_/  /_/|_|  (_)   \___/ .___/ .___/ )" << "\n"
+              << R"(                                  /_/   /_/      )" << "\n"
+              << "\n";
+
     // initialize bark context
-    struct bark_context * bctx = bark_load_model(params.model_path);
+    struct bark_context * bctx = bark_load_model(params.model_path, VerbosityLevel::LOW);
     if (!bctx) {
         fprintf(stderr, "%s: Could not load model\n", __func__);
         exit(1);

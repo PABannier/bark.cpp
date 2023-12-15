@@ -1,3 +1,4 @@
+#include <iostream>
 #include <string> 
 #include <vector>
 
@@ -25,19 +26,19 @@ void write_wav_on_disk(std::vector<float> & audio_arr, std::string dest_path) {
 }
 
 void bark_print_usage(char ** argv, const bark_params & params) {
-    fprintf(stderr, "usage: %s [options]\n", argv[0]);
-    fprintf(stderr, "\n");
-    fprintf(stderr, "options:\n");
-    fprintf(stderr, "  -h, --help            show this help message and exit\n");
-    fprintf(stderr, "  -t N, --threads N     number of threads to use during computation (default: %d)\n", params.n_threads);
-    fprintf(stderr, "  -s N, --seed N        seed for random number generator (default: %d)\n", params.seed);
-    fprintf(stderr, "  -p PROMPT, --prompt PROMPT\n");
-    fprintf(stderr, "                        prompt to start generation with (default: random)\n");
-    fprintf(stderr, "  -m FNAME, --model FNAME\n");
-    fprintf(stderr, "                        model path (default: %s)\n", params.model_path.c_str());
-    fprintf(stderr, "  -o FNAME, --outwav FNAME\n");
-    fprintf(stderr, "                        output generated wav (default: %s)\n", params.dest_wav_path.c_str());
-    fprintf(stderr, "\n");
+    std::cout << "usage: " << argv[0] << " [options]\n"
+              << "\n"
+              << "options:\n"
+              << "  -h, --help            show this help message and exit\n"
+              << "  -t N, --threads N     number of threads to use during computation (default: " << params.n_threads << ")\n"
+              << "  -s N, --seed N        seed for random number generator (default: " << params.seed << ")\n"
+              << "  -p PROMPT, --prompt PROMPT\n"
+              << "                        prompt to start generation with (default: random)\n"
+              << "  -m FNAME, --model FNAME\n"
+              << "                        model path (default: " << params.model_path << ")\n"
+              << "  -o FNAME, --outwav FNAME\n"
+              << "                        output generated wav (default: " << params.dest_wav_path << ")\n"
+              << "\n";
 }
 
 int bark_params_parse(int argc, char ** argv, bark_params & params) {

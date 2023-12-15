@@ -24,7 +24,7 @@ int main() {
     std::mt19937 rng(0);
 
     // initialize bark context
-    struct bark_context * bctx = bark_load_model(dirname);
+    struct bark_context * bctx = bark_load_model(dirname, VerbosityLevel::LOW);
     if (!bctx) {
         fprintf(stderr, "%s: Could not load model\n", __func__);
         exit(1);
