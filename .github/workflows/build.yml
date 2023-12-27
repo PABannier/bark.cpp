@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - encodec-submodule-fix-ci
     paths:
       [
         ".github/workflows/**",
