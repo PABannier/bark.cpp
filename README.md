@@ -158,6 +158,7 @@ Here are the steps for the bark model.
 ```bash
 git clone --recursive https://github.com/PABannier/bark.cpp.git
 cd bark.cpp
+git submodule update --init --recursive
 ```
 
 ### Build
@@ -165,8 +166,8 @@ cd bark.cpp
 In order to build bark.cpp you must use `CMake`:
 
 ```bash
-mkdir build
-cd build
+mkdir bark/build
+cd bark/build
 cmake ..
 cmake --build . --config Release
 ```
@@ -175,20 +176,19 @@ cmake --build . --config Release
 
 ```bash
 # install Python dependencies
-python3 -m pip install -r requirements.txt
+python3 -m pip install -r bark/requirements.txt
 
 # obtain the original bark and encodec weights and place them in ./models
-python3 download_weights.py --download-dir ./models
+python3 bark/download_weights.py --download-dir ./models
 
 # convert the model to ggml format
-python3 convert.py \
+python3 bark/convert.py \
         --dir-model ./models \
-        --codec-path ./models \
         --vocab-path ./ggml_weights/ \
         --out-dir ./ggml_weights/
 
 # run the inference
-./main -m ./ggml_weights/ -p "this is an audio"
+./bark/build/examples/main/main -m ./ggml_weights/ -p "this is an audio"
 ```
 
 ### (Optional) Quantize weights
@@ -199,9 +199,11 @@ Note that to preserve audio quality, we do not quantize the codec model. The bul
 computation is in the forward pass of the GPT models.
 
 ```bash
-./quantize ./ggml_weights/ggml_weights_text.bin ./ggml_weights_q4/ggml_weights_text.bin q4_0
-./quantize ./ggml_weights/ggml_weights_coarse.bin ./ggml_weights_q4/ggml_weights_coarse.bin q4_0
-./quantize ./ggml_weights/ggml_weights_fine.bin ./ggml_weights_q4/ggml_weights_fine.bin q4_0
+mkdir ggml_weights_q4
+cp ggml_weights/*vocab* ggml_weights_q4
+./bark/build/examples/quantize/quantize ./ggml_weights/ggml_weights_text.bin ./ggml_weights_q4/ggml_weights_text.bin q4_0
+./bark/build/examples/quantize/quantize ./ggml_weights/ggml_weights_coarse.bin ./ggml_weights_q4/ggml_weights_coarse.bin q4_0
+./bark/build/examples/quantize/quantize ./ggml_weights/ggml_weights_fine.bin ./ggml_weights_q4/ggml_weights_fine.bin q4_0
 ```
 
 ### Seminal papers and background on models

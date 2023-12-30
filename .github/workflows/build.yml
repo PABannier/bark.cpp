@@ -4,10 +4,31 @@ on:
   push:
     branches:
       - main
-    paths: ['.github/workflows/**', '**/CMakeLists.txt', '**/Makefile', '**/*.h', '**/*.hpp', '**/*.c', '**/*.cpp', '**/*.cu']
+      - encodec-submodule-fix-ci
+    paths:
+      [
+        ".github/workflows/**",
+        "**/CMakeLists.txt",
+        "**/Makefile",
+        "**/*.h",
+        "**/*.hpp",
+        "**/*.c",
+        "**/*.cpp",
+        "**/*.cu",
+      ]
   pull_request:
     types: [opened, synchronize, reopened]
-    paths: ['**/CMakeLists.txt', '**/Makefile', '**/*.h', '**/*.hpp', '**/*.c', '**/*.cpp', '**/*.cu', ".github/workflows/**"]
+    paths:
+      [
+        "**/CMakeLists.txt",
+        "**/Makefile",
+        "**/*.h",
+        "**/*.hpp",
+        "**/*.c",
+        "**/*.cpp",
+        "**/*.cu",
+        ".github/workflows/**",
+      ]
 
 env:
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
@@ -24,7 +45,7 @@ jobs:
         id: checkout
         uses: actions/checkout@v4
         with:
-          submodules: true
+          submodules: recursive
 
       - name: Dependencies
         id: depends
@@ -49,7 +70,7 @@ jobs:
         id: checkout
         uses: actions/checkout@v4
         with:
-          submodules: true
+          submodules: recursive
 
       - name: Dependencies
         id: depends
