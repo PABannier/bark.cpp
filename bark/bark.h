@@ -20,7 +20,7 @@
 #    define BARK_API
 #endif
 
-enum VerbosityLevel {
+enum class bark_verbosity_level {
     LOW = 0,
     MEDIUM = 1,
     HIGH = 2,
@@ -144,7 +144,7 @@ struct bark_context_params {
     int max_coarse_history;
 
     // Verbosity level
-    VerbosityLevel verbosity;
+    bark_verbosity_level verbosity;
 };
 
 struct bark_context {
@@ -155,6 +155,7 @@ struct bark_context {
 
     // custom allocator
     struct ggml_allocr * allocr = NULL;
+    int n_gpu_layers = 0;
 
     std::mt19937 rng;
 
@@ -173,6 +174,8 @@ struct bark_context {
     int64_t t_load_us = 0;
     int64_t t_eval_us = 0;
 
+    // encodec parameters
+    std::string encodec_model_path;
 };
 
 /**
@@ -191,7 +194,7 @@ BARK_API struct bark_context_params bark_context_default_params(void);
  */
 BARK_API struct bark_context * bark_load_model(
            const std::string & model_path,
-              VerbosityLevel   verbosity);
+              bark_verbosity_level   verbosity);
 
 /**
  * Generates an audio file from the given text using the specified Bark context.

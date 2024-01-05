@@ -19,7 +19,6 @@
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-#define BARK_DEBUG 0
 #define EPS_NORM 1e-5
 
 #define SAMPLE_RATE 24000
@@ -122,16 +121,6 @@ static void read_safe(std::ifstream& fin, T& dest) {
 template<typename T>
 static void write_safe(std::ofstream& fout, T& dest) {
     fout.write((char*)& dest, sizeof(T));
-}
-
-template <typename E,typename X>
-void unroll(const std::vector<E>& v,std::vector<X>& out){
-    out.insert(out.end(), v.begin(), v.end());
-}
-
-template <typename V,typename X>
-void unroll(const std::vector<std::vector<V>>& v,std::vector<X>& out) {
-    for (const auto& e : v) unroll(e, out);
 }
 
 static void bark_print_statistics(gpt_model * model) {
@@ -422,8 +411,8 @@ static void bark_tokenize_input(struct bark_context * ctx, const std::string & t
     printf("\n");
 }
 
-static bool gpt_load_model_weights(const std::string & fname, gpt_model & model, VerbosityLevel verbosity) {
-    if (verbosity == VerbosityLevel::MEDIUM || verbosity == VerbosityLevel::HIGH) {
+static bool gpt_load_model_weights(const std::string & fname, gpt_model & model, bark_verbosity_level verbosity) {
+    if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
         fprintf(stderr, "%s: loading model from '%s'\n", __func__, fname.c_str());
     }
 
@@ -460,7 +449,7 @@ static bool gpt_load_model_weights(const std::string & fname, gpt_model & model,
 
         const int32_t qntvr = hparams.ftype / GGML_QNT_VERSION_FACTOR;
 
-        if (verbosity == VerbosityLevel::MEDIUM || verbosity == VerbosityLevel::HIGH) {
+        if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
             printf("%s: n_in_vocab  = %d\n", __func__, hparams.n_in_vocab);
             printf("%s: n_out_vocab = %d\n", __func__, hparams.n_out_vocab);
             printf("%s: block_size  = %d\n", __func__, hparams.block_size);
@@ -550,7 +539,7 @@ static bool gpt_load_model_weights(const std::string & fname, gpt_model & model,
             n_tensors += 4 * n_layer;  // c_attn_attn_b, c_attn_proj_b, c_mlp_fc_b, c_mlp_proj_b
         }
 
-        if (verbosity == VerbosityLevel::HIGH) {
+        if (verbosity == bark_verbosity_level::HIGH) {
             printf("%s: ggml tensor size = %d bytes\n", __func__, (int) sizeof(ggml_tensor));
             printf("%s: ggml ctx size = %6.2f MB\n", __func__, buffer_size/(1024.0*1024.0));
         }
@@ -573,14 +562,14 @@ static bool gpt_load_model_weights(const std::string & fname, gpt_model & model,
 
     if (!model.backend) {
         // fallback to CPU backend
-        if (verbosity == VerbosityLevel::HIGH) {
+        if (verbosity == bark_verbosity_level::HIGH) {
             fprintf(stderr, "%s: no backend specified, using CPU backend\n", __func__);
         }
         model.backend = ggml_backend_cpu_init();
     }
 
     if (!model.backend) {
-        if (verbosity == VerbosityLevel::HIGH) {
+        if (verbosity == bark_verbosity_level::HIGH) {
             fprintf(stderr, "%s: failed to initialize CPU backend\n", __func__);
         }
 
@@ -697,7 +686,7 @@ static bool gpt_load_model_weights(const std::string & fname, gpt_model & model,
 
             const size_t memory_size = ggml_nbytes(model.memory_k) + ggml_nbytes(model.memory_v);
 
-            if (verbosity == VerbosityLevel::HIGH) {
+            if (verbosity == bark_verbosity_level::HIGH) {
                 printf("%s: memory size = %8.2f MB, n_mem = %d\n", __func__, memory_size/1024.0/1024.0, n_mem);
             }
 
@@ -788,7 +777,7 @@ static bool gpt_load_model_weights(const std::string & fname, gpt_model & model,
                 ggml_backend_tensor_set(tensor, read_buf.data(), 0, ggml_nbytes(tensor));
             }
 
-            if (verbosity == VerbosityLevel::HIGH) {
+            if (verbosity == bark_verbosity_level::HIGH) {
                 printf("%48s - [%5d, %5d], type = %6s, %6.2f MB\n", name.data(), ne[0], ne[1], "float", ggml_nbytes(tensor)/1024.0/1024.0);
             }
 
@@ -797,7 +786,7 @@ static bool gpt_load_model_weights(const std::string & fname, gpt_model & model,
 
         ggml_allocr_free(alloc);
 
-        if (verbosity == VerbosityLevel::MEDIUM || verbosity == VerbosityLevel::HIGH) {
+        if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
             printf("%s: model size  = %8.2f MB\n", __func__, total_size/1024.0/1024.0);
         }
 
@@ -1783,7 +1772,7 @@ static bool bark_eval_fine_encoder(struct bark_context * bctx, int n_threads) {
         // transfer over info into model_in
         for (int nn = n_coarse; nn < N_FINE_CODEBOOKS; nn++) {
             for (int j = 0; j < CODEBOOK_SIZE - rel_start_fill_idx; j++) {
-                in_arr[start_fill_idx+j][nn] = in_buffer[nn*1024 + rel_start_fill_idx + j];
+                in_arr[start_fill_idx+j][nn] = in_buffer[nn * 1024 + rel_start_fill_idx + j];
             }
         }
     }
@@ -1952,7 +1941,7 @@ static bool bark_forward_eval(
     }
 
     // DEBUG
-    if (1) {
+    if (0) {
         // printf("SEMANTIC=\n");
 
         // // print semantic tokens
@@ -2006,30 +1995,42 @@ bool bark_generate_audio(
     }
 
     // Calling Encodec API to generate audio wavefrom from tokens
-    const int n_gpu_layers = 0;
-    const std::string encodec_model_path = "/Users/pbannier/Documents/encodec.cpp/ggml_weights/ggml-model.bin";
+    const int n_gpu_layers = bctx->n_gpu_layers;
+    const std::string encodec_model_path = bctx->encodec_model_path;
 
-    // struct encodec_context * ectx = encodec_load_model(encodec_model_path, n_gpu_layers);
-    // if (!ectx) {
-    //     printf("%s: error during loading encodec model\n", __func__);
-    //     return 1;
-    // }
+    struct encodec_context * ectx = encodec_load_model(
+        encodec_model_path, n_gpu_layers, encodec_verbosity_level::LOW);
+    if (!ectx) {
+        printf("%s: error during loading encodec model\n", __func__);
+        return 1;
+    }
 
-    // encodec_set_target_bandwidth(ectx, TARGET_BANDWIDTH);
+    encodec_set_target_bandwidth(ectx, TARGET_BANDWIDTH);
+    encodec_set_sample_rate(ectx, SAMPLE_RATE);
 
-    // // TODO: fine_tokens might need to get transposed
-    // // TODO: dirty solution, can be improved
-    // std::vector<bark_vocab::id> out_tokens;
-    // unroll(bctx->fine_tokens, out_tokens);
+    // current shape fine_tokens: [seq_length][n_channels], n_channels are contiguous
+    // encodec expects shape fine_tokens: [n_channels][seq_length], time steps are contiguous
 
-    // if (!encodec_decompress_audio(ectx, out_tokens, n_threads)) {
-    //     printf("%s: error during audio generation\n", __func__);
-    //     return 1;
-    // }
+    std::vector<bark_vocab::id> encodec_tokens;
 
-    // bctx->audio_arr = ectx->out_audio;
+    // copy fine_tokens into encodec_tokens by transposing to abide by encodec's shape
+    for (int i = 0; i < (int) bctx->fine_tokens[0].size(); i++) {
+        for (int j = 0; j < (int) bctx->fine_tokens.size(); j++) {
+            encodec_tokens.push_back(bctx->fine_tokens[j][i]);
+        }
+    }
 
-    // encodec_free(ectx);
+    fprintf(stderr, "fine_tokens size: %zu\n", bctx->fine_tokens.size());
+    fprintf(stderr, "encodec_tokens size: %zu\n", encodec_tokens.size());
+
+    if (!encodec_decompress_audio(ectx, encodec_tokens, n_threads)) {
+        printf("%s: error during audio generation\n", __func__);
+        return 1;
+    }
+
+    bctx->audio_arr = ectx->out_audio;
+
+    encodec_free(ectx);
 
     bctx->t_eval_us = ggml_time_us() - t_start_eval_us;
 
@@ -2064,14 +2065,14 @@ void bark_free(struct bark_context * bctx) {
 static struct bark_model * bark_load_model_from_file(
                          const std::string & dirname,
                          struct bark_model * model,
-                            VerbosityLevel   verbosity) {
-    if (verbosity == VerbosityLevel::MEDIUM || verbosity == VerbosityLevel::HIGH) {
+                            bark_verbosity_level   verbosity) {
+    if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
         printf("%s: loading model from '%s'\n", __func__, dirname.c_str());
     }
 
     // text
     {
-        if (verbosity == VerbosityLevel::MEDIUM || verbosity == VerbosityLevel::HIGH) {
+        if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
             printf("%s: reading bark text model\n", __func__);
         }
 
@@ -2084,7 +2085,7 @@ static struct bark_model * bark_load_model_from_file(
 
     // vocab
     {
-        if (verbosity == VerbosityLevel::MEDIUM || verbosity == VerbosityLevel::HIGH) {
+        if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
             printf("%s: reading bark vocab\n", __func__);
         }
 
@@ -2100,7 +2101,7 @@ static struct bark_model * bark_load_model_from_file(
 
     // coarse
     {
-        if (verbosity == VerbosityLevel::MEDIUM || verbosity == VerbosityLevel::HIGH) {
+        if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
             printf("\n%s: reading bark coarse model\n", __func__);
         }
 
@@ -2114,7 +2115,7 @@ static struct bark_model * bark_load_model_from_file(
 
     // fine
     {
-        if (verbosity == VerbosityLevel::MEDIUM || verbosity == VerbosityLevel::HIGH) {
+        if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
             printf("\n%s: reading bark fine model\n", __func__);
         }
 
@@ -2144,7 +2145,7 @@ struct bark_context_params bark_context_default_params() {
     return result;
 }
 
-struct bark_context * bark_load_model(const std::string & model_path, VerbosityLevel verbosity) {
+struct bark_context * bark_load_model(const std::string & model_path, bark_verbosity_level verbosity) {
     int64_t t_load_start_us = ggml_time_us();
 
     struct bark_context * bctx = new bark_context();
