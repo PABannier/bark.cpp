@@ -96,7 +96,7 @@ int main(int argc, char ** argv) {
 
     bark_params_parse(argc, argv, params);
 
-    struct bark_context * bctx = bark_load_model(params.model_path.c_str(), VerbosityLevel::LOW);
+    struct bark_context * bctx = bark_load_model(params.model_path.c_str(), bark_verbosity_level::LOW);
     if (!bctx) {
         fprintf(stderr, "%s: Could not load model\n", __func__);
         return 1;

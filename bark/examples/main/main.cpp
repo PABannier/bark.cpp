@@ -26,11 +26,14 @@ int main(int argc, char **argv) {
               << "\n";
 
     // initialize bark context
-    struct bark_context * bctx = bark_load_model(params.model_path, VerbosityLevel::LOW);
+    struct bark_context * bctx = bark_load_model(params.model_path, bark_verbosity_level::LOW);
     if (!bctx) {
         fprintf(stderr, "%s: Could not load model\n", __func__);
         exit(1);
     }
+
+    // TODO: for now, hardcoding the Encodec model path
+    bctx->encodec_model_path = "/Users/pbannier/Documents/encodec.cpp/ggml_weights/ggml-model.bin";
 
     // generate audio
     if (!bark_generate_audio(bctx, params.prompt, params.dest_wav_path, params.n_threads)) {
