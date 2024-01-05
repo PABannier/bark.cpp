@@ -194,7 +194,7 @@ BARK_API struct bark_context_params bark_context_default_params(void);
  */
 BARK_API struct bark_context * bark_load_model(
            const std::string & model_path,
-              bark_verbosity_level   verbosity);
+        bark_verbosity_level   verbosity);
 
 /**
  * Generates an audio file from the given text using the specified Bark context.
