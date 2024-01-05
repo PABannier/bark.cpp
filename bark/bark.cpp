@@ -127,7 +127,7 @@ static void bark_print_statistics(gpt_model * model) {
     printf("\n\n");
     printf("%s: mem per token = %8.2f MB\n", __func__, model->mem_per_token/1000.0f/1000.0f);
     printf("%s:   sample time = %8.2f ms / %lld tokens\n", __func__, model->t_sample_us/1000.0f, model->n_sample);
-    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, model->t_predict_us/1000.0f, model->t_predict_us/model->n_predict/1000.0f);
+    printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, model->t_predict_us/1000.0f, model->t_predict_us/model->n_sample/1000.0f);
     printf("%s:    total time = %8.2f ms\n", __func__, model->t_main_us/1000.0f);
     printf("\n");
 }
@@ -411,7 +411,10 @@ static void bark_tokenize_input(struct bark_context * ctx, const std::string & t
     printf("\n");
 }
 
-static bool gpt_load_model_weights(const std::string & fname, gpt_model & model, bark_verbosity_level verbosity) {
+static bool gpt_load_model_weights(
+            const std::string & fname, 
+                    gpt_model & model, 
+         bark_verbosity_level  verbosity) {
     if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
         fprintf(stderr, "%s: loading model from '%s'\n", __func__, fname.c_str());
     }
@@ -1949,27 +1952,27 @@ static bool bark_forward_eval(
         //     printf("%d ", bctx->semantic_tokens[i]);
         // }
 
-        // printf("\n");
-        // printf("COARSE=\n");
-        // printf("\n");
-
-        // // print coarse tokens
-        // for (int i = 0; i < (int) bctx->coarse_tokens.size(); i++) {
-        //     for (int j = 0; j < (int) bctx->coarse_tokens[i].size(); j++) {
-        //         printf("%d ", bctx->coarse_tokens[i][j]);
-        //     }
-        // }
-
         printf("\n");
-        printf("FINE=\n");
+        printf("COARSE=\n");
         printf("\n");
 
-        // print fine tokens
-        for (int i = 0; i < (int) bctx->fine_tokens.size(); i++) {
-            for (int j = 0; j < (int) bctx->fine_tokens[i].size(); j++) {
-                printf("%d ", bctx->fine_tokens[i][j]);
+        // print coarse tokens
+        for (int i = 0; i < (int) bctx->coarse_tokens.size(); i++) {
+            for (int j = 0; j < (int) bctx->coarse_tokens[i].size(); j++) {
+                printf("%d ", bctx->coarse_tokens[i][j]);
             }
         }
+
+        // printf("\n");
+        // printf("FINE=\n");
+        // printf("\n");
+
+        // // print fine tokens
+        // for (int i = 0; i < (int) bctx->fine_tokens.size(); i++) {
+        //     for (int j = 0; j < (int) bctx->fine_tokens[i].size(); j++) {
+        //         printf("%d ", bctx->fine_tokens[i][j]);
+        //     }
+        // }
     }
 
     return true;
