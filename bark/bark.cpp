@@ -91,27 +91,39 @@ void print_tensor(struct ggml_tensor * a) {
     }
 }
 
-struct bark_progress {
-    float current = 0.0f;
-    const char * func;
-
-    bark_progress(const char * func): func(func) {}
-
-    void callback(float progress) {
-        float percentage = progress * 100;
-        if (percentage == 0.0f) {
-            fprintf(stderr, "%s: ", func);
+class BarkProgressBar {
+    public:
+        BarkProgressBar(std::string func_name, double needed_progress) {
+            this->func_name = func_name;
+            this->needed_progress = needed_progress;
         }
-        while (percentage > current) {
-            current = percentage;
-            fprintf(stderr, ".");
-            fflush(stderr);
-            if (percentage >= 100) {
-                fprintf(stderr, "\n");
+
+        void update(double new_progress) {
+            current_progress += new_progress;
+            amount_of_filler = (int)((current_progress / needed_progress)*(double)pbar_length);
+        }
+        void print() {
+            printf("\r%s: %s", func_name.c_str(), initial_part.c_str());
+            for (int a = 0; a < amount_of_filler; a++) {
+                printf("%s", pbar_filler.c_str());
             }
+            printf("%s", pbar_updater.c_str());
+            for (int b = 0; b < pbar_length - amount_of_filler; b++) {
+                printf(" ");
+            }
+            printf("%s (%d%%)", last_part.c_str(), (int)(100*(current_progress/needed_progress)));
+            fflush(stdout);
         }
-    }
+
+        std::string initial_part = "[", last_part = "]";
+        std::string pbar_filler = "=", pbar_updater = ">";
+
+    private:
+        std::string func_name;
+        double needed_progress, current_progress = 0;
+        int amount_of_filler, pbar_length = 50;
 };
+
 
 template<typename T>
 static void read_safe(std::ifstream& fin, T& dest) {
@@ -412,8 +424,8 @@ static void bark_tokenize_input(struct bark_context * ctx, const std::string & t
 }
 
 static bool gpt_load_model_weights(
-            const std::string & fname, 
-                    gpt_model & model, 
+            const std::string & fname,
+                    gpt_model & model,
          bark_verbosity_level  verbosity) {
     if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
         fprintf(stderr, "%s: loading model from '%s'\n", __func__, fname.c_str());
@@ -1535,7 +1547,7 @@ static bool bark_eval_text_encoder(struct bark_context * bctx, int n_threads) {
     bark_sequence input = bctx->tokens;
     bark_sequence output;
 
-    bark_progress progress( __func__);
+    BarkProgressBar progress(std::string("Generating semantic tokens"), N_STEPS_TEXT_ENCODER);
 
     auto & model   = bctx->model.text_model;
     auto & allocr  = bctx->allocr;
@@ -1573,7 +1585,8 @@ static bool bark_eval_text_encoder(struct bark_context * bctx, int n_threads) {
         input.push_back(next);
         output.push_back(next);
 
-        progress.callback((float) i / N_STEPS_TEXT_ENCODER);
+        progress.update(1);
+        progress.print();
     }
 
     bctx->semantic_tokens = output;
@@ -1584,8 +1597,6 @@ static bool bark_eval_text_encoder(struct bark_context * bctx, int n_threads) {
 static bool bark_eval_coarse_encoder(struct bark_context * bctx, int n_threads) {
     bark_codes out_coarse;
     bark_sequence out;
-
-    bark_progress progress(__func__);
 
     auto & model   = bctx->model.coarse_model;
     auto & allocr  = bctx->allocr;
@@ -1611,6 +1622,8 @@ static bool bark_eval_coarse_encoder(struct bark_context * bctx, int n_threads) 
     int step_idx = 0;
 
     bark_sequence input = bctx->semantic_tokens;
+
+    BarkProgressBar progress(std::string("Generating coarse tokens"), n_steps);
 
     std::vector<float> logits;
     logits.resize(n_vocab);
@@ -1672,7 +1685,8 @@ static bool bark_eval_coarse_encoder(struct bark_context * bctx, int n_threads) 
 
             step_idx += 1;
 
-            progress.callback((float) (i*sliding_window_size+j)/n_steps);
+            progress.update(1);
+            progress.print();
         }
     }
 
@@ -1696,8 +1710,6 @@ static bool bark_eval_coarse_encoder(struct bark_context * bctx, int n_threads) 
 
 static bool bark_eval_fine_encoder(struct bark_context * bctx, int n_threads) {
     // input shape: [N, n_codes]
-    bark_progress progress(__func__);
-
     auto & model   = bctx->model.fine_model;
     auto & hparams = model.hparams;
 
@@ -1732,6 +1744,8 @@ static bool bark_eval_fine_encoder(struct bark_context * bctx, int n_threads) {
 
     bark_codes in_arr = input;  // [seq_length, n_codes]
 
+    BarkProgressBar progress(std::string("Generating fine tokens"), n_loops * (N_FINE_CODEBOOKS - n_coarse));
+
     for (int n = 0; n < n_loops; n++) {
         int start_idx          = std::min(n * 512, (int) in_arr.size() - 1024);
         int start_fill_idx     = std::min(n * 512, (int) in_arr.size() - 512);
@@ -1765,11 +1779,8 @@ static bool bark_eval_fine_encoder(struct bark_context * bctx, int n_threads) {
                 in_buffer[nn * 1024 + rel_start_fill_idx + i] = next;
             }
 
-            float progress_v = (
-                (n * (N_FINE_CODEBOOKS - n_coarse) + (nn - n_coarse)) /
-                (n_loops * (N_FINE_CODEBOOKS - n_coarse))
-            );
-            progress.callback((float) progress_v);
+            progress.update(1);
+            progress.print();
         }
 
         // transfer over info into model_in
