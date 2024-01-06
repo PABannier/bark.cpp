@@ -3,6 +3,14 @@
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
 
+#ifdef GGML_USE_CUBLAS
+#include "ggml-cuda.h"
+#endif
+
+#ifdef GGML_USE_METAL
+#include "ggml-metal.h"
+#endif
+
 #include "bark.h"
 #include "encodec.h"
 
@@ -404,6 +412,7 @@ static void bark_tokenize_input(struct bark_context * bctx, const std::string & 
 static bool gpt_load_model_weights(
             const std::string & fname,
                     gpt_model & model,
+                          int   n_gpu_layers,
          bark_verbosity_level  verbosity) {
     if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
         fprintf(stderr, "%s: loading model from '%s'\n", __func__, fname.c_str());
@@ -552,6 +561,27 @@ static bool gpt_load_model_weights(
             return false;
         }
     }
+
+#ifdef GGML_USE_CUBLAS
+    if (n_gpu_layers > 0) {
+        fprintf(stderr, "%s: using CUDA backend\n", __func__);
+        model.backend = ggml_backend_cuda_init();
+        if (!model.backend) {
+            fprintf(stderr, "%s: ggml_backend_cuda_init() failed\n", __func__);
+        }
+    }
+#endif
+
+#ifdef GGML_USE_METAL
+    if (n_gpu_layers > 0) {
+        fprintf(stderr, "%s: using Metal backend\n", __func__);
+        ggml_metal_log_set_callback(ggml_log_callback_default, nullptr);
+        model.backend = ggml_backend_metal_init();
+        if (!model.backend) {
+            fprintf(stderr, "%s: ggml_backend_metal_init() failed\n", __func__);
+        }
+    }
+#endif
 
     if (!model.backend) {
         // fallback to CPU backend
@@ -761,7 +791,12 @@ static bool gpt_load_model_weights(
 
             ggml_allocr_alloc(alloc, tensor);
 
-            if (ggml_backend_is_cpu(model.backend)) {
+            if (ggml_backend_is_cpu(model.backend)
+#ifdef GGML_USE_METAL
+                || ggml_backend_is_metal(model.backend)
+#endif
+            ) {
+                // for the CPU and Metal backends, we can read directly into the device memory
                 fin.read(reinterpret_cast<char *>(tensor->data), ggml_nbytes(tensor));
             } else {
                 // read into a temporary buffer first, then copy to device memory
@@ -1458,7 +1493,11 @@ static bool bark_eval_encoder_internal(
     if (ggml_backend_is_cpu(model.backend)) {
         ggml_backend_cpu_set_n_threads(model.backend, n_threads);
     }
-
+#ifdef GGML_USE_METAL
+    if (ggml_backend_is_metal(model.backend)) {
+        ggml_backend_metal_set_n_cb(model.backend, n_threads);
+    }
+#endif
     ggml_backend_graph_compute(model.backend, gf);
 
     struct ggml_tensor * inpL = gf->nodes[gf->n_nodes - 1];
@@ -1513,7 +1552,11 @@ static bool bark_eval_fine_encoder_internal(
     if (ggml_backend_is_cpu(model.backend)) {
         ggml_backend_cpu_set_n_threads(model.backend, n_threads);
     }
-
+#ifdef GGML_USE_METAL
+    if (ggml_backend_is_metal(model.backend)) {
+        ggml_backend_metal_set_n_cb(model.backend, n_threads);
+    }
+#endif
     ggml_backend_graph_compute(model.backend, gf);
 
     struct ggml_tensor * inpL = gf->nodes[gf->n_nodes - 1];
@@ -2106,7 +2149,8 @@ void bark_free(struct bark_context * bctx) {
 static struct bark_model * bark_load_model_from_file(
                          const std::string & dirname,
                          struct bark_model * model,
-                            bark_verbosity_level   verbosity) {
+                                       int   n_gpu_layers,
+                      bark_verbosity_level   verbosity) {
     if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
         printf("%s: loading model from '%s'\n", __func__, dirname.c_str());
     }
@@ -2118,7 +2162,7 @@ static struct bark_model * bark_load_model_from_file(
         }
 
         const std::string fname = std::string(dirname) + "/ggml_weights_text.bin";
-        if (!gpt_load_model_weights(fname, model->text_model, verbosity)) {
+        if (!gpt_load_model_weights(fname, model->text_model, n_gpu_layers, verbosity)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
             return nullptr;
         }
@@ -2148,7 +2192,7 @@ static struct bark_model * bark_load_model_from_file(
 
         const std::string fname = std::string(dirname) + "/ggml_weights_coarse.bin";
 
-        if (!gpt_load_model_weights(fname, model->coarse_model, verbosity)) {
+        if (!gpt_load_model_weights(fname, model->coarse_model, n_gpu_layers, verbosity)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad coarse)\n", __func__, fname.c_str());
             return nullptr;
         }
@@ -2162,7 +2206,7 @@ static struct bark_model * bark_load_model_from_file(
 
         const std::string fname = std::string(dirname) + "/ggml_weights_fine.bin";
 
-        if (!gpt_load_model_weights(fname, model->fine_model, verbosity)) {
+        if (!gpt_load_model_weights(fname, model->fine_model, n_gpu_layers, verbosity)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad fine)\n", __func__, fname.c_str());
             return nullptr;
         }
@@ -2203,13 +2247,15 @@ struct bark_context_params bark_context_default_params() {
     return result;
 }
 
-struct bark_context * bark_load_model(const std::string & model_path, bark_verbosity_level verbosity) {
+struct bark_context * bark_load_model(
+                    const std::string & model_path,
+                 bark_verbosity_level   verbosity) {
     int64_t t_load_start_us = ggml_time_us();
 
     struct bark_context * bctx = new bark_context();
 
     bctx->model = bark_model();
-    if (!bark_load_model_from_file(model_path, &bctx->model, verbosity)) {
+    if (!bark_load_model_from_file(model_path, &bctx->model, bctx->n_gpu_layers, verbosity)) {
         fprintf(stderr, "%s: failed to load model weights from '%s'\n", __func__, model_path.c_str());
         return {};
     }
