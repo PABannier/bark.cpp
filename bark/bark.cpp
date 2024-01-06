@@ -421,7 +421,7 @@ static bool gpt_load_model_weights(
         fin.read((char *) &magic, sizeof(magic));
         if (magic != GGML_FILE_MAGIC) {
             fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname.c_str());
-            return 1;
+            return false;
         }
     }
 
@@ -816,7 +816,7 @@ static bool ggml_quantize_weights(
         case GGML_FTYPE_MOSTLY_Q6_K:
                 {
                     fprintf(stderr, "%s: invalid model type %d\n", __func__, ftype);
-                    return 1;
+                    return false;
                 }
     };
 
@@ -885,7 +885,7 @@ static bool ggml_quantize_weights(
         if (quantize) {
             if (ttype != GGML_TYPE_F32 && ttype != GGML_TYPE_F16) {
                 fprintf(stderr, "%s: unsupported ttype %d (%s) for integer quantization\n", __func__, ttype, ggml_type_name((ggml_type) ttype));
-                return 1;
+                return false;
             }
 
             if (ttype == GGML_TYPE_F16) {
@@ -958,7 +958,7 @@ static bool ggml_quantize_weights(
                 case GGML_TYPE_COUNT:
                     {
                         fprintf(stderr, "%s: unsupported quantization type %d (%s)\n", __func__, ttype, ggml_type_name((ggml_type) ttype));
-                        return 1;
+                        return false;
                     }
             }
 
@@ -999,7 +999,7 @@ static bool ggml_quantize_weights(
         printf("\n");
     }
 
-    return 0;
+    return true;
 }
 
 static struct ggml_cgraph * bark_build_gpt_graph(
@@ -2039,7 +2039,7 @@ bool bark_generate_audio(
         encodec_model_path, n_gpu_layers, encodec_verbosity_level::LOW);
     if (!ectx) {
         printf("%s: error during loading encodec model\n", __func__);
-        return 1;
+        return false;
     }
 
     auto & params = bctx->params;
@@ -2066,7 +2066,7 @@ bool bark_generate_audio(
 
     if (!encodec_decompress_audio(ectx, encodec_tokens, n_threads)) {
         printf("%s: error during audio generation\n", __func__);
-        return 1;
+        return false;
     }
 
     bctx->audio_arr = ectx->out_audio;
@@ -2235,13 +2235,13 @@ bool bark_model_quantize(
     auto fin = std::ifstream(fname_inp, std::ios::binary);
     if (!fin) {
         fprintf(stderr, "%s: failed to open '%s' for reading\n", __func__, fname_inp.c_str());
-        return 1;
+        return false;
     }
 
     auto fout = std::ofstream(fname_out, std::ios::binary);
     if (!fout) {
         fprintf(stderr, "%s: failed to open '%s' for writing\n", __func__, fname_out.c_str());
-        return 1;
+        return false;
     }
 
     // verify magic
@@ -2250,7 +2250,7 @@ bool bark_model_quantize(
         fin.read((char *) &magic, sizeof(magic));
         if (magic != GGML_FILE_MAGIC) {
             fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname_inp.c_str());
-            return 1;
+            return false;
         }
 
         fout.write((char *) &magic, sizeof(magic));
