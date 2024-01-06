@@ -16,26 +16,15 @@ Currently, we are focused on porting the [Bark](https://github.com/suno-ai/bark)
 
 - [X] Plain C/C++ implementation without dependencies
 - [X] AVX, AVX2 and AVX512 for x86 architectures
+- [X] CPU and GPU compatible backends
 - [X] Mixed F16 / F32 precision
 - [X] 4-bit, 5-bit and 8-bit integer quantization
-- [ ] Optimized via ARM NEON, Accelerate and Metal frameworks
+- [X] Metal and CUDA backends
 - [ ] iOS on-device deployment using CoreML
 
 The original implementation of `bark.cpp` is the bark's 24Khz English model. We expect to support multiple encoders in the future (see [this](https://github.com/PABannier/bark.cpp/issues/36) and [this](https://github.com/PABannier/bark.cpp/issues/6)), as well as music generation model (see [this](https://github.com/PABannier/bark.cpp/issues/62)). This project is for educational purposes.
 
 Demo on [Google Colab](https://colab.research.google.com/drive/1JVtJ6CDwxtKfFmEd8J4FGY2lzdL0d0jT?usp=sharing) ([#95](https://github.com/PABannier/bark.cpp/issues/95))
-
-**Supported platforms:**
-
-- [X] Mac OS
-- [X] Linux
-- [X] Windows
-
-**Supported models:**
-
-- [X] Bark
-- [ ] Vocos
-- [ ] AudioCraft
 
 ---
 
