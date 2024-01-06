@@ -8,17 +8,3 @@ target_compile_features(test_utils PRIVATE cxx_std_11)
 set(TEST_TARGET test-tokenizer)
 add_executable(${TEST_TARGET} ${TEST_TARGET}.cpp)
 target_link_libraries(${TEST_TARGET} PRIVATE bark)
-
-#
-# test-gpt-eval
-
-# set(TEST_TARGET test-gpt-eval)
-# add_executable(${TEST_TARGET} ${TEST_TARGET}.cpp)
-# target_link_libraries(${TEST_TARGET} PRIVATE bark)
-
-#
-# test-forward-semantic
-
-set(TEST_TARGET test-forward-semantic)
-add_executable(${TEST_TARGET} ${TEST_TARGET}.cpp)
-target_link_libraries(${TEST_TARGET} PRIVATE bark test_utils)
