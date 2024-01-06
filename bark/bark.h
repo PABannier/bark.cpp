@@ -139,12 +139,50 @@ struct bark_context_params {
     // Minimum probability for EOS token (text encoder)
     float min_eos_p;
     // Sliding window size for coarse encoder
-    int sliding_window_size;
+    int32_t sliding_window_size;
     // Max history for coarse encoder
-    int max_coarse_history;
+    int32_t max_coarse_history;
 
-    // Verbosity level
-    bark_verbosity_level verbosity;
+    // Sample rate
+    int32_t sample_rate;
+    // Target bandwidth
+    int32_t target_bandwidth;
+
+    // CLS token ID
+    int32_t cls_token_id;
+    // SEP token ID
+    int32_t sep_token_id;
+
+    // Maximum number of semantic tokens to generate
+    int32_t n_steps_text_encoder;
+
+    // Text PAD token ID
+    int32_t text_pad_token;
+    // Text encoding offset
+    int32_t text_encoding_offset;
+
+    // Semantic frequency rate
+    float semantic_rate_hz;
+    // Semantic PAD token ID
+    int32_t semantic_pad_token;
+    // Vocabulary size in semantic encoder
+    int32_t semantic_vocab_size;
+    // Semantic infernce token ID
+    int32_t semantic_infer_token;
+
+    // Coarse frequency rate
+    float coarse_rate_hz;
+    // Coarse infer token ID
+    int32_t coarse_infer_token;
+    // Coarse semantic pad token ID
+    int32_t coarse_semantic_pad_token;
+
+    // Number of codebooks in coarse encoder
+    int32_t n_coarse_codebooks;
+    // Number of codebooks in fine encoder
+    int32_t n_fine_codebooks;
+    // Dimension of the codes
+    int32_t codebook_size;
 };
 
 struct bark_context {
