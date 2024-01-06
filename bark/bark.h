@@ -110,7 +110,6 @@ struct gpt_model {
 
     //
     int64_t n_sample  = 0;
-    int64_t n_predict = 0;
 
     //
     int64_t memsize = 0;
