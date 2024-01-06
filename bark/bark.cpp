@@ -420,7 +420,7 @@ static void bark_tokenize_input(struct bark_context * ctx, const std::string & t
     for (int i = 0; i < std::min(8, (int) ctx->tokens.size()); i++) {
         printf("%d ", ctx->tokens[i]);
     }
-    printf("\n");
+    printf("\n\n");
 }
 
 static bool gpt_load_model_weights(
@@ -1802,7 +1802,10 @@ static bool bark_eval_fine_encoder(struct bark_context * bctx, int n_threads) {
     return true;
 }
 
-bool bark_forward_text_encoder(struct bark_context * bctx, int n_threads) {
+bool bark_forward_text_encoder(
+                    struct bark_context * bctx,
+                                    int   n_threads,
+                   bark_verbosity_level   verbosity) {
     const int64_t t_main_start_us = ggml_time_us();
 
     auto & model  = bctx->model.text_model;
@@ -1829,7 +1832,9 @@ bool bark_forward_text_encoder(struct bark_context * bctx, int n_threads) {
         bctx->buf_compute = ggml_backend_alloc_buffer(model.backend, mem_size);
         bctx->allocr = ggml_allocr_new_from_buffer(bctx->buf_compute);
 
-        fprintf(stderr, "%s: compute buffer size: %.2f MB\n\n", __func__, mem_size/1024.0/1024.0);
+        if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
+            fprintf(stderr, "%s: compute buffer size: %.2f MB\n\n", __func__, mem_size/1024.0/1024.0);
+        }
     }
 
     if (!bark_eval_text_encoder(bctx, n_threads)) {
@@ -1847,7 +1852,10 @@ bool bark_forward_text_encoder(struct bark_context * bctx, int n_threads) {
     return true;
 }
 
-static bool bark_forward_coarse_encoder(struct bark_context * bctx, int n_threads) {
+static bool bark_forward_coarse_encoder(
+                        struct bark_context * bctx,
+                                        int   n_threads,
+                       bark_verbosity_level   verbosity) {
     const int64_t t_main_start_us = ggml_time_us();
 
     auto & model  = bctx->model.coarse_model;
@@ -1874,7 +1882,9 @@ static bool bark_forward_coarse_encoder(struct bark_context * bctx, int n_thread
         bctx->buf_compute = ggml_backend_alloc_buffer(model.backend, mem_size);
         bctx->allocr = ggml_allocr_new_from_buffer(bctx->buf_compute);
 
-        fprintf(stderr, "%s: compute buffer size: %.2f MB\n\n", __func__, mem_size/1024.0/1024.0);
+        if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
+            fprintf(stderr, "%s: compute buffer size: %.2f MB\n\n", __func__, mem_size/1024.0/1024.0);
+        }
     }
 
     if (!bark_eval_coarse_encoder(bctx, n_threads)) {
@@ -1892,7 +1902,10 @@ static bool bark_forward_coarse_encoder(struct bark_context * bctx, int n_thread
     return true;
 }
 
-static bool bark_forward_fine_encoder(struct bark_context * bctx, int n_threads) {
+static bool bark_forward_fine_encoder(
+                            struct bark_context * bctx,
+                                            int   n_threads,
+                           bark_verbosity_level   verbosity) {
     const int64_t t_main_start_us = ggml_time_us();
 
     auto & model  = bctx->model.fine_model;
@@ -1918,7 +1931,9 @@ static bool bark_forward_fine_encoder(struct bark_context * bctx, int n_threads)
         bctx->buf_compute = ggml_backend_alloc_buffer(model.backend, mem_size);
         bctx->allocr = ggml_allocr_new_from_buffer(bctx->buf_compute);
 
-        fprintf(stderr, "%s: compute buffer size: %.2f MB\n\n", __func__, mem_size/1024.0/1024.0);
+        if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
+            fprintf(stderr, "%s: compute buffer size: %.2f MB\n\n", __func__, mem_size/1024.0/1024.0);
+        }
     }
 
     if (!bark_eval_fine_encoder(bctx, n_threads)) {
@@ -1938,18 +1953,19 @@ static bool bark_forward_fine_encoder(struct bark_context * bctx, int n_threads)
 
 static bool bark_forward_eval(
         struct bark_context * bctx,
-                        int   n_threads) {
-    if (!bark_forward_text_encoder(bctx, n_threads)) {
+                        int   n_threads,
+       bark_verbosity_level   verbosity) {
+    if (!bark_forward_text_encoder(bctx, n_threads, verbosity)) {
         fprintf(stderr, "%s: failed to forward text encoder\n", __func__);
         return false;
     }
 
-    if (!bark_forward_coarse_encoder(bctx, n_threads)) {
+    if (!bark_forward_coarse_encoder(bctx, n_threads, verbosity)) {
         fprintf(stderr, "%s: failed to forward coarse encoder\n", __func__);
         return false;
     }
 
-    if (!bark_forward_fine_encoder(bctx, n_threads)) {
+    if (!bark_forward_fine_encoder(bctx, n_threads, verbosity)) {
         fprintf(stderr, "%s: failed to forward fine encoder\n", __func__);
         return false;
     }
@@ -1993,7 +2009,8 @@ bool bark_generate_audio(
         struct bark_context * bctx,
                 std::string & text,
                 std::string & dest_wav_path,
-                        int   n_threads) {
+                        int   n_threads,
+       bark_verbosity_level   verbosity) {
     if (!bctx) {
         fprintf(stderr, "%s: invalid bark context\n", __func__);
         return false;
@@ -2003,7 +2020,7 @@ bool bark_generate_audio(
 
     bark_tokenize_input(bctx, text);
 
-    if (!bark_forward_eval(bctx, n_threads)) {
+    if (!bark_forward_eval(bctx, n_threads, verbosity)) {
         fprintf(stderr, "%s: failed to forward eval\n", __func__);
         return false;
     }

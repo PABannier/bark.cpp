@@ -11,6 +11,7 @@ int main(int argc, char **argv) {
     const int64_t t_main_start_us = ggml_time_us();
 
     bark_params params;
+    bark_verbosity_level verbosity = bark_verbosity_level::LOW;
 
     if (bark_params_parse(argc, argv, params) > 0) {
         fprintf(stderr, "%s: Could not parse arguments\n", __func__);
@@ -26,7 +27,7 @@ int main(int argc, char **argv) {
               << "\n";
 
     // initialize bark context
-    struct bark_context * bctx = bark_load_model(params.model_path, bark_verbosity_level::LOW);
+    struct bark_context * bctx = bark_load_model(params.model_path, verbosity);
     if (!bctx) {
         fprintf(stderr, "%s: Could not load model\n", __func__);
         exit(1);
@@ -36,7 +37,7 @@ int main(int argc, char **argv) {
     bctx->encodec_model_path = "/Users/pbannier/Documents/encodec.cpp/ggml_weights/ggml-model.bin";
 
     // generate audio
-    if (!bark_generate_audio(bctx, params.prompt, params.dest_wav_path, params.n_threads)) {
+    if (!bark_generate_audio(bctx, params.prompt, params.dest_wav_path, params.n_threads, verbosity)) {
         fprintf(stderr, "%s: Could not generate audio\n", __func__);
         exit(1);
     }

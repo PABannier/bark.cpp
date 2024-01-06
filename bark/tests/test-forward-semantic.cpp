@@ -39,7 +39,7 @@ int main() {
         load_test_data(path, input, gt_tokens);
         bctx->tokens = input;
 
-        if (!bark_forward_text_encoder(bctx, n_threads)) {
+        if (!bark_forward_text_encoder(bctx, n_threads, bark_verbosity_level::LOW)) {
             fprintf(stderr, "%s: failed to forward text encoder\n", __func__);
             exit(1);
         }
