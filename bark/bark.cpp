@@ -108,7 +108,6 @@ class BarkProgressBar {
         int amount_of_filler, pbar_length = 50;
 };
 
-
 template<typename T>
 static void read_safe(std::ifstream& fin, T& dest) {
     fin.read((char*)& dest, sizeof(T));
