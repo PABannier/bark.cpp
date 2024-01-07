@@ -120,7 +120,6 @@ static void write_safe(std::ofstream& fout, T& dest) {
 
 static void bark_print_statistics(gpt_model * model) {
     printf("\n\n");
-    printf("%s: mem per token = %8.2f MB\n", __func__, model->mem_per_token/1000.0f/1000.0f);
     printf("%s:   sample time = %8.2f ms / %lld tokens\n", __func__, model->t_sample_us/1000.0f, model->n_sample);
     printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, model->t_predict_us/1000.0f, model->t_predict_us/model->n_sample/1000.0f);
     printf("%s:    total time = %8.2f ms\n", __func__, model->t_main_us/1000.0f);
@@ -2103,8 +2102,8 @@ bool bark_generate_audio(
         }
     }
 
-    fprintf(stderr, "fine_tokens size: %zu\n", bctx->fine_tokens.size());
-    fprintf(stderr, "encodec_tokens size: %zu\n", encodec_tokens.size());
+    fprintf(stderr, "fine_tokens shape: [%zu, %zu]\n", bctx->fine_tokens.size(), bctx->fine_tokens[0].size());
+    fprintf(stderr, "encodec_tokens shape: [%zu]\n", encodec_tokens.size());
 
     if (!encodec_decompress_audio(ectx, encodec_tokens, n_threads)) {
         printf("%s: error during audio generation\n", __func__);

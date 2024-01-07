@@ -113,7 +113,6 @@ struct gpt_model {
 
     //
     int64_t memsize = 0;
-    size_t mem_per_token = 0;
 };
 
 struct bark_model {
