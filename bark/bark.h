@@ -311,3 +311,37 @@ bool bark_forward_text_encoder(
      struct bark_context * bctx,
                      int   n_threads,
     bark_verbosity_level   verbosity);
+
+/**
+ * \brief Encodes the input data using the coarse encoder in the bark library.
+ *
+ * This function encodes the input data using the coarse encoder in the bark library.
+ * It takes a bark_context structure pointer, the number of threads to use, and the verbosity level as parameters.
+ *
+ * \param bctx The bark_context structure pointer.
+ * \param n_threads The number of threads to use for encoding.
+ * \param verbosity The verbosity level for logging.
+ * \return Returns true if the encoding is successful, false otherwise.
+ */
+bool bark_forward_coarse_encoder(
+                        struct bark_context * bctx,
+                                        int   n_threads,
+                       bark_verbosity_level   verbosity);
+
+/**
+ * @brief Performs forward fine encoding using the specified bark context.
+ *
+ * This function encodes the input data using the bark context provided. It performs
+ * the encoding operation in parallel using the specified number of threads. The
+ * verbosity level can be used to control the amount of logging information printed
+ * during the encoding process.
+ *
+ * @param bctx The bark context used for encoding.
+ * @param n_threads The number of threads to use for parallel encoding.
+ * @param verbosity The verbosity level for logging information.
+ * @return True if the encoding operation was successful, false otherwise.
+ */
+bool bark_forward_fine_encoder(
+                    struct bark_context * bctx,
+                                    int   n_threads,
+                   bark_verbosity_level   verbosity);

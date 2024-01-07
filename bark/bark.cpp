@@ -1896,7 +1896,7 @@ bool bark_forward_text_encoder(
     return true;
 }
 
-static bool bark_forward_coarse_encoder(
+bool bark_forward_coarse_encoder(
                         struct bark_context * bctx,
                                         int   n_threads,
                        bark_verbosity_level   verbosity) {
@@ -1946,10 +1946,10 @@ static bool bark_forward_coarse_encoder(
     return true;
 }
 
-static bool bark_forward_fine_encoder(
-                            struct bark_context * bctx,
-                                            int   n_threads,
-                           bark_verbosity_level   verbosity) {
+bool bark_forward_fine_encoder(
+                    struct bark_context * bctx,
+                                    int   n_threads,
+                   bark_verbosity_level   verbosity) {
     const int64_t t_main_start_us = ggml_time_us();
 
     auto & model   = bctx->model.fine_model;
