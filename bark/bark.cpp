@@ -2102,11 +2102,8 @@ bool bark_generate_audio(
         }
     }
 
-    fprintf(stderr, "fine_tokens shape: [%zu, %zu]\n", bctx->fine_tokens.size(), bctx->fine_tokens[0].size());
-    fprintf(stderr, "encodec_tokens shape: [%zu]\n", encodec_tokens.size());
-
     if (!encodec_decompress_audio(ectx, encodec_tokens, n_threads)) {
-        printf("%s: error during audio generation\n", __func__);
+        printf("%s: Could not generate waveform from tokens with Encodec\n", __func__);
         return false;
     }
 
