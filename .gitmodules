@@ -1,3 +1,0 @@
-[submodule "encodec.cpp"]
-	path = encodec.cpp
-	url = https://github.com/PABannier/encodec.cpp.git
