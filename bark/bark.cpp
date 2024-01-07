@@ -1891,6 +1891,7 @@ bool bark_forward_text_encoder(
     bark_print_statistics(&model);
 
     ggml_backend_buffer_free(bctx->buf_compute);
+    ggml_allocr_free(bctx->allocr);
 
     return true;
 }
@@ -1940,6 +1941,7 @@ static bool bark_forward_coarse_encoder(
     bark_print_statistics(&model);
 
     ggml_backend_buffer_free(bctx->buf_compute);
+    ggml_allocr_free(bctx->allocr);
 
     return true;
 }
@@ -1991,6 +1993,7 @@ static bool bark_forward_fine_encoder(
     bark_print_statistics(&model);
 
     ggml_backend_buffer_free(bctx->buf_compute);
+    ggml_allocr_free(bctx->allocr);
 
     return true;
 }
@@ -2012,38 +2015,6 @@ static bool bark_forward_eval(
     if (!bark_forward_fine_encoder(bctx, n_threads, verbosity)) {
         fprintf(stderr, "%s: failed to forward fine encoder\n", __func__);
         return false;
-    }
-
-    // DEBUG
-    if (0) {
-        // printf("SEMANTIC=\n");
-
-        // // print semantic tokens
-        // for (int i = 0; i < (int) bctx->semantic_tokens.size(); i++) {
-        //     printf("%d ", bctx->semantic_tokens[i]);
-        // }
-
-        printf("\n");
-        printf("COARSE=\n");
-        printf("\n");
-
-        // print coarse tokens
-        for (int i = 0; i < (int) bctx->coarse_tokens.size(); i++) {
-            for (int j = 0; j < (int) bctx->coarse_tokens[i].size(); j++) {
-                printf("%d ", bctx->coarse_tokens[i][j]);
-            }
-        }
-
-        // printf("\n");
-        // printf("FINE=\n");
-        // printf("\n");
-
-        // // print fine tokens
-        // for (int i = 0; i < (int) bctx->fine_tokens.size(); i++) {
-        //     for (int j = 0; j < (int) bctx->fine_tokens[i].size(); j++) {
-        //         printf("%d ", bctx->fine_tokens[i][j]);
-        //     }
-        // }
     }
 
     return true;
