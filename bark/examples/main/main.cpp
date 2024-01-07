@@ -23,8 +23,7 @@ int main(int argc, char **argv) {
               << R"(  / __ \/ __ `/ ___/ //_/       / ___/ __ \/ __ \)" << "\n"
               << R"( / /_/ / /_/ / /  / ,<    _    / /__/ /_/ / /_/ /)" << "\n"
               << R"(/_.___/\__,_/_/  /_/|_|  (_)   \___/ .___/ .___/ )" << "\n"
-              << R"(                                  /_/   /_/      )" << "\n"
-              << "\n";
+              << R"(                                  /_/   /_/      )" << "\n";
 
     // initialize bark context
     struct bark_context * bctx = bark_load_model(params.model_path, verbosity);

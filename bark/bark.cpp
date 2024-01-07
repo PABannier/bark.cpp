@@ -1890,7 +1890,6 @@ bool bark_forward_text_encoder(
 
     bark_print_statistics(&model);
 
-    // TODO: clean allocr and buf_compute in the end
     ggml_backend_buffer_free(bctx->buf_compute);
 
     return true;
@@ -1940,7 +1939,6 @@ static bool bark_forward_coarse_encoder(
 
     bark_print_statistics(&model);
 
-    // TODO: clean allocr and buf_compute in the end
     ggml_backend_buffer_free(bctx->buf_compute);
 
     return true;
@@ -1992,7 +1990,6 @@ static bool bark_forward_fine_encoder(
 
     bark_print_statistics(&model);
 
-    // TODO: clean allocr and buf_compute in the end
     ggml_backend_buffer_free(bctx->buf_compute);
 
     return true;
