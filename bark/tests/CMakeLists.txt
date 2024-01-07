@@ -8,3 +8,19 @@ target_compile_features(test_utils PRIVATE cxx_std_11)
 set(TEST_TARGET test-tokenizer)
 add_executable(${TEST_TARGET} ${TEST_TARGET}.cpp)
 target_link_libraries(${TEST_TARGET} PRIVATE bark)
+
+
+#
+# test-coarse-encoder
+
+set(TEST_TARGET test-coarse-encoder)
+add_executable(${TEST_TARGET} ${TEST_TARGET}.cpp)
+target_link_libraries(${TEST_TARGET} PRIVATE bark)
+
+
+#
+# test-fine-encoder
+
+set(TEST_TARGET test-fine-encoder)
+add_executable(${TEST_TARGET} ${TEST_TARGET}.cpp)
+target_link_libraries(${TEST_TARGET} PRIVATE bark)
