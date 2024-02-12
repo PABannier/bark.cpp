@@ -11,16 +11,14 @@ Inference of [SunoAI's bark model](https://github.com/suno-ai/bark) in pure C/C+
 
 ## Description
 
-With `bark.cpp`, our goal is to bring **real-time realistic** text-to-speech generation to the community.
-Currently, we are focused on porting the [Bark](https://github.com/suno-ai/bark) model in C++.
+With `bark.cpp`, my goal is to bring **real-time realistic multilingual** text-to-speech generation to the community. Currently, I am focused on porting the [Bark](https://github.com/suno-ai/bark) model in C++.
 
-- [X] Plain C/C++ implementation without dependencies
-- [X] AVX, AVX2 and AVX512 for x86 architectures
-- [X] CPU and GPU compatible backends
-- [X] Mixed F16 / F32 precision
-- [X] 4-bit, 5-bit and 8-bit integer quantization
-- [X] Metal and CUDA backends
-- [ ] iOS on-device deployment using CoreML
+- [x] Plain C/C++ implementation without dependencies
+- [x] AVX, AVX2 and AVX512 for x86 architectures
+- [x] CPU and GPU compatible backends
+- [x] Mixed F16 / F32 precision
+- [x] 4-bit, 5-bit and 8-bit integer quantization
+- [x] Metal and CUDA backends
 
 The original implementation of `bark.cpp` is the bark's 24Khz English model. We expect to support multiple encoders in the future (see [this](https://github.com/PABannier/bark.cpp/issues/36) and [this](https://github.com/PABannier/bark.cpp/issues/6)), as well as music generation model (see [this](https://github.com/PABannier/bark.cpp/issues/62)). This project is for educational purposes.
 
@@ -80,7 +78,7 @@ https://github.com/PABannier/bark.cpp/assets/12958149/c0caadfd-bed9-4a48-8c17-32
 
 ## Usage
 
-Here are the steps for the bark model.
+Here are the steps to use Bark.cpp
 
 ### Get the code
 
@@ -124,8 +122,7 @@ python3 bark/convert.py \
 
 Weights can be quantized using the following strategy: `q4_0`, `q4_1`, `q5_0`, `q5_1`, `q8_0`.
 
-Note that to preserve audio quality, we do not quantize the codec model. The bulk of the
-computation is in the forward pass of the GPT models.
+Note that to preserve audio quality, we do not quantize the codec model. The bulk of the computation is in the forward pass of the GPT models.
 
 ```bash
 mkdir ggml_weights_q4
@@ -135,14 +132,14 @@ cp ggml_weights/*vocab* ggml_weights_q4
 ./bark/build/examples/quantize/quantize ./ggml_weights/ggml_weights_fine.bin ./ggml_weights_q4/ggml_weights_fine.bin q4_0
 ```
 
-### Seminal papers and background on models
+### Seminal papers
 
 - Bark
-    - [Text Prompted Generative Audio](https://github.com/suno-ai/bark)
+  - [Text Prompted Generative Audio](https://github.com/suno-ai/bark)
 - Encodec
-    - [High Fidelity Neural Audio Compression](https://arxiv.org/abs/2210.13438)
+  - [High Fidelity Neural Audio Compression](https://arxiv.org/abs/2210.13438)
 - GPT-3
-    - [Language Models are Few-Shot Learners](https://arxiv.org/abs/2005.14165)
+  - [Language Models are Few-Shot Learners](https://arxiv.org/abs/2005.14165)
 
 ### Contributing
 
@@ -156,5 +153,3 @@ cp ggml_weights/*vocab* ggml_weights_q4
 
 - Avoid adding third-party dependencies, extra files, extra headers, etc.
 - Always consider cross-compatibility with other operating systems and architectures
-- Avoid fancy looking modern STL constructs, keep it simple
-- Clean-up any trailing whitespaces, use 4 spaces for indentation, brackets on the same line, `void * ptr`, `int & ref`
