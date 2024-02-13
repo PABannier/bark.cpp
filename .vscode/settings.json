@@ -71,6 +71,13 @@
         "algorithm": "cpp",
         "bit": "cpp",
         "cinttypes": "cpp",
-        "codecvt": "cpp"
-    }
+        "codecvt": "cpp",
+        "any": "cpp",
+        "forward_list": "cpp",
+        "ranges": "cpp",
+        "set": "cpp",
+        "span": "cpp",
+        "valarray": "cpp"
+    },
+    "cmake.sourceDirectory": "/Users/pbannier/Documents/bark.cpp/bark"
 }
