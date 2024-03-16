@@ -2045,7 +2045,7 @@ bool bark_generate_audio(
     const std::string encodec_model_path = bctx->encodec_model_path;
 
     struct encodec_context * ectx = encodec_load_model(
-        encodec_model_path, n_gpu_layers, encodec_verbosity_level::LOW);
+        encodec_model_path, n_gpu_layers);
     if (!ectx) {
         printf("%s: error during loading encodec model\n", __func__);
         return false;
