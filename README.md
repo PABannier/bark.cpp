@@ -114,6 +114,12 @@ python3 bark/convert.py \
         --vocab-path ./ggml_weights/ \
         --out-dir ./ggml_weights/
 
+# convert the encodec model to ggml format
+python ./encodec.cpp/convert.py \
+    --dir-model ./models/ \
+    --out-dir ./ggml_weights/ \
+    --use-f16
+    
 # run the inference
 ./bark/build/examples/main/main -m ./ggml_weights/ -p "this is an audio"
 ```
