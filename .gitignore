@@ -7,7 +7,6 @@
 *.wav
 *.bin
 .build/
-build/
 .cache/
 *.dSYM/
 .direnv/
@@ -19,18 +18,4 @@ build/
 .vscode/
 
 bark_weights/
-
-build-info.h
-
-!ggml_weights/ggml_vocab.bin
-!ggml_weights/vocab.txt
-
-tests/test-gpt-eval
-tests/test-fine-gpt-eval
-
-tests/test-forward-coarse
-tests/test-forward-semantic
-tests/test-forward-fine
-tests/test-forward-encodec
-
-tests/test-tokenizer
+build/

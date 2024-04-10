@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - encodec-submodule-fix-ci
     paths:
       [
         ".github/workflows/**",
@@ -56,7 +55,6 @@ jobs:
       - name: Build
         id: cmake_build
         run: |
-          cd bark
           mkdir build
           cd build
           cmake ..
@@ -82,7 +80,6 @@ jobs:
         id: cmake_build
         run: |
           sysctl -a
-          cd bark
           mkdir build
           cd build
           cmake ..
