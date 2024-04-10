@@ -2267,23 +2267,14 @@ bool bark_model_quantize(
         write_safe(fout, n_vocab);
 
         std::string word;
-        std::vector<char> tmp;
-
-        tmp.reserve(128);
-
         for (int i = 0; i < n_vocab; i++) {
             uint32_t len;
             read_safe(fin, len);
             write_safe(fout, len);
 
-            if (len > 0) {
-                tmp.resize(len);
-                fin.read(&tmp[0], tmp.size());
-                word.assign(&tmp[0], tmp.size());
-                write_safe(fout, word);
-            } else {
-                word = "";
-            }
+            word.resize(len);
+            fin.read((char*)word.data(), len);
+            fout.write((char*)word.data(), len);
         }
     }
 
