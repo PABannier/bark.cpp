@@ -18,6 +18,7 @@ build/
 .vs/
 .vscode/
 
+bark_weights/
 
 build-info.h
 
