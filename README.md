@@ -103,7 +103,7 @@ cmake --build . --config Release
 
 ```bash
 # install Python dependencies
-python3 -m pip install -r bark/requirements.txt
+python3 -m pip install -r requirements.txt
 
 # obtain the original bark and encodec weights and place them in ./models
 python3 download_weights.py --download-dir ./models
