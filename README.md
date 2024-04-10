@@ -106,16 +106,13 @@ cmake --build . --config Release
 python3 -m pip install -r bark/requirements.txt
 
 # obtain the original bark and encodec weights and place them in ./models
-python3 bark/download_weights.py --download-dir ./models
+python3 download_weights.py --download-dir ./models
 
 # convert the model to ggml format
-python3 bark/convert.py \
-        --dir-model ./models \
-        --vocab-path ./ggml_weights/ \
-        --out-dir ./ggml_weights/
+python3 convert.py --dir-model ./models --out-dir ./ggml_weights/
 
 # run the inference
-./bark/build/examples/main/main -m ./ggml_weights/ -p "this is an audio"
+./build/examples/main/main -m ./ggml_weights/ -p "this is an audio"
 ```
 
 ### (Optional) Quantize weights
@@ -125,7 +122,7 @@ Weights can be quantized using the following strategy: `q4_0`, `q4_1`, `q5_0`, `
 Note that to preserve audio quality, we do not quantize the codec model. The bulk of the computation is in the forward pass of the GPT models.
 
 ```bash
-./bark/build/examples/quantize/quantize ./ggml_weights.bin ./ggml_weights_q4.bin q4_0
+./build/examples/quantize/quantize ./ggml_weights.bin ./ggml_weights_q4.bin q4_0
 ```
 
 ### Seminal papers
