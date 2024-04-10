@@ -18,9 +18,6 @@ build/
 .vs/
 .vscode/
 
-ggml_weights/*
-ggml_weights_*/*
-models/
 
 build-info.h
 
