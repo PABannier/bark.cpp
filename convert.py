@@ -1,5 +1,12 @@
 """Convert Bark's GPT and Encodec checkpoints into the GGML format.
 
+The file is structured as follows:
+    - Hyperparameters
+    - Vocabulary
+    - Text model
+    - Coarse model
+    - Fine model
+
 The bytes are packed in a binary file in the following order:
     - Magic (`ggml` in binary format)
     - Tensors
@@ -66,8 +73,12 @@ def parse_hparams(hparams, outfile, use_f16, overwrite_bias):
 
     outfile.write(struct.pack("iii", n_lm_heads, n_wtes, ftype))
 
-def parse_text_models(checkpoint, outfile, use_f16):
+
+def parse_model_weights(checkpoint, outfile, use_f16):
     """Load GPT model checkpoint (text, fine, coarse)."""
+    num_tensors = len(checkpoint)
+    outfile.write(struct.pack("i", num_tensors))
+
     for name in checkpoint.keys():
         var_data = checkpoint[name].squeeze().numpy()
         print(f"Processing variable: {name} with shape: {var_data.shape}")
@@ -161,29 +172,26 @@ def parse_text_models(checkpoint, outfile, use_f16):
 
         var_data.tofile(outfile)
 
-def generate_file(in_file, out_dir, use_f16, overwrite_bias=False):
-    with open(out_dir, "wb") as fout:
-        fout.write(struct.pack("i", 0x67676d6c))  # ggml magic
 
-        checkpoint = torch.load(in_file, map_location="cpu")
-        parse_hparams(checkpoint["model_args"], fout, use_f16, overwrite_bias)
-        parse_text_models(checkpoint["model"], fout, use_f16)
+def generate_file(in_file, fout, use_f16, overwrite_bias=False):
+    checkpoint = torch.load(in_file, map_location="cpu")
+    parse_hparams(checkpoint["model_args"], fout, use_f16, overwrite_bias)
+    parse_model_weights(checkpoint["model"], fout, use_f16)
 
-def generate_vocab_file(dir_model, out_dir):
+
+def generate_vocab_file(dir_model, fout):
     """Parse vocabulary."""
     # Even if bark relies on GPT to encode text, it uses BertTokenizer (WordPiece)
     with open(dir_model / "vocab.txt", "r", encoding="utf-8") as fin:
         vocab = fin.readlines()
 
-    with open(out_dir, "wb") as fout:
-        fout.write(struct.pack("i", 0x67676d6c))  # ggml magic
-        fout.write(struct.pack("i", len(vocab)))
-        print("Vocab size:", len(vocab))
+    fout.write(struct.pack("i", len(vocab)))
+    print("Vocab size:", len(vocab))
 
-        for token in vocab:
-            data = bytearray(token[:-1], "utf-8")  # strip newline at the end
-            fout.write(struct.pack("i", len(data)))
-            fout.write(data)
+    for token in vocab:
+        data = bytearray(token[:-1], "utf-8")  # strip newline at the end
+        fout.write(struct.pack("i", len(data)))
+        fout.write(data)
 
 
 if __name__ == "__main__":
@@ -195,18 +203,26 @@ if __name__ == "__main__":
     out_dir = Path(args.out_dir)
     out_dir.mkdir(exist_ok=True, parents=True)
 
-    generate_vocab_file(vocab_path, out_dir / "ggml_vocab.bin")
-    print(" Vocab loaded.")
+    out_file = out_dir / "ggml_weights.bin"
 
-    generate_file(dir_model / "text_2.pt", out_dir / "ggml_weights_text.bin", args.use_f16)
-    print(" Text model loaded.")
+    # Write magic number
+    fout = open(out_file, "wb")
+    fout.write(struct.pack("i", 0x67676d6c))
 
-    generate_file(dir_model / "coarse_2.pt", out_dir / "ggml_weights_coarse.bin", args.use_f16)
-    print(" Coarse model loaded.")
+    generate_vocab_file(vocab_path, fout)
+    print(" Vocab written.")
+
+    generate_file(dir_model / "text_2.pt", fout, args.use_f16)
+    print(" Text model written.")
+
+    generate_file(dir_model / "coarse_2.pt", fout, args.use_f16)
+    print(" Coarse model written.")
 
     # overwrite_bias set to True since the fine model has biases and current config file
     # has bias set to False
-    generate_file(dir_model / "fine_2.pt", out_dir / "ggml_weights_fine.bin", args.use_f16, overwrite_bias=True)
-    print(" Fine model loaded.")
+    generate_file(dir_model / "fine_2.pt", fout, args.use_f16, overwrite_bias=True)
+    print(" Fine model written.")
+
+    fout.close()
 
     print("Done.")

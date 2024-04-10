@@ -11,7 +11,7 @@ Inference of [SunoAI's bark model](https://github.com/suno-ai/bark) in pure C/C+
 
 ## Description
 
-With `bark.cpp`, my goal is to bring **real-time realistic multilingual** text-to-speech generation to the community. Currently, I am focused on porting the [Bark](https://github.com/suno-ai/bark) model in C++.
+With `bark.cpp`, our goal is to bring **real-time realistic multilingual** text-to-speech generation to the community. Currently, I am focused on porting the [Bark](https://github.com/suno-ai/bark) model in C++.
 
 - [x] Plain C/C++ implementation without dependencies
 - [x] AVX, AVX2 and AVX512 for x86 architectures
@@ -93,8 +93,8 @@ git submodule update --init --recursive
 In order to build bark.cpp you must use `CMake`:
 
 ```bash
-mkdir bark/build
-cd bark/build
+mkdir build
+cd build
 cmake ..
 cmake --build . --config Release
 ```
@@ -106,16 +106,13 @@ cmake --build . --config Release
 python3 -m pip install -r bark/requirements.txt
 
 # obtain the original bark and encodec weights and place them in ./models
-python3 bark/download_weights.py --download-dir ./models
+python3 download_weights.py --download-dir ./models
 
 # convert the model to ggml format
-python3 bark/convert.py \
-        --dir-model ./models \
-        --vocab-path ./ggml_weights/ \
-        --out-dir ./ggml_weights/
+python3 convert.py --dir-model ./models --out-dir ./ggml_weights/
 
 # run the inference
-./bark/build/examples/main/main -m ./ggml_weights/ -p "this is an audio"
+./build/examples/main/main -m ./ggml_weights/ -p "this is an audio"
 ```
 
 ### (Optional) Quantize weights
@@ -125,11 +122,7 @@ Weights can be quantized using the following strategy: `q4_0`, `q4_1`, `q5_0`, `
 Note that to preserve audio quality, we do not quantize the codec model. The bulk of the computation is in the forward pass of the GPT models.
 
 ```bash
-mkdir ggml_weights_q4
-cp ggml_weights/*vocab* ggml_weights_q4
-./bark/build/examples/quantize/quantize ./ggml_weights/ggml_weights_text.bin ./ggml_weights_q4/ggml_weights_text.bin q4_0
-./bark/build/examples/quantize/quantize ./ggml_weights/ggml_weights_coarse.bin ./ggml_weights_q4/ggml_weights_coarse.bin q4_0
-./bark/build/examples/quantize/quantize ./ggml_weights/ggml_weights_fine.bin ./ggml_weights_q4/ggml_weights_fine.bin q4_0
+./build/examples/quantize/quantize ./ggml_weights.bin ./ggml_weights_q4.bin q4_0
 ```
 
 ### Seminal papers

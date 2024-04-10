@@ -1,18 +1,17 @@
-#include "bark.h"
-
-#include "httplib.h"
-#include "json.hpp"
-
 #include <cmath>
-#include <fstream>
 #include <cstdio>
+#include <cstring>
+#include <fstream>
 #include <string>
 #include <thread>
 #include <vector>
-#include <cstring>
+
+#include "bark.h"
+#include "httplib.h"
+#include "json.hpp"
 
 #if defined(_MSC_VER)
-#pragma warning(disable: 4244 4267) // possible loss of data
+#pragma warning(disable : 4244 4267)  // possible loss of data
 #endif
 
 #ifndef SERVER_VERBOSE
@@ -22,8 +21,7 @@
 using namespace httplib;
 using json = nlohmann::json;
 
-struct server_params
-{
+struct server_params {
     std::string hostname = "127.0.0.1";
     std::string public_path = "examples/server/public";
     int32_t port = 1337;
@@ -44,7 +42,7 @@ struct bark_params {
     server_params sparams;
 };
 
-void bark_print_usage(char ** argv, const bark_params & params) {
+void bark_print_usage(char **argv, const bark_params &params) {
     fprintf(stderr, "usage: %s [options]\n", argv[0]);
     fprintf(stderr, "\n");
     fprintf(stderr, "options:\n");
@@ -56,7 +54,7 @@ void bark_print_usage(char ** argv, const bark_params & params) {
     fprintf(stderr, "\n");
 }
 
-void bark_params_parse(int argc, char ** argv, bark_params & params) {
+void bark_params_parse(int argc, char **argv, bark_params &params) {
     bool model_req = false;
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -80,15 +78,14 @@ void bark_params_parse(int argc, char ** argv, bark_params & params) {
             exit(1);
         }
     }
-    if (!model_req)
-    {
+    if (!model_req) {
         fprintf(stderr, "error: no model path specified\n");
         bark_print_usage(argv, params);
         exit(1);
     }
 }
 
-int main(int argc, char ** argv) {
+int main(int argc, char **argv) {
     ggml_time_init();
     const int64_t t_main_start_us = ggml_time_us();
 
@@ -96,7 +93,7 @@ int main(int argc, char ** argv) {
 
     bark_params_parse(argc, argv, params);
 
-    struct bark_context * bctx = bark_load_model(params.model_path.c_str(), bark_verbosity_level::LOW);
+    struct bark_context *bctx = bark_load_model(params.model_path.c_str(), bark_verbosity_level::LOW);
     if (!bctx) {
         fprintf(stderr, "%s: Could not load model\n", __func__);
         return 1;
@@ -111,13 +108,12 @@ int main(int argc, char ** argv) {
     std::string default_content = "<html>hello</html>";
 
     // this is only called if no index.html is found in the public --path
-    svr.Get("/", [&default_content](const Request &, Response &res){
+    svr.Get("/", [&default_content](const Request &, Response &res) {
         res.set_content(default_content.c_str(), default_content.size(), "text/html");
         return false;
     });
 
-    svr.Post("/bark", [&](const Request &req, Response &res){
-
+    svr.Post("/bark", [&](const Request &req, Response &res) {
         // aquire bark model mutex lock
         bark_mutex.lock();
 
@@ -126,7 +122,7 @@ int main(int argc, char ** argv) {
 
         // generate audio
         std::string dest_wav_path = "/tmp/bark_tmp.wav";
-        bark_generate_audio(bctx, text, dest_wav_path, params.n_threads, bark_verbosity_level::LOW);
+        bark_generate_audio(bctx, text, dest_wav_path, params.n_threads);
 
         // read audio as binary
         std::ifstream wav_file("/tmp/bark_tmp.wav", std::ios::binary);
@@ -141,8 +137,7 @@ int main(int argc, char ** argv) {
 
             // Set the response body to the WAV file contents
             res.set_content(wav_contents, "audio/wav");
-        }
-        else {
+        } else {
             // If the file cannot be opened, set a 500 Internal Server Error response
             res.status = 500;
             res.set_content("Internal Server Error", "text/plain");
