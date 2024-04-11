@@ -108,8 +108,12 @@ python3 -m pip install -r requirements.txt
 # obtain the original bark and encodec weights and place them in ./models
 python3 download_weights.py --download-dir ./models
 
+# download the vocabulary
+wget https://huggingface.co/suno/bark/raw/main/vocab.txt
+mv ./vocab.txt ./models/
+
 # convert the model to ggml format
-python3 convert.py --dir-model ./models --out-dir ./ggml_weights/
+python3 convert.py --dir-model ./models --out-dir ./ggml_weights/ --vocab-path ./models
 
 # run the inference
 ./build/examples/main/main -m ./ggml_weights/ -p "this is an audio"
