@@ -113,10 +113,14 @@ wget https://huggingface.co/suno/bark/raw/main/vocab.txt
 mv ./vocab.txt ./models/
 
 # convert the model to ggml format
-python3 convert.py --dir-model ./models --out-dir ./ggml_weights/ --vocab-path ./models
+python3 convert.py --dir-model ./models --out-dir ./ggml_weights/ --vocab-path ./models --use-f16
+
+# convert the codec to ggml format
+python3 encodec.cpp/convert.py --dir-model ./models/ --out-dir ./ggml_weights/ --use-f16
+mv ggml_weights/ggml-model.bin ggml_weights/encodec_weights.bin
 
 # run the inference
-./build/examples/main/main -m ./ggml_weights/ -p "this is an audio"
+./build/examples/main/main -m ./ggml_weights/ -em ./ggml_weights/encodec_weights.bin -p "this is an audio"
 ```
 
 ### (Optional) Quantize weights
