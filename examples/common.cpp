@@ -28,17 +28,18 @@ void bark_print_usage(char** argv, const bark_params& params) {
     std::cout << "usage: " << argv[0] << " [options]\n"
               << "\n"
               << "options:\n"
-              << "  -h, --help            show this help message and exit\n"
-              << "  -t N, --threads N     number of threads to use during computation (default: " << params.n_threads << ")\n"
-              << "  -s N, --seed N        seed for random number generator (default: " << params.seed << ")\n"
+              << "  -h, --help                    show this help message and exit\n"
+              << "  -t N, --threads N             number of threads to use during computation (default: " << params.n_threads << ")\n"
+              << "  -s N, --seed N                seed for random number generator (default: " << params.seed << ")\n"
+              << "  -ngl N, --n_gpu_layers N      number of GPU layers (default: " << params.n_gpu_layers << ")\n"
               << "  -p PROMPT, --prompt PROMPT\n"
-              << "                        prompt to start generation with (default: random)\n"
+              << "                                prompt to start generation with (default: random)\n"
               << "  -m FNAME, --model FNAME\n"
-              << "                        model path (default: " << params.model_path << ")\n"
+              << "                                model path (default: " << params.model_path << ")\n"
               << "  -em FNAME, --encodec_model_path FNAME\n"
-              << "                        Encodec model path (default: " << params.encodec_model_path << ")\n"
+              << "                                Encodec model path (default: " << params.encodec_model_path << ")\n"
               << "  -o FNAME, --outwav FNAME\n"
-              << "                        output generated wav (default: " << params.dest_wav_path << ")\n"
+              << "                                output generated wav (default: " << params.dest_wav_path << ")\n"
               << "\n";
 }
 
@@ -54,6 +55,8 @@ int bark_params_parse(int argc, char** argv, bark_params& params) {
             params.model_path = argv[++i];
         } else if (arg == "-em" || arg == "--encodec_model_path") {
             params.encodec_model_path = argv[++i];
+        } else if (arg == "-ngl" || arg == "--n_gpu_layers") {
+            params.n_gpu_layers = std::stoi(argv[++i]);
         } else if (arg == "-s" || arg == "--seed") {
             params.seed = std::stoi(argv[++i]);
         } else if (arg == "-o" || arg == "--outwav") {

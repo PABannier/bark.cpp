@@ -37,6 +37,7 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+    bctx->n_gpu_layers = params.n_gpu_layers;
     bctx->encodec_model_path = params.encodec_model_path;
 
     // generate audio
