@@ -73,6 +73,13 @@ static void write_safe(std::ofstream& fout, T& dest) {
     fout.write((char*)&dest, sizeof(T));
 }
 
+static void ggml_log_callback_default(ggml_log_level level, const char* text, void* user_data) {
+    (void)level;
+    (void)user_data;
+    fputs(text, stderr);
+    fflush(stderr);
+}
+
 static void bark_print_statistics(gpt_model* model) {
     printf("\n\n");
     printf("%s:   sample time = %8.2f ms / %lld tokens\n", __func__, model->t_sample_us / 1000.0f, model->n_sample);

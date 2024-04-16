@@ -116,7 +116,7 @@ mv ./vocab.txt ./models/
 python3 convert.py --dir-model ./models --out-dir ./ggml_weights/ --vocab-path ./models
 
 # run the inference
-./build/examples/main/main -m ./ggml_weights/ -p "this is an audio"
+./build/examples/main/main -m ./ggml_weights/ -t 4 -p "this is an audio"
 ```
 
 ### (Optional) Quantize weights
@@ -127,6 +127,15 @@ Note that to preserve audio quality, we do not quantize the codec model. The bul
 
 ```bash
 ./build/examples/quantize/quantize ./ggml_weights.bin ./ggml_weights_q4.bin q4_0
+```
+
+### Using Metal
+
+To build Bark with support of the Metal backend, run
+
+```bash
+cmake -DGGML_CUBLAS=ON ..
+./build/examples/main/main -m ./ggml_weights/ -ngl 100 -t 8 -p "this is an audio"
 ```
 
 ### Seminal papers
