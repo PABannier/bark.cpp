@@ -11,7 +11,7 @@ Inference of [SunoAI's bark model](https://github.com/suno-ai/bark) in pure C/C+
 
 ## Description
 
-With `bark.cpp`, our goal is to bring **real-time realistic multilingual** text-to-speech generation to the community. Currently, I am focused on porting the [Bark](https://github.com/suno-ai/bark) model in C++.
+With `bark.cpp`, our goal is to bring **real-time realistic multilingual** text-to-speech generation to the community.
 
 - [x] Plain C/C++ implementation without dependencies
 - [x] AVX, AVX2 and AVX512 for x86 architectures
@@ -20,7 +20,16 @@ With `bark.cpp`, our goal is to bring **real-time realistic multilingual** text-
 - [x] 4-bit, 5-bit and 8-bit integer quantization
 - [x] Metal and CUDA backends
 
-The original implementation of `bark.cpp` is the bark's 24Khz English model. We expect to support multiple encoders in the future (see [this](https://github.com/PABannier/bark.cpp/issues/36) and [this](https://github.com/PABannier/bark.cpp/issues/6)), as well as music generation model (see [this](https://github.com/PABannier/bark.cpp/issues/62)). This project is for educational purposes.
+**Models supported**
+
+- [x] [Bark Small](https://huggingface.co/suno/bark-small)
+- [x] [Bark Large](https://huggingface.co/suno/bark)
+
+**Models we want to implement! Please open a PR :)**
+
+- [ ] [AudioCraft](https://audiocraft.metademolab.com/)
+- [ ] [AudioLDM2](https://audioldm.github.io/audioldm2/)
+- [ ] [Piper](https://github.com/rhasspy/piper)
 
 Demo on [Google Colab](https://colab.research.google.com/drive/1JVtJ6CDwxtKfFmEd8J4FGY2lzdL0d0jT?usp=sharing) ([#95](https://github.com/PABannier/bark.cpp/issues/95))
 
