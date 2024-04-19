@@ -991,9 +991,7 @@ static bool bark_model_load(std::ifstream& fin, gpt_model& model, int n_gpu_laye
 
 static bool bark_load_model_from_file(
     const std::string& fname,
-    struct bark_model* text_model,
-    struct encodec_context* encodec_ctx,
-    int n_gpu_layers,
+    struct bark_context* bctx,
     bark_verbosity_level verbosity) {
     if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
         printf("%s: loading model from '%s'\n", __func__, fname.c_str());
@@ -1021,11 +1019,13 @@ static bool bark_load_model_from_file(
             printf("%s: reading bark vocab\n", __func__);
         }
 
-        if (!bark_vocab_load(fin, &text_model->vocab)) {
+        if (!bark_vocab_load(fin, &bctx->text_model.vocab)) {
             fprintf(stderr, "%s: failed to load vocab\n", __func__);
             return false;
         }
     }
+
+    int n_gpu_layers = bctx->n_gpu_layers;
 
     // text
     {
@@ -1033,17 +1033,15 @@ static bool bark_load_model_from_file(
             printf("%s: reading bark text model\n", __func__);
         }
 
-        if (!bark_model_load(fin, text_model->semantic_model, n_gpu_layers, verbosity)) {
+        if (!bark_model_load(fin, bctx->text_model.semantic_model, n_gpu_layers, verbosity)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
             return false;
         }
     }
 
-    printf("we are here\n");
-
     // coarse
     {
-        if (!bark_model_load(fin, text_model->coarse_model, n_gpu_layers, verbosity)) {
+        if (!bark_model_load(fin, bctx->text_model.coarse_model, n_gpu_layers, verbosity)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad coarse)\n", __func__, fname.c_str());
             return false;
         }
@@ -1051,7 +1049,7 @@ static bool bark_load_model_from_file(
 
     // fine
     {
-        if (!bark_model_load(fin, text_model->fine_model, n_gpu_layers, verbosity)) {
+        if (!bark_model_load(fin, bctx->text_model.fine_model, n_gpu_layers, verbosity)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad fine)\n", __func__, fname.c_str());
             return false;
         }
@@ -1059,8 +1057,8 @@ static bool bark_load_model_from_file(
 
     // codec model
     {
-        encodec_ctx = encodec_load_model(fin, n_gpu_layers);
-        if (!encodec_ctx) {
+        bctx->encodec_ctx = encodec_load_model(fin, n_gpu_layers);
+        if (!bctx->encodec_ctx) {
             fprintf(stderr, "%s: invalid model file '%s' (bad encodec)\n", __func__, fname.c_str());
             return false;
         }
@@ -1079,8 +1077,7 @@ struct bark_context* bark_load_model(const std::string& model_path, bark_verbosi
     struct bark_context* bctx = new bark_context();
 
     bctx->text_model = bark_model();
-    if (!bark_load_model_from_file(model_path, &bctx->text_model, bctx->encodec_ctx,
-                                   bctx->n_gpu_layers, verbosity)) {
+    if (!bark_load_model_from_file(model_path, bctx, verbosity)) {
         fprintf(stderr, "%s: failed to load model weights from '%s'\n", __func__, model_path.c_str());
         return nullptr;
     }
