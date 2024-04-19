@@ -52,7 +52,7 @@ DECODER_CONV_TRANSPOSE_LAYERS = [
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dir-model", type=str, required=True)
-parser.add_argument("--out-dir", type=str, required=True)
+parser.add_argument("--out-dir", type=str, required=False)
 parser.add_argument("--use-f16", action="store_true")
 
 
@@ -326,9 +326,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     dir_model = Path(args.dir_model)
+    if not dir_model.exists():
+        raise ValueError(f"Could not find directory {dir_model}")
 
-    out_dir = Path(args.out_dir)
-    out_dir.mkdir(exist_ok=True, parents=True)
+    if args.out_dir is None:
+        out_dir = dir_model
+    else:
+        out_dir = Path(args.out_dir)
+        out_dir.mkdir(exist_ok=True, parents=True)
 
     out_file = out_dir / "ggml_weights.bin"
 
