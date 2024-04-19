@@ -38,6 +38,18 @@ import numpy as np
 import torch
 
 
+DECODER_CONV_TRANSPOSE_LAYERS = [
+    "decoder.layers.3.conv.bias",
+    "decoder.layers.3.conv.weight",
+    "decoder.layers.6.conv.bias",
+    "decoder.layers.6.conv.weight",
+    "decoder.layers.9.conv.bias",
+    "decoder.layers.9.conv.weight",
+    "decoder.layers.12.conv.bias",
+    "decoder.layers.12.conv.weight",
+]
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--dir-model", type=str, required=True)
 parser.add_argument("--out-dir", type=str, required=True)
@@ -67,7 +79,7 @@ def parse_codec_hparams(config, outfile, use_f16):
     outfile.write(struct.pack("i", ftype))
 
 
-def parse_hparams(config, prefix, outfile, use_f16, overwrite_bias):
+def parse_hparams(config, prefix, outfile, use_f16):
     """Parse GPT hyperparameters."""
     hparams = config[f"{prefix}_config"]
 
@@ -76,7 +88,9 @@ def parse_hparams(config, prefix, outfile, use_f16, overwrite_bias):
     outfile.write(struct.pack("i", hparams["hidden_size"]))
     outfile.write(struct.pack("i", hparams["block_size"]))
 
-    bias = 1 if overwrite_bias else hparams["bias"]
+    # trick: for fine model, we need to set the bias flag to true, since there are
+    # bias for the layer norm (to refactor)
+    bias = True if prefix == "fine_acoustics" else hparams["bias"]
     outfile.write(struct.pack("i", int(bias)))
 
     outfile.write(
@@ -98,9 +112,9 @@ def parse_hparams(config, prefix, outfile, use_f16, overwrite_bias):
 
 def parse_codec_model_weights(checkpoint, outfile, use_f16):
     """Load encodec model checkpoint."""
-    n_f16, n_f32 = 0, 0
+    keys = [k for k in checkpoint.keys() if "codec_model" in k]
 
-    for name in checkpoint.keys():
+    for name in keys:
         if "weight_g" in name:
             # the tensor has already been parsed with the corresponding "weight_v"
             # tensor to form the final weights tensor of the convolution, therefore
@@ -111,6 +125,9 @@ def parse_codec_model_weights(checkpoint, outfile, use_f16):
             # "inited", "cluster_size" and "embed_avg" tensors in quantizer are not used
             # for the forward pass
             continue
+
+        # Remove prefix from the variable name and the dot
+        clean_name = name.replace("codec_model.", "")
 
         var_data = checkpoint[name]
 
@@ -129,6 +146,25 @@ def parse_codec_model_weights(checkpoint, outfile, use_f16):
             var_data = final_var_data.numpy()
 
             name = ".".join(base_name + ["weight"])
+            clean_name = name.replace("codec_model.", "")
+
+        if "encoder" in clean_name or "decoder" in clean_name:
+            if clean_name in DECODER_CONV_TRANSPOSE_LAYERS:
+                pattern = r"decoder.layers.(\d+).conv\.(bias|weight)$"
+                replacement = r"decoder.model.\1.convtr.convtr.\2"
+                clean_name = re.sub(pattern, replacement, clean_name)
+            elif "conv" in clean_name:
+                pattern = r"(encoder|decoder).layers.(\d+)(.*?).conv\.(bias|weight)$"
+                replacement = r"\1.model.\2\3.conv.conv.\4"
+                clean_name = re.sub(pattern, replacement, clean_name)
+            elif "lstm" in clean_name:
+                clean_name = clean_name.replace("layers", "model")
+        elif "quantizer" in clean_name:
+            pattern = r"quantizer.layers.(\d+)\.codebook\.(.+)$"
+            replacement = r"quantizer.vq.layers.\1._codebook.\2"
+            clean_name = re.sub(pattern, replacement, clean_name)
+        else:
+            raise Exception(f"Unrecognized variable name: {clean_name}")
 
         print(f"Processing variable: {name} with shape: {var_data.shape}")
 
@@ -137,25 +173,21 @@ def parse_codec_model_weights(checkpoint, outfile, use_f16):
                 print("  Converting to float32")
                 var_data = var_data.astype(np.float32)
                 ftype_cur = 0
-                n_f32 += 1
             elif "weight" in name:
                 print("  Converting to float16")
                 var_data = var_data.astype(np.float16)
                 ftype_cur = 1
-                n_f16 += 1
             else:
                 print("  Converting to float32")
                 var_data = var_data.astype(np.float32)
                 ftype_cur = 0
-                n_f32 += 1
         else:
             print("  Converting to float32")
             var_data = var_data.astype(np.float32)
             ftype_cur = 0
-            n_f32 += 1
 
         n_dims = len(var_data.shape)
-        encoded_name = name.encode("utf-8")
+        encoded_name = clean_name.encode("utf-8")
         outfile.write(struct.pack("iii", n_dims, len(encoded_name), ftype_cur))
 
         for i in range(n_dims):
@@ -166,18 +198,16 @@ def parse_codec_model_weights(checkpoint, outfile, use_f16):
 
     outfile.close()
 
-    print("\n")
-    print(f"n_f16: {n_f16} ({n_f16/(n_f16 + n_f32)*100:.0f}%)")
-    print(f"n_f32: {n_f32} ({n_f32/(n_f16 + n_f32)*100:.0f}%)")
-
 
 def parse_model_weights(checkpoint, prefix, outfile, use_f16):
     """Load GPT model checkpoint (text, fine, coarse)."""
-    num_tensors = len(checkpoint)
+    keys = [k for k in checkpoint.keys() if prefix in k]
+    keys = [k for k in keys if "attn.bias" not in k]
+
+    num_tensors = len(keys)
     outfile.write(struct.pack("i", num_tensors))
 
     # Filter out the variables that are not part of the current model with prefix
-    keys = [k for k in checkpoint.keys() if prefix in k]
 
     for name in keys:
         var_data = checkpoint[name].squeeze().numpy()
@@ -215,8 +245,9 @@ def parse_model_weights(checkpoint, prefix, outfile, use_f16):
             i = re.findall("\d+", name)[0]
             name = f"model/h{i}/ln_2/b"
         elif re.match(r"layers\.\d+\.attn\.bias", name):
-            i = re.findall("\d+", name)[0]
-            name = f"model/h{i}/attn/c_attn/b"
+            # this pattern is the lower triangular matrix of the attention bias
+            # we do not need to load it
+            continue
         elif re.match(r"layers\.\d+\.attn\.att_proj\.weight", name):
             i = re.findall("\d+", name)[0]
             name = f"model/h{i}/attn/c_attn/w"
@@ -233,7 +264,7 @@ def parse_model_weights(checkpoint, prefix, outfile, use_f16):
             i = re.findall("\d+", name)[0]
             name = f"model/lm_head/{i}"
         else:
-            print(f"Unrecognized variable name: {name}")
+            raise Exception(f"Unrecognized variable name: {name}")
 
         if use_f16:
             if (name[-2:] == "/w" or "wte" in name or "lm_head" in name) and n_dims == 2:
@@ -259,14 +290,17 @@ def parse_model_weights(checkpoint, prefix, outfile, use_f16):
         var_data.tofile(outfile)
 
 
-def generate_file(dir_model, fout, use_f16, overwrite_bias=False):
+def generate_file(dir_model, fout, use_f16):
     checkpoint = torch.load(dir_model / "pytorch_model.bin", map_location="cpu")
     config = json.load(open(dir_model / "config.json", "r"))
 
     # Parse transformer hyperparameters and weights
     for prefix in ["semantic", "coarse_acoustics", "fine_acoustics"]:
-        parse_hparams(config, prefix, fout, use_f16, overwrite_bias)
+        parse_hparams(config, prefix, fout, use_f16)
         parse_model_weights(checkpoint, prefix, fout, use_f16)
+
+    # New model (Encodec.cpp expects the magic number) => re-write it
+    fout.write(struct.pack("i", 0x67676d6c))
 
     # Parse neural codec weights
     parse_codec_hparams(config["codec_config"], fout, use_f16)
