@@ -37,8 +37,6 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    bctx->encodec_model_path = params.encodec_model_path;
-
     // generate audio
     if (!bark_generate_audio(bctx, params.prompt, params.dest_wav_path, params.n_threads)) {
         fprintf(stderr, "%s: An error occured. If the problem persists, feel free to open an issue to report it.\n", __func__);
