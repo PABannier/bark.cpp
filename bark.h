@@ -3,6 +3,7 @@
 #include <thread>
 #include <vector>
 
+#include "encodec.h"
 #include "ggml-backend.h"
 #include "ggml.h"
 
@@ -105,7 +106,7 @@ struct bark_model {
     // encoder
     gpt_model coarse_model;
     gpt_model fine_model;
-    gpt_model text_model;
+    gpt_model semantic_model;
 
     // vocab
     bark_vocab vocab;
@@ -172,7 +173,9 @@ struct bark_context_params {
 };
 
 struct bark_context {
-    bark_model model;
+    bark_model text_model;
+
+    struct encodec_context *encodec_ctx;
 
     // buffer for model evaluation
     ggml_backend_buffer_t buf_compute;
