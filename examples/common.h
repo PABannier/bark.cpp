@@ -12,9 +12,6 @@ struct bark_params {
     // Location of model weights.
     std::string model_path = "./ggml_weights";
 
-    // Location of Encodec model weights.
-    std::string encodec_model_path = "./encodec_weights.bin";
-
     // Destination path for generated WAV file.
     std::string dest_wav_path = "output.wav";
 
