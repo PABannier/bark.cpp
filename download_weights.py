@@ -23,11 +23,19 @@ if __name__ == "__main__":
             print("     -> Downloading Bark-Small...")
             bark_small_out_dir = out_dir / "bark-small"
             bark_small_out_dir.mkdir(parents=True, exist_ok=True)
-            snapshot_download(BARK_SMALL_REPO_ID, local_dir=out_dir)
+            snapshot_download(
+                BARK_SMALL_REPO_ID,
+                local_dir=bark_small_out_dir,
+                allow_patterns=["*.bin", "*.json", "*.txt"]
+            )
         elif model == "bark":
             print("     -> Downloading Bark...")
             bark_out_dir = out_dir / "bark"
             bark_out_dir.mkdir(parents=True, exist_ok=True)
-            snapshot_download(BARK_REPO_ID, local_dir=out_dir)
+            snapshot_download(
+                BARK_REPO_ID,
+                local_dir=bark_out_dir,
+                allow_patterns=["*.bin", "*.json", "*.txt"]
+            )
 
     print("Done.")
