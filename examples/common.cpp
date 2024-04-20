@@ -35,8 +35,6 @@ void bark_print_usage(char** argv, const bark_params& params) {
               << "                        prompt to start generation with (default: random)\n"
               << "  -m FNAME, --model FNAME\n"
               << "                        model path (default: " << params.model_path << ")\n"
-              << "  -em FNAME, --encodec_model_path FNAME\n"
-              << "                        Encodec model path (default: " << params.encodec_model_path << ")\n"
               << "  -o FNAME, --outwav FNAME\n"
               << "                        output generated wav (default: " << params.dest_wav_path << ")\n"
               << "\n";
@@ -52,8 +50,6 @@ int bark_params_parse(int argc, char** argv, bark_params& params) {
             params.prompt = argv[++i];
         } else if (arg == "-m" || arg == "--model_path") {
             params.model_path = argv[++i];
-        } else if (arg == "-em" || arg == "--encodec_model_path") {
-            params.encodec_model_path = argv[++i];
         } else if (arg == "-s" || arg == "--seed") {
             params.seed = std::stoi(argv[++i]);
         } else if (arg == "-o" || arg == "--outwav") {

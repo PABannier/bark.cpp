@@ -527,8 +527,8 @@ void bert_tokenize(
 }
 
 static void bark_tokenize_input(struct bark_context* bctx, const std::string& text) {
-    auto& model = bctx->model.text_model;
-    bark_vocab* vocab = &bctx->model.vocab;
+    auto& model = bctx->text_model.semantic_model;
+    bark_vocab* vocab = &bctx->text_model.vocab;
 
     auto& params = bctx->params;
 
@@ -903,6 +903,10 @@ static bool bark_model_load(std::ifstream& fin, gpt_model& model, int n_gpu_laye
         int32_t n_tensors;
         read_safe(fin, n_tensors);
 
+        if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
+            printf("%s: loading %d tensors\n", __func__, n_tensors);
+        }
+
         for (int i = 0; i < n_tensors; i++) {
             int32_t n_dims;
             int32_t length;
@@ -929,14 +933,15 @@ static bool bark_model_load(std::ifstream& fin, gpt_model& model, int n_gpu_laye
 
             auto tensor = model.tensors[name];
             ggml_set_name(tensor, name.c_str());
-            if (ggml_nelements(tensor) != nelements) {
-                fprintf(stderr, "%s: tensor '%s' has wrong size in model file\n", __func__, name.data());
-                return false;
-            }
 
             if (tensor->ne[0] != ne[0] || tensor->ne[1] != ne[1]) {
                 fprintf(stderr, "%s: tensor '%s' has wrong shape in model file: got [%d, %d], expected [%d, %d]\n",
                         __func__, name.data(), (int)tensor->ne[0], (int)tensor->ne[1], ne[0], ne[1]);
+                return false;
+            }
+
+            if (ggml_nelements(tensor) != nelements) {
+                fprintf(stderr, "%s: tensor '%s' has wrong size in model file\n", __func__, name.data());
                 return false;
             }
 
@@ -983,10 +988,9 @@ static bool bark_model_load(std::ifstream& fin, gpt_model& model, int n_gpu_laye
     return true;
 }
 
-static struct bark_model* bark_load_model_from_file(
+static bool bark_load_model_from_file(
     const std::string& fname,
-    struct bark_model* model,
-    int n_gpu_layers,
+    struct bark_context* bctx,
     bark_verbosity_level verbosity) {
     if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
         printf("%s: loading model from '%s'\n", __func__, fname.c_str());
@@ -995,7 +999,7 @@ static struct bark_model* bark_load_model_from_file(
     auto fin = std::ifstream(fname, std::ios::binary);
     if (!fin) {
         fprintf(stderr, "%s: failed to open '%s'\n", __func__, fname.c_str());
-        return nullptr;
+        return false;
     }
 
     // verify magic
@@ -1004,7 +1008,7 @@ static struct bark_model* bark_load_model_from_file(
         fin.read((char*)&magic, sizeof(magic));
         if (magic != GGML_FILE_MAGIC) {
             fprintf(stderr, "%s: invalid model file '%s' (bad magic)\n", __func__, fname.c_str());
-            return nullptr;
+            return false;
         }
     }
 
@@ -1014,11 +1018,13 @@ static struct bark_model* bark_load_model_from_file(
             printf("%s: reading bark vocab\n", __func__);
         }
 
-        if (!bark_vocab_load(fin, &model->vocab)) {
+        if (!bark_vocab_load(fin, &bctx->text_model.vocab)) {
             fprintf(stderr, "%s: failed to load vocab\n", __func__);
-            return nullptr;
+            return false;
         }
     }
+
+    int n_gpu_layers = bctx->n_gpu_layers;
 
     // text
     {
@@ -1026,25 +1032,34 @@ static struct bark_model* bark_load_model_from_file(
             printf("%s: reading bark text model\n", __func__);
         }
 
-        if (!bark_model_load(fin, model->text_model, n_gpu_layers, verbosity)) {
+        if (!bark_model_load(fin, bctx->text_model.semantic_model, n_gpu_layers, verbosity)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad text)\n", __func__, fname.c_str());
-            return nullptr;
+            return false;
         }
     }
 
     // coarse
     {
-        if (!bark_model_load(fin, model->coarse_model, n_gpu_layers, verbosity)) {
+        if (!bark_model_load(fin, bctx->text_model.coarse_model, n_gpu_layers, verbosity)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad coarse)\n", __func__, fname.c_str());
-            return nullptr;
+            return false;
         }
     }
 
     // fine
     {
-        if (!bark_model_load(fin, model->fine_model, n_gpu_layers, verbosity)) {
+        if (!bark_model_load(fin, bctx->text_model.fine_model, n_gpu_layers, verbosity)) {
             fprintf(stderr, "%s: invalid model file '%s' (bad fine)\n", __func__, fname.c_str());
-            return nullptr;
+            return false;
+        }
+    }
+
+    // codec model
+    {
+        bctx->encodec_ctx = encodec_load_model(fin, n_gpu_layers);
+        if (!bctx->encodec_ctx) {
+            fprintf(stderr, "%s: invalid model file '%s' (bad encodec)\n", __func__, fname.c_str());
+            return false;
         }
     }
 
@@ -1052,18 +1067,16 @@ static struct bark_model* bark_load_model_from_file(
 
     fin.close();
 
-    return model;
+    return true;
 }
 
-struct bark_context* bark_load_model(
-    const std::string& model_path,
-    bark_verbosity_level verbosity) {
+struct bark_context* bark_load_model(const std::string& model_path, bark_verbosity_level verbosity) {
     int64_t t_load_start_us = ggml_time_us();
 
     struct bark_context* bctx = new bark_context();
 
-    bctx->model = bark_model();
-    if (!bark_load_model_from_file(model_path, &bctx->model, bctx->n_gpu_layers, verbosity)) {
+    bctx->text_model = bark_model();
+    if (!bark_load_model_from_file(model_path, bctx, verbosity)) {
         fprintf(stderr, "%s: failed to load model weights from '%s'\n", __func__, model_path.c_str());
         return nullptr;
     }
@@ -1575,7 +1588,7 @@ static bool bark_eval_text_encoder(struct bark_context* bctx, int n_threads) {
 
     BarkProgressBar progress(std::string("Generating semantic tokens"), n_steps_text_encoder);
 
-    auto& model = bctx->model.text_model;
+    auto& model = bctx->text_model.semantic_model;
     auto& allocr = bctx->allocr;
     auto& hparams = model.hparams;
 
@@ -1623,7 +1636,7 @@ static bool bark_eval_text_encoder(struct bark_context* bctx, int n_threads) {
 bool bark_forward_text_encoder(struct bark_context* bctx, int n_threads) {
     const int64_t t_main_start_us = ggml_time_us();
 
-    auto& model = bctx->model.text_model;
+    auto& model = bctx->text_model.semantic_model;
     auto& allocr = bctx->allocr;
     auto& hparams = model.hparams;
     auto& verbosity = bctx->params.verbosity;
@@ -1674,7 +1687,7 @@ static bool bark_eval_coarse_encoder(struct bark_context* bctx, int n_threads) {
 
     bark_sequence input = bctx->semantic_tokens;
 
-    auto& model = bctx->model.coarse_model;
+    auto& model = bctx->text_model.coarse_model;
     auto& allocr = bctx->allocr;
     auto& hparams = model.hparams;
     auto& params = bctx->params;
@@ -1791,7 +1804,7 @@ static bool bark_eval_coarse_encoder(struct bark_context* bctx, int n_threads) {
 bool bark_forward_coarse_encoder(struct bark_context* bctx, int n_threads) {
     const int64_t t_main_start_us = ggml_time_us();
 
-    auto& model = bctx->model.coarse_model;
+    auto& model = bctx->text_model.coarse_model;
     auto& allocr = bctx->allocr;
     auto& hparams = model.hparams;
     auto& verbosity = bctx->params.verbosity;
@@ -1842,7 +1855,7 @@ static bool bark_eval_fine_encoder_internal(
     std::vector<float>& logits,
     int nn,
     int n_threads) {
-    auto& model = bctx->model.fine_model;
+    auto& model = bctx->text_model.fine_model;
     auto& allocr = bctx->allocr;
     auto& hparams = model.hparams;
     auto& params = bctx->params;
@@ -1890,7 +1903,7 @@ static bool bark_eval_fine_encoder(struct bark_context* bctx, int n_threads) {
     std::vector<float> logits;
     logits.resize(1024 * 1056);
 
-    auto& model = bctx->model.fine_model;
+    auto& model = bctx->text_model.fine_model;
     auto& hparams = model.hparams;
     auto& params = bctx->params;
 
@@ -1983,7 +1996,7 @@ static bool bark_eval_fine_encoder(struct bark_context* bctx, int n_threads) {
 bool bark_forward_fine_encoder(struct bark_context* bctx, int n_threads) {
     const int64_t t_main_start_us = ggml_time_us();
 
-    auto& model = bctx->model.fine_model;
+    auto& model = bctx->text_model.fine_model;
     auto& allocr = bctx->allocr;
     auto& hparams = model.hparams;
     auto& params = bctx->params;
@@ -2065,23 +2078,13 @@ bool bark_generate_audio(struct bark_context* bctx, std::string& text,
         return false;
     }
 
-    // Calling Encodec API to generate the audio waveform from the fine tokens
-    const int n_gpu_layers = bctx->n_gpu_layers;
-    const std::string encodec_model_path = bctx->encodec_model_path;
-
-    struct encodec_context* ectx = encodec_load_model(encodec_model_path, n_gpu_layers);
-    if (!ectx) {
-        printf("%s: error during loading encodec model\n", __func__);
-        return false;
-    }
-
     auto& params = bctx->params;
 
     int32_t target_bandwidth = params.target_bandwidth;
     int32_t sample_rate = params.sample_rate;
 
-    encodec_set_target_bandwidth(ectx, target_bandwidth);
-    encodec_set_sample_rate(ectx, sample_rate);
+    encodec_set_target_bandwidth(bctx->encodec_ctx, target_bandwidth);
+    encodec_set_sample_rate(bctx->encodec_ctx, sample_rate);
 
     // current shape fine_tokens: [seq_length][n_channels], n_channels are contiguous
     // encodec expects shape fine_tokens: [n_channels][seq_length], time steps are contiguous
@@ -2093,14 +2096,12 @@ bool bark_generate_audio(struct bark_context* bctx, std::string& text,
         }
     }
 
-    if (!encodec_decompress_audio(ectx, encodec_tokens, n_threads)) {
+    if (!encodec_decompress_audio(bctx->encodec_ctx, encodec_tokens, n_threads)) {
         printf("%s: Could not generate waveform from tokens with Encodec\n", __func__);
         return false;
     }
 
-    bctx->audio_arr = ectx->out_audio;
-
-    encodec_free(ectx);
+    bctx->audio_arr = bctx->encodec_ctx->out_audio;
 
     bctx->t_eval_us = ggml_time_us() - t_start_eval_us;
 
@@ -2125,9 +2126,11 @@ void bark_free(struct bark_context* bctx) {
         return;
     }
 
-    bark_free_model(&bctx->model.text_model);
-    bark_free_model(&bctx->model.coarse_model);
-    bark_free_model(&bctx->model.fine_model);
+    encodec_free(bctx->encodec_ctx);
+
+    bark_free_model(&bctx->text_model.semantic_model);
+    bark_free_model(&bctx->text_model.coarse_model);
+    bark_free_model(&bctx->text_model.fine_model);
 
     delete bctx;
 }
