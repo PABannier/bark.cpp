@@ -5,3 +5,8 @@ target_compile_features(common PUBLIC cxx_std_11)
 add_subdirectory(main)
 add_subdirectory(server)
 add_subdirectory(quantize)
+
+if (EMSCRIPTEN)
+    add_subdirectory(wasm)
+    set_target_properties(libmain PROPERTIES FOLDER "libs")
+endif()
