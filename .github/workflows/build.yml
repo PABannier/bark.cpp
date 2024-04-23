@@ -84,3 +84,25 @@ jobs:
           cd build
           cmake ..
           cmake --build . --config Release
+
+  emscripten:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        build: [Release]
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Setup emsdk
+        uses: mymindstorm/setup-emsdk@v12
+
+      - name: Verify
+        run: emcc -v
+
+      - name: Build
+        run: |
+          emcmake cmake . -DCMAKE_BUILD_TYPE=${{ matrix.build }}
+          make
