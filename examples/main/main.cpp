@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
     }
 
     // generate audio
-    if (!bark_generate_audio(bctx, params.prompt, params.dest_wav_path, params.n_threads)) {
+    if (!bark_generate_audio(bctx, params.prompt, params.n_threads)) {
         fprintf(stderr, "%s: An error occured. If the problem persists, feel free to open an issue to report it.\n", __func__);
         exit(1);
     }

@@ -68,7 +68,7 @@ EMSCRIPTEN_BINDINGS(bark) {
 
                              // run the worker and generate audio
                              {
-                                 g_worker = std::thread([index, prompt, dest_wav_path, n_threads]() {
+                                 g_worker = std::thread([index, prompt, n_threads]() {
                                      ggml_time_init();
                                      const int64_t t_main_start_us = ggml_time_us();
 
