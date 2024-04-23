@@ -85,12 +85,36 @@ jobs:
           cmake ..
           cmake --build . --config Release
 
-  emscripten:
-    runs-on: ubuntu-latest
+  windows-msys2:
+    runs-on: windows-latest
 
     strategy:
+      fail-fast: false
       matrix:
-        build: [Release]
+        include:
+          - { sys: UCRT64,  env: ucrt-x86_64,  build: Release }
+          - { sys: CLANG64, env: clang-x86_64, build: Release }
+        with:
+          submodules: recursive
+
+      - name: Setup ${{ matrix.sys }}
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          msystem: ${{matrix.sys}}
+          install: >-
+            base-devel
+            mingw-w64-${{matrix.env}}-toolchain
+            mingw-w64-${{matrix.env}}-cmake
+
+      - name: Build using CMake
+        shell: msys2 {0}
+        run: |
+            cmake -B build
+            cmake --build build --config ${{ matrix.build }} -j $(nproc)
+
+  emscripten:
+    runs-on: ubuntu-latest
 
     steps:
       - name: Clone
