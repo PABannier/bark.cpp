@@ -228,14 +228,12 @@ struct bark_context *bark_load_model(
  *
  * @param bctx The Bark context to use for generating the audio.
  * @param text The text to generate audio from.
- * @param dest_wav_path The path to save the generated audio file.
  * @param n_threads The number of threads to use for generating the audio.
  * @return An integer indicating the success of the audio generation process.
  */
 bool bark_generate_audio(
     bark_context *bctx,
     std::string &text,
-    std::string &dest_wav_path,
     int n_threads);
 
 /**
