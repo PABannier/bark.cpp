@@ -1,28 +1,9 @@
-# First step: build the Bark library for WASM with Emscripten
 set(TARGET libmain)
 add_executable(${TARGET} emscripten.cpp)
 target_link_libraries(${TARGET} PRIVATE bark)
 target_compile_features(${TARGET} PRIVATE cxx_std_11)
 
-set_target_properties(${TARGET}
-    PROPERTIES
-        EXPORT_COMPILE_COMMANDS ON
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-)
-
 unset(EXTRA_FLAGS)
-
-if (BARK_WASM_SINGLE_FILE)
-    set(EXTRA_FLAGS "-s SINGLE_FILE=1")
-    message(STATUS "Embedding WASM inside main.js")
-
-    add_custom_command(
-        TARGET ${TARGET} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy
-        ${CMAKE_BINARY_DIR}/bin/libmain.js
-        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/wasm/main.js
-    )
-endif()
 
 set_target_properties(${TARGET} PROPERTIES LINK_FLAGS " \
     --bind \
@@ -35,9 +16,7 @@ set_target_properties(${TARGET} PROPERTIES LINK_FLAGS " \
     ${EXTRA_FLAGS} \
     ")
 
-# Second step: build the main.js file
-
 set(TARGET wasm)
 
-# configure_file(${CMAKE_CURRENT_SOURCE_DIR}/index-tmpl.html ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TARGET}/index.html @ONLY)
-# configure_file(${CMAKE_CURRENT_SOURCE_DIR}/helpers.js      ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TARGET}/helpers.js @ONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/index-tmpl.html ${CMAKE_BINARY_DIR}/${TARGET}/index.html @ONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/helpers.js      ${CMAKE_BINARY_DIR}/${TARGET}/helpers.js @ONLY)
