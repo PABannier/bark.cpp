@@ -11,3 +11,5 @@ mkdir build && cd build
 emcmake cmake ..
 make
 ```
+
+You'll need [emscripten](https://emscripten.org). Follow the instructions [here](https://emscripten.org/docs/getting_started/downloads.html#sdk-download-and-install) to install it.

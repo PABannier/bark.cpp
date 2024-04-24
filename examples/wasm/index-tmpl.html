@@ -58,8 +58,10 @@
             </div>
 
             <br>
-            
-            <textarea id="input" rows="5" cols="100" id="prompt" placeholder="Write your text here" onchange="changePrompt(this.value)"></textarea>
+
+
+            Prompt:<br>
+            <textarea rows="5" cols="100" id="prompt" placeholder="Write your text here" onchange="changePrompt(this.value)"></textarea>
 
             <br>
 
@@ -150,9 +152,7 @@
 
                 Module.FS_createDataFile("/", fname, buf, true, true);
 
-                //model_whisper = fname;
-
-                document.getElementById('model-bark-status').innerHTML = 'loaded "' + model_whisper + '"!';
+                document.getElementById('model-bark-status').innerHTML = 'loaded "' + model_bark + '"!';
 
                 printTextarea('storeFS: stored model: ' + fname + ' size: ' + buf.length);
 
@@ -168,6 +168,8 @@
                 printTextarea("loadFile: loading model: " + file.name + ", size: " + file.size + " bytes");
                 printTextarea('loadFile: please wait ...');
 
+                model_bark = file.name;
+
                 var reader = new FileReader();
                 reader.onload = function(event) {
                     var buf = new Uint8Array(reader.result);
@@ -180,8 +182,6 @@
 
                 document.getElementById('bark-file'          ).style.display = 'none';
                 document.getElementById('model-bark-status'  ).innerHTML = 'loaded model: ' + file.name;
-
-                printTextarea('loadFile: model loaded.');
             }
 
             function loadBark(model) {
@@ -191,7 +191,7 @@
                 };
 
                 let sizes = {
-                    'small': 843, 
+                    'small': 843,
                     'large': 2240,
                 };
 
@@ -199,7 +199,7 @@
                 let dst     = 'bark.bin';
                 let size_mb = sizes[model];
 
-                model_whisper = model;
+                model_bark = model;
 
                 document.getElementById('fetch-bark-small').style.display = 'none';
                 document.getElementById('fetch-bark-large').style.display = 'none';
@@ -255,8 +255,8 @@
                     return;
                 }
 
-                if (!audio) {
-                    printTextarea("js: no audio data");
+                if (!promptValue) {
+                    printTextarea("js: no prompt - enter a prompt to generate an audio");
                     return;
                 }
 
@@ -266,7 +266,7 @@
                     printTextarea('');
 
                     setTimeout(function() {
-                        var ret = Module.generate(instance, promptValue, "", nthreads);
+                        var ret = Module.generate(instance, promptValue, nthreads);
                         console.log('js: generate returned: ' + ret);
                         if (ret) {
                             printTextarea("js: bark returned: " + ret);
@@ -275,6 +275,6 @@
                 }
             }
         </script>
-        <script type="text/javascript" src="main.js"></script>
+        <script type="text/javascript" src="libmain.js"></script>
     </body>
 </html>

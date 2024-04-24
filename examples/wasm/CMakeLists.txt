@@ -18,5 +18,5 @@ set_target_properties(${TARGET} PROPERTIES LINK_FLAGS " \
 
 set(TARGET wasm)
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/index-tmpl.html ${CMAKE_BINARY_DIR}/${TARGET}/index.html @ONLY)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/helpers.js      ${CMAKE_BINARY_DIR}/${TARGET}/helpers.js @ONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/index-tmpl.html ${CMAKE_BINARY_DIR}/examples/${TARGET}/index.html @ONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/helpers.js      ${CMAKE_BINARY_DIR}/examples/${TARGET}/helpers.js @ONLY)
