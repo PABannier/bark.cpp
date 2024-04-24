@@ -2062,7 +2062,7 @@ static bool bark_forward_eval(struct bark_context* bctx, int n_threads) {
     return true;
 }
 
-bool bark_generate_audio(struct bark_context* bctx, std::string& text, int n_threads) {
+bool bark_generate_audio(struct bark_context* bctx, const std::string& text, int n_threads) {
     if (!bctx) {
         fprintf(stderr, "%s: invalid bark context\n", __func__);
         return false;

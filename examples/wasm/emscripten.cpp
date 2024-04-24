@@ -43,7 +43,7 @@ EMSCRIPTEN_BINDINGS(bark) {
                              }
                          }));
 
-    emscripten::function("generate", emscripten::optional_override([](size_t index, const std::string &prompt, const std::string &path_wav, int nthreads) {
+    emscripten::function("generate", emscripten::optional_override([](size_t index, const std::string &prompt, int n_threads) {
                              if (g_worker.joinable()) {
                                  g_worker.join();
                              }
@@ -61,7 +61,7 @@ EMSCRIPTEN_BINDINGS(bark) {
                              // print system information
                              {
                                  printf("system_info: n_threads = %d / %d \n",
-                                        params.n_threads, std::thread::hardware_concurrency());
+                                        n_threads, std::thread::hardware_concurrency());
 
                                  printf("\n");
                              }
@@ -72,17 +72,19 @@ EMSCRIPTEN_BINDINGS(bark) {
                                      ggml_time_init();
                                      const int64_t t_main_start_us = ggml_time_us();
 
-                                     if (!bark_generate_audio(g_contexts[index], prompt, dest_wav_path, n_threads)) {
+                                     if (!bark_generate_audio(g_contexts[index], prompt, n_threads)) {
                                          printf("An error occured.");
                                      }
 
                                      const int64_t t_main_end_us = ggml_time_us();
 
                                      printf("\n\n");
-                                     printf("%s:     load time = %8.2f ms\n", __func__, bctx->t_load_us / 1000.0f);
-                                     printf("%s:     eval time = %8.2f ms\n", __func__, bctx->t_eval_us / 1000.0f);
+                                     printf("%s:     load time = %8.2f ms\n", __func__, g_contexts[index]->t_load_us / 1000.0f);
+                                     printf("%s:     eval time = %8.2f ms\n", __func__, g_contexts[index]->t_eval_us / 1000.0f);
                                      printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us) / 1000.0f);
                                  });
                              }
+
+                             return 0;
                          }));
 }

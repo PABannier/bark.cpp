@@ -31,7 +31,7 @@ set_target_properties(${TARGET} PROPERTIES LINK_FLAGS " \
     -s INITIAL_MEMORY=2000MB \
     -s TOTAL_MEMORY=2000MB \
     -s FORCE_FILESYSTEM=1 \
-    -s EXPORTED_RUNTIME_METHODS=\"['print', 'printErr', 'ccall', 'cwrap']\" \
+    -s EXPORTED_RUNTIME_METHODS=\"['out', 'err', 'ccall', 'cwrap']\" \
     ${EXTRA_FLAGS} \
     ")
 
@@ -39,11 +39,5 @@ set_target_properties(${TARGET} PROPERTIES LINK_FLAGS " \
 
 set(TARGET wasm)
 
-set(WASM_OUTPUT_DIR ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/wasm)
-file(MAKE_DIRECTORY ${WASM_OUTPUT_DIR})
-
 # configure_file(${CMAKE_CURRENT_SOURCE_DIR}/index-tmpl.html ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TARGET}/index.html @ONLY)
 # configure_file(${CMAKE_CURRENT_SOURCE_DIR}/helpers.js      ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${TARGET}/helpers.js @ONLY)
-
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/index-tmpl.html ${WASM_OUTPUT_DIR}/index.html @ONLY)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/helpers.js      ${WASM_OUTPUT_DIR}/helpers.js @ONLY)

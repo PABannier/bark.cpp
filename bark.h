@@ -232,8 +232,8 @@ struct bark_context *bark_load_model(
  * @return An integer indicating the success of the audio generation process.
  */
 bool bark_generate_audio(
-    bark_context *bctx,
-    std::string &text,
+    struct bark_context *bctx,
+    const std::string &text,
     int n_threads);
 
 /**
