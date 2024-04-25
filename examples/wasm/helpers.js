@@ -210,3 +210,39 @@ function loadRemote(url, dst, size_mb, cbProgress, cbReady, cbCancel, cbPrint) {
     cbCancel();
   };
 }
+
+function floatToWav(float32Array, sampleRate) {
+  var buffer = new ArrayBuffer(44 + float32Array.length * 2);
+  var view = new DataView(buffer);
+
+  // Write WAV header
+  writeString(view, 0, "RIFF");
+  view.setUint32(4, 36 + float32Array.length * 2, true);
+  writeString(view, 8, "WAVE");
+  writeString(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM format
+  view.setUint16(22, 1, true); // Mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); // Byte rate
+  view.setUint16(32, 2, true); // Block align
+  view.setUint16(34, 16, true); // Bits per sample
+  writeString(view, 36, "data");
+  view.setUint32(40, float32Array.length * 2, true);
+
+  // Write PCM samples
+  var index = 44;
+  for (var i = 0; i < float32Array.length; i++) {
+    var sample = Math.max(-1, Math.min(1, float32Array[i]));
+    view.setInt16(index, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+    index += 2;
+  }
+
+  return buffer;
+
+  function writeString(view, offset, string) {
+    for (var i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  }
+}

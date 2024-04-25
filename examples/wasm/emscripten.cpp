@@ -87,4 +87,19 @@ EMSCRIPTEN_BINDINGS(bark) {
 
                              return 0;
                          }));
+
+    emscripten::function("getAudioBuffer", emscripten::optional_override([](size_t index) -> emscripten::val {
+                             printf("getAudioBuffer: index = %d\n", index);
+                             printf("context size = %d\n", g_contexts.size());
+                             printf("context ptr = %p\n", g_contexts[index]);
+                             if (index >= g_contexts.size() || g_contexts[index] == nullptr) {
+                                 return emscripten::val::null();
+                             }
+
+                             emscripten::val result = emscripten::val::object();
+                             result.set("ptr", reinterpret_cast<uintptr_t>(g_contexts[index]->audio_arr.data()));
+                             result.set("size", g_contexts[index]->audio_arr.size() * sizeof(float));
+
+                             return result;
+                         }));
 }

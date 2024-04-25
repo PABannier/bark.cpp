@@ -12,8 +12,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 if (EMSCRIPTEN)
-    set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -pthread")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
+    set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -pthread -O3")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -O3")
 endif()
 
 set(BARK_LIB bark)

@@ -58,19 +58,15 @@
             </div>
 
             <br>
-
+            <br>
 
             Prompt:<br>
             <textarea rows="5" cols="100" id="prompt" placeholder="Write your text here" onchange="changePrompt(this.value)"></textarea>
 
-            <br>
-
-            <div id="audio_player" style="display: none;">
-                Generated audio:
-            </div>
+            <br><br>
 
             <audio controls="controls" id="audio" loop hidden>
-                Your browser does not support the &lt;audio&gt; tag.
+                Your browser does not support the audio element.
                 <source id="source" src="" type="audio/wav" />
             </audio>
 
@@ -132,6 +128,23 @@
             // the bark instance
             var instance = null;
             var model_bark = '';
+
+            //
+            // display audio
+            //
+
+            function setAudio() {
+                if (audio) {
+                    var wavBuffer = floatToWav(audio, 24000);
+                    var blob = new Blob([wavBuffer], { type: 'audio/wav' });
+                    var url  = URL.createObjectURL(blob);
+
+                    document.getElementById('source').src = url;
+                    document.getElementById('audio').hidden = false;
+                    document.getElementById('audio').loop = false;
+                    document.getElementById('audio').load();
+                }
+            }
 
             //
             // load model
@@ -270,6 +283,17 @@
                         console.log('js: generate returned: ' + ret);
                         if (ret) {
                             printTextarea("js: bark returned: " + ret);
+                            return;
+                        }
+
+                        printTextarea("js: audio generated!");
+
+                        var bufferInfo = Module.getAudioBuffer(instance);
+
+                        if (bufferInfo) {
+                            var bufferSlice = Module.HEAPF32.subarray(bufferInfo.ptr / Float32Array.BYTES_PER_ELEMENT, (bufferInfo.ptr + bufferInfo.size) / Float32Array.BYTES_PER_ELEMENT);
+                            audio = new Float32Array(bufferSlice);
+                            setAudio();
                         }
                     }, 100);
                 }
