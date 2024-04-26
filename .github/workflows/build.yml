@@ -92,8 +92,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { sys: UCRT64,  env: ucrt-x86_64,  build: Release }
+          - { sys: UCRT64, env: ucrt-x86_64, build: Release }
           - { sys: CLANG64, env: clang-x86_64, build: Release }
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -110,8 +114,8 @@ jobs:
       - name: Build using CMake
         shell: msys2 {0}
         run: |
-            cmake -B build
-            cmake --build build --config ${{ matrix.build }} -j $(nproc)
+          cmake -B build
+          cmake --build build --config ${{ matrix.build }} -j $(nproc)
 
   emscripten:
     runs-on: ubuntu-latest
