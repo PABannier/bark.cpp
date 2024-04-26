@@ -1070,7 +1070,7 @@ static bool bark_load_model_from_file(
     return true;
 }
 
-struct bark_context* bark_load_model(const std::string& model_path, bark_verbosity_level verbosity) {
+struct bark_context* bark_load_model(const std::string& model_path, bark_verbosity_level verbosity, uint32_t seed) {
     int64_t t_load_start_us = ggml_time_us();
 
     struct bark_context* bctx = new bark_context();
@@ -1083,7 +1083,7 @@ struct bark_context* bark_load_model(const std::string& model_path, bark_verbosi
 
     bark_context_params params = bark_context_default_params();
     params.verbosity = verbosity;
-    bctx->rng = std::mt19937(params.seed);
+    bctx->rng = std::mt19937(seed);
     bctx->params = params;
     bctx->t_load_us = ggml_time_us() - t_load_start_us;
 
@@ -2136,7 +2136,6 @@ void bark_free(struct bark_context* bctx) {
 
 struct bark_context_params bark_context_default_params() {
     struct bark_context_params result = {
-        /*.seed                        =*/0,
         /*.verbosity                   =*/bark_verbosity_level::LOW,
         /*.temp                        =*/0.7,
         /*.fine_temp                   =*/0.5,

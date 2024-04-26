@@ -113,8 +113,6 @@ struct bark_model {
 };
 
 struct bark_context_params {
-    // RNG seed
-    uint32_t seed;
     // Verbosity level
     bark_verbosity_level verbosity;
 
@@ -217,11 +215,13 @@ struct bark_context_params bark_context_default_params(void);
  *
  * @param model_path The directory path of the bark model to load.
  * @param verbosity  The verbosity level when loading the model.
+ * @param seed       The seed to use for random number generation.
  * @return A pointer to the loaded bark model context.
  */
 struct bark_context *bark_load_model(
     const std::string &model_path,
-    bark_verbosity_level verbosity);
+    bark_verbosity_level verbosity,
+    uint32_t seed);
 
 /**
  * Generates an audio file from the given text using the specified Bark context.
