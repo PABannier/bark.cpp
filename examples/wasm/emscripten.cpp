@@ -18,7 +18,7 @@ EMSCRIPTEN_BINDINGS(bark) {
 
                              for (size_t i = 0; i < g_contexts.size(); i++) {
                                  if (g_contexts[i] == nullptr) {
-                                     g_contexts[i] = bark_load_model(path_model.c_str(), bark_verbosity_level::LOW);
+                                     g_contexts[i] = bark_load_model(path_model.c_str(), bark_verbosity_level::LOW, 0);
                                      if (g_contexts[i] != nullptr) {
                                          return i + 1;
                                      } else {

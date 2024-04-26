@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
               << "\n";
 
     // initialize bark context
-    struct bark_context *bctx = bark_load_model(params.model_path, verbosity);
+    struct bark_context *bctx = bark_load_model(params.model_path, verbosity, params.seed);
     if (!bctx) {
         fprintf(stderr, "%s: Could not load model\n", __func__);
         exit(1);
