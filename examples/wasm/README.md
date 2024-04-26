@@ -2,7 +2,9 @@
 
 This demo runs `bark.cpp` in your browser using WebAssembly.
 
-**Important Note: Your browser must support 128-bit SIMD instructions.**
+**Import Note: The forward pass is currently extremely slow. This is because ggml only has `WASM_SIMD` implementation for the matrix multiplication operation. This is left as an open experiment.**
+See [155](https://github.com/PABannier/bark.cpp/pull/155) for more details.
+**Important Note 2: Your browser must support 128-bit SIMD instructions.**
 
 To build the example, run from the root of the repository:
 
