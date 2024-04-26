@@ -122,7 +122,7 @@ int main(int argc, char **argv) {
 
         // generate audio
         std::string dest_wav_path = "/tmp/bark_tmp.wav";
-        bark_generate_audio(bctx, text, dest_wav_path, params.n_threads);
+        bark_generate_audio(bctx, text, params.n_threads);
 
         // read audio as binary
         std::ifstream wav_file("/tmp/bark_tmp.wav", std::ios::binary);

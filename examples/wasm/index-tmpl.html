@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en-us">
+    <head>
+        <title>bark.cpp : WASM example</title>
+
+        <style>
+            #output {
+                width: 100%;
+                height: 100%;
+                margin: 0 auto;
+                margin-top: 10px;
+                border-left: 0px;
+                border-right: 0px;
+                padding-left: 0px;
+                padding-right: 0px;
+                display: block;
+                background-color: black;
+                color: white;
+                font-size: 10px;
+                font-family: 'Lucida Console', Monaco, monospace;
+                outline: none;
+                white-space: pre;
+                overflow-wrap: normal;
+                overflow-x: scroll;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="main-container">
+            <b>Minimal <a href="https://github.com/PABannier/bark.cpp">bark.cpp</a> example running fully in the browser</b>
+
+            <br><br>
+
+            Usage instructions:<br>
+            <ul>
+                <li>Load a ggml model file (you can obtain one from <a href="https://ggml.ggerganov.com/">here</a>, recommended: <b>small</b>)</li>
+                <li>Write an audio to speechify in the textbox</li>
+                <li>Click on the "Speechify" button to start the generation</li>
+            </ul>
+
+            Note that the computation is quite heavy and may take a few seconds to complete.<br>
+            After generation, an audio player will appear below the textbox.<br><br>
+            <b>Important:</b>
+                <ul>
+                    <li>your browser must support WASM SIMD instructions for this to work</li>
+                    <li>Firefox cannot load files larger than 256 MB - use Chrome instead</li>
+                </ul>
+
+            <hr>
+
+            <div id="model">
+                Bark models: <span id="model-bark-status"></span><br><br>
+                <button id="fetch-bark-small"  onclick="loadBark('small')">small (843 MB)</button>
+                <button id="fetch-bark-large"  onclick="loadBark('large')">large (2.2 GB)</button>
+                <input type="file" id="bark-file" name="file" onchange="loadFile(event, 'bark.bin')" />
+                <br><br>
+                <span id="fetch-bark-progress"></span>
+            </div>
+
+            <br>
+            <br>
+
+            Prompt:<br>
+            <textarea rows="5" cols="100" id="prompt" placeholder="Write your text here" onchange="changePrompt(this.value)"></textarea>
+
+            <br><br>
+
+            <audio controls="controls" id="audio" loop hidden>
+                Your browser does not support the audio element.
+                <source id="source" src="" type="audio/wav" />
+            </audio>
+
+            <hr><br>
+
+            <table>
+                <tr>
+                    <!-- Slider to select number of threads between 1 and 16 -->
+                    <td>
+                        Threads:
+                        <input type="range" id="threads" name="threads" min="1" max="16" value="8" onchange="changeThreads(this.value)" />
+                        <span id="threads-value">8</span>
+                    </td>
+                    <td>
+                        <button onclick="onProcess(false);">Generate</button>
+                    </td>
+                </tr>
+            </table>
+
+            <br>
+
+            <!-- textarea with height filling the rest of the page -->
+            <textarea id="output" rows="20"></textarea>
+
+            <br><br>
+
+            <div class="cell-version">
+                <span>
+                    |
+                    Build time: <span class="nav-link">@GIT_DATE@</span> |
+                    Commit hash: <a class="nav-link" href="https://github.com/PABannier/bark.cpp/commit/@GIT_SHA1@">@GIT_SHA1@</a> |
+                    Commit subject: <span class="nav-link">@GIT_COMMIT_SUBJECT@</span> |
+                    <a class="nav-link" href="https://github.com/PABannier/bark.cpp">Source Code</a> |
+                </span>
+            </div>
+        </div>
+
+        <script type="text/javascript" src="helpers.js"></script>
+        <script type='text/javascript'>
+            var Module = {
+                out: printTextarea,
+                err: printTextarea,
+                setStatus: function(text) {
+                    printTextarea('js: ' + text);
+                },
+                monitorRunDependencies: function(left) {
+                }
+            };
+
+            // web audio context
+            var context = null;
+
+            // the prompt
+            var promptValue = null;
+
+            // the audio data
+            var audio = null;
+
+            // the bark instance
+            var instance = null;
+            var model_bark = '';
+
+            //
+            // display audio
+            //
+
+            function setAudio() {
+                if (audio) {
+                    var wavBuffer = floatToWav(audio, 24000);
+                    var blob = new Blob([wavBuffer], { type: 'audio/wav' });
+                    var url  = URL.createObjectURL(blob);
+
+                    document.getElementById('source').src = url;
+                    document.getElementById('audio').hidden = false;
+                    document.getElementById('audio').loop = false;
+                    document.getElementById('audio').load();
+                }
+            }
+
+            //
+            // load model
+            //
+
+            let dbVersion = 1
+            let dbName    = 'whisper.ggerganov.com';
+            let indexedDB = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB
+
+            function storeFS(fname, buf) {
+                // write to WASM file using FS_createDataFile
+                // if the file exists, delete it
+                try {
+                    Module.FS_unlink(fname);
+                } catch (e) {
+                    // ignore
+                }
+
+                Module.FS_createDataFile("/", fname, buf, true, true);
+
+                document.getElementById('model-bark-status').innerHTML = 'loaded "' + model_bark + '"!';
+
+                printTextarea('storeFS: stored model: ' + fname + ' size: ' + buf.length);
+
+                document.getElementById('model').innerHTML = 'Model fetched: ' + model_bark;
+            }
+
+            function loadFile(event, fname) {
+                var file = event.target.files[0] || null;
+                if (file == null) {
+                    return;
+                }
+
+                printTextarea("loadFile: loading model: " + file.name + ", size: " + file.size + " bytes");
+                printTextarea('loadFile: please wait ...');
+
+                model_bark = file.name;
+
+                var reader = new FileReader();
+                reader.onload = function(event) {
+                    var buf = new Uint8Array(reader.result);
+                    storeFS(fname, buf);
+                }
+                reader.readAsArrayBuffer(file);
+
+                document.getElementById('fetch-bark-small').style.display = 'none';
+                document.getElementById('fetch-bark-large').style.display = 'none';
+
+                document.getElementById('bark-file'          ).style.display = 'none';
+                document.getElementById('model-bark-status'  ).innerHTML = 'loaded model: ' + file.name;
+            }
+
+            function loadBark(model) {
+                let urls = {
+                    'small': 'HF LINK',
+                    'large': 'HF LINK',
+                };
+
+                let sizes = {
+                    'small': 843,
+                    'large': 2240,
+                };
+
+                let url     = urls[model];
+                let dst     = 'bark.bin';
+                let size_mb = sizes[model];
+
+                model_bark = model;
+
+                document.getElementById('fetch-bark-small').style.display = 'none';
+                document.getElementById('fetch-bark-large').style.display = 'none';
+
+                document.getElementById('bark-file'        ).style.display = 'none';
+                document.getElementById('model-bark-status').innerHTML = 'loading model: ' + model;
+
+                cbProgress = function(p) {
+                    let el = document.getElementById('fetch-bark-progress');
+                    el.innerHTML = Math.round(100*p) + '%';
+                };
+
+                cbCancel = function() {
+                    var el;
+
+                    el = document.getElementById('fetch-bark-small'); if (el) el.style.display = 'inline-block';
+                    el = document.getElementById('fetch-bark-large'); if (el) el.style.display = 'inline-block';
+
+                    el = document.getElementById('bark-file'        ); if (el) el.style.display = 'inline-block';
+                    el = document.getElementById('model-bark-status'); if (el) el.innerHTML = '';
+                };
+
+                loadRemote(url, dst, size_mb, cbProgress, storeFS, cbCancel, printTextarea);
+            }
+
+            //
+            // generate audio
+            //
+
+            var nthreads = 8;
+
+            function changeThreads(value) {
+                nthreads = value;
+                document.getElementById('threads-value').innerHTML = nthreads;
+            }
+
+            function changePrompt(value) {
+                promptValue = value;
+            }
+
+            function onProcess(translate) {
+                if (!instance) {
+                    instance = Module.init('bark.bin');
+
+                    if (instance) {
+                        printTextarea("js: bark initialized, instance: " + instance);
+                        document.getElementById('model').innerHTML = 'Model loaded: ' + model_bark;
+                    }
+                }
+
+                if (!instance) {
+                    printTextarea("js: failed to initialize bark");
+                    return;
+                }
+
+                if (!promptValue) {
+                    printTextarea("js: no prompt - enter a prompt to generate an audio");
+                    return;
+                }
+
+                if (instance) {
+                    printTextarea('');
+                    printTextarea('js: processing - this might take a while ...');
+                    printTextarea('');
+
+                    setTimeout(function() {
+                        var ret = Module.generate(instance, promptValue, nthreads);
+                        console.log('js: generate returned: ' + ret);
+                        if (ret) {
+                            printTextarea("js: bark returned: " + ret);
+                            return;
+                        }
+
+                        printTextarea("js: audio generated!");
+
+                        var bufferInfo = Module.getAudioBuffer(instance);
+
+                        if (bufferInfo) {
+                            var bufferSlice = Module.HEAPF32.subarray(bufferInfo.ptr / Float32Array.BYTES_PER_ELEMENT, (bufferInfo.ptr + bufferInfo.size) / Float32Array.BYTES_PER_ELEMENT);
+                            audio = new Float32Array(bufferSlice);
+                            setAudio();
+                        }
+                    }, 100);
+                }
+            }
+        </script>
+        <script type="text/javascript" src="libmain.js"></script>
+    </body>
+</html>

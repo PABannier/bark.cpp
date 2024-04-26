@@ -11,6 +11,11 @@ endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
+if (EMSCRIPTEN)
+    set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -pthread -O3")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -O3")
+endif()
+
 set(BARK_LIB bark)
 
 add_subdirectory(encodec.cpp)
@@ -24,6 +29,10 @@ endif()
 target_link_libraries(${BARK_LIB} PUBLIC ggml encodec)
 target_include_directories(${BARK_LIB} PUBLIC .)
 target_compile_features(${BARK_LIB} PUBLIC cxx_std_11)
+
+if (EMSCRIPTEN)
+    set_target_properties(${BARK_LIB} PROPERTIES COMPILE_FLAGS "-msimd128")
+endif()
 
 if (GGML_CUBLAS)
     add_compile_definitions(GGML_USE_CUBLAS)

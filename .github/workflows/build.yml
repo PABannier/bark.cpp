@@ -92,7 +92,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { sys: UCRT64,  env: ucrt-x86_64,  build: Release }
+          - { sys: UCRT64, env: ucrt-x86_64, build: Release }
           - { sys: CLANG64, env: clang-x86_64, build: Release }
 
     steps:
@@ -114,5 +114,25 @@ jobs:
       - name: Build using CMake
         shell: msys2 {0}
         run: |
-            cmake -B build
-            cmake --build build --config ${{ matrix.build }} -j $(nproc)
+          cmake -B build
+          cmake --build build --config ${{ matrix.build }} -j $(nproc)
+
+  emscripten:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup emsdk
+        uses: mymindstorm/setup-emsdk@v12
+
+      - name: Verify
+        run: emcc -v
+
+      - name: Build
+        run: |
+          emcmake cmake . -DCMAKE_BUILD_TYPE=${{ matrix.build }}
+          make
