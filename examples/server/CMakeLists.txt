@@ -6,4 +6,5 @@ target_link_libraries(${TARGET} PRIVATE bark ${CMAKE_THREAD_LIBS_INIT})
 
 if (WIN32)
     target_link_libraries(${TARGET} PRIVATE ws2_32)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:10485760")
 endif()
