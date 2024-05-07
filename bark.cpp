@@ -2,6 +2,10 @@
 #include "ggml-backend.h"
 #include "ggml.h"
 
+#ifdef BARK_USE_COREML
+#include "coreml/bark.h"
+#endif
+
 #ifdef GGML_USE_CUBLAS
 #include "ggml-cuda.h"
 #endif
