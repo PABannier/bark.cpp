@@ -7,6 +7,10 @@
 #include "ggml-backend.h"
 #include "ggml.h"
 
+#ifdef BARK_USE_COREML
+#include "coreml/bark.h"
+#endif
+
 enum class bark_verbosity_level {
     LOW = 0,
     MEDIUM = 1,
@@ -201,6 +205,10 @@ struct bark_context {
 
     // encodec parameters
     std::string encodec_model_path;
+
+#ifdef BARK_USE_COREML
+    bark_coreml_context * ctx_coreml = nullptr;
+#endif
 };
 
 /**
