@@ -21,13 +21,16 @@ actor BarkContext {
         // Leave 2 processors free (i.e. the high-efficiency cores).
         let maxThreads = max(1, min(8, cpuCount() - 2))
         print("Using \(maxThreads) threads for audio generation")
-        if (bark_generate_audio(self.context, text, maxThreads)) {
-            let audio = bark_get_audio_data(self.context)
-            let audioLength = bark_get_audio_data_size(self.context)
-            return Array(UnsafeBufferPointer(start: audio, count: audioLength))
-        } else {
-            throw BarkError.couldNotGenerateAudio
+        let audioArray = try text.withCString { prompt in
+            if (bark_generate_audio(self.context, prompt, Int32(maxThreads))) {
+                let audio = bark_get_audio_data(self.context)
+                let audioLength = bark_get_audio_data_size(self.context)
+                return Array(UnsafeBufferPointer(start: audio, count: Int(audioLength)))
+            } else {
+                throw BarkError.couldNotGenerateAudio
+            }
         }
+        return audioArray
     }
 
     static func createContext(path: String, seed: Int) throws -> BarkContext {

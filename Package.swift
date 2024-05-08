@@ -18,7 +18,6 @@ let package = Package(
             name: "bark",
             path: ".",
             exclude: [
-               "coreml",
                "examples",
                "models",
                "Dockerfile",
@@ -28,10 +27,10 @@ let package = Package(
             ],
             sources: [
                 "bark.cpp",
-                "encodec.cpp",
-                "ggml.c",
-                "ggml-alloc.c",
-                "ggml-backend.c",
+                "encodec.cpp/encodec.cpp",
+                "encodec.cpp/ggml/src/ggml-alloc.c",
+                "encodec.cpp/ggml/src/ggml-backend.c",
+                "encodec.cpp/ggml/src/ggml.c",
             ],
             publicHeadersPath: "spm-headers",
             cSettings: [
