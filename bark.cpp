@@ -2301,3 +2301,17 @@ bool bark_model_quantize(
 
     return true;
 }
+
+float * bark_get_audio_data(struct bark_context *bctx) {
+    if (!bctx || bctx->audio_arr.empty()) {
+        return nullptr;
+    }
+    return bctx->audio_arr.data();
+}
+
+int32_t bark_get_audio_size(struct bark_context *bctx) {
+    if (!bctx || bctx->audio_arr.empty()) {
+        return 0;
+    }
+    return bctx->audio_arr.size();
+}
