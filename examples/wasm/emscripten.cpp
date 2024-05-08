@@ -18,7 +18,7 @@ EMSCRIPTEN_BINDINGS(bark) {
 
                              for (size_t i = 0; i < g_contexts.size(); i++) {
                                  if (g_contexts[i] == nullptr) {
-                                     g_contexts[i] = bark_load_model(path_model.c_str(), bark_verbosity_level::LOW, 0);
+                                     g_contexts[i] = bark_load_model(path_model.c_str(), bark_verbosity_level::LOW, 0 /* seed */);
                                      if (g_contexts[i] != nullptr) {
                                          return i + 1;
                                      } else {
@@ -77,10 +77,11 @@ EMSCRIPTEN_BINDINGS(bark) {
                                      }
 
                                      const int64_t t_main_end_us = ggml_time_us();
+                                     const struct bark_statistics *stats = bark_get_statistics(g_contexts[index]);
 
                                      printf("\n\n");
-                                     printf("%s:     load time = %8.2f ms\n", __func__, g_contexts[index]->t_load_us / 1000.0f);
-                                     printf("%s:     eval time = %8.2f ms\n", __func__, g_contexts[index]->t_eval_us / 1000.0f);
+                                     printf("%s:     load time = %8.2f ms\n", __func__, stats->t_load_us / 1000.0f);
+                                     printf("%s:     eval time = %8.2f ms\n", __func__, stats->t_eval_us / 1000.0f);
                                      printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us) / 1000.0f);
                                  });
                              }
@@ -93,9 +94,17 @@ EMSCRIPTEN_BINDINGS(bark) {
                                  return emscripten::val::null();
                              }
 
+                             const float * audio_data = bark_get_audio_data(g_contexts[index]);
+                             if (audio_data == nullptr) {
+                                printf("Could not retrieve audio data");
+                                return emscripten::val::null();
+                             }
+
+                             const int n_samples = bark_get_audio_data_size(g_contexts[index]);
+
                              emscripten::val result = emscripten::val::object();
-                             result.set("ptr", reinterpret_cast<uintptr_t>(g_contexts[index]->audio_arr.data()));
-                             result.set("size", g_contexts[index]->audio_arr.size() * sizeof(float));
+                             result.set("ptr", reinterpret_cast<uintptr_t>(audio_data));
+                             result.set("size", n_samples * sizeof(float));
 
                              return result;
                          }));
