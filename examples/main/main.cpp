@@ -31,28 +31,41 @@ int main(int argc, char **argv) {
               << "\n";
 
     // initialize bark context
-    struct bark_context *bctx = bark_load_model(params.model_path, verbosity, params.seed);
+    struct bark_context *bctx = bark_load_model(params.model_path.c_str(), verbosity, params.seed);
     if (!bctx) {
         fprintf(stderr, "%s: Could not load model\n", __func__);
         exit(1);
     }
 
+    bark_reset_statistics(bctx);
+
     // generate audio
-    if (!bark_generate_audio(bctx, params.prompt, params.n_threads)) {
+    if (!bark_generate_audio(bctx, params.prompt.c_str(), params.n_threads)) {
         fprintf(stderr, "%s: An error occured. If the problem persists, feel free to open an issue to report it.\n", __func__);
         exit(1);
     }
 
-    auto &audio_arr = bctx->audio_arr;
+    // auto &audio_arr = bctx->audio_arr;
+    const float *audio_data = bark_get_audio_data(bctx);
+    if (audio_data == NULL) {
+        fprintf(stderr, "%s: Could not get audio data\n", __func__);
+        exit(1);
+    }
+
+    const int audio_arr_size = bark_get_audio_data_size(bctx);
+
+    std::vector<float> audio_arr(audio_data, audio_data + audio_arr_size);
+
     write_wav_on_disk(audio_arr, params.dest_wav_path);
 
     // report timing
     {
         const int64_t t_main_end_us = ggml_time_us();
+        const struct bark_statistics *stats = bark_get_statistics(bctx);
 
         printf("\n\n");
-        printf("%s:     load time = %8.2f ms\n", __func__, bctx->t_load_us / 1000.0f);
-        printf("%s:     eval time = %8.2f ms\n", __func__, bctx->t_eval_us / 1000.0f);
+        printf("%s:     load time = %8.2f ms\n", __func__, stats->t_load_us / 1000.0f);
+        printf("%s:     eval time = %8.2f ms\n", __func__, stats->t_eval_us / 1000.0f);
         printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us) / 1000.0f);
     }
 
