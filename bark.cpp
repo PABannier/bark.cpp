@@ -1070,14 +1070,15 @@ static bool bark_load_model_from_file(
     return true;
 }
 
-struct bark_context* bark_load_model(const std::string& model_path, bark_verbosity_level verbosity, uint32_t seed) {
+struct bark_context* bark_load_model(const char *model_path, bark_verbosity_level verbosity, uint32_t seed) {
     int64_t t_load_start_us = ggml_time_us();
 
     struct bark_context* bctx = new bark_context();
 
     bctx->text_model = bark_model();
-    if (!bark_load_model_from_file(model_path, bctx, verbosity)) {
-        fprintf(stderr, "%s: failed to load model weights from '%s'\n", __func__, model_path.c_str());
+    std::string model_path_str(model_path);
+    if (!bark_load_model_from_file(model_path_str, bctx, verbosity)) {
+        fprintf(stderr, "%s: failed to load model weights from '%s'\n", __func__, model_path);
         return nullptr;
     }
 
@@ -2062,7 +2063,7 @@ static bool bark_forward_eval(struct bark_context* bctx, int n_threads) {
     return true;
 }
 
-bool bark_generate_audio(struct bark_context* bctx, const std::string& text, int n_threads) {
+bool bark_generate_audio(struct bark_context* bctx, const char * text, int n_threads) {
     if (!bctx) {
         fprintf(stderr, "%s: invalid bark context\n", __func__);
         return false;
@@ -2070,7 +2071,8 @@ bool bark_generate_audio(struct bark_context* bctx, const std::string& text, int
 
     int64_t t_start_eval_us = ggml_time_us();
 
-    bark_tokenize_input(bctx, text);
+    std::string text_str(text);
+    bark_tokenize_input(bctx, text_str);
 
     if (!bark_forward_eval(bctx, n_threads)) {
         fprintf(stderr, "%s: failed to forward eval\n", __func__);
@@ -2300,4 +2302,18 @@ bool bark_model_quantize(
     fout.close();
 
     return true;
+}
+
+float * bark_get_audio_data(struct bark_context *bctx) {
+    if (!bctx || bctx->audio_arr.empty()) {
+        return nullptr;
+    }
+    return bctx->audio_arr.data();
+}
+
+int bark_get_audio_data_size(struct bark_context *bctx) {
+    if (!bctx || bctx->audio_arr.empty()) {
+        return 0;
+    }
+    return bctx->audio_arr.size();
 }
