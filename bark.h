@@ -11,11 +11,6 @@ extern "C" {
         HIGH = 2,
     };
 
-    typedef int32_t bark_token;
-
-    typedef std::vector<int32_t> bark_sequence;
-    typedef std::vector<std::vector<int32_t>> bark_codes;
-
     struct gpt_hparams {
         int32_t n_in_vocab;
         int32_t n_out_vocab;

@@ -32,6 +32,10 @@
 
 static const size_t MB = 1024 * 1024;
 
+typedef int32_t bark_token;
+typedef std::vector<int32_t> bark_sequence;
+typedef std::vector<std::vector<int32_t>> bark_codes;
+
 struct bark_vocab {
     using id = int32_t;
     using token = std::string;
