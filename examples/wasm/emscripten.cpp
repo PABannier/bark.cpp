@@ -72,7 +72,7 @@ EMSCRIPTEN_BINDINGS(bark) {
                                      ggml_time_init();
                                      const int64_t t_main_start_us = ggml_time_us();
 
-                                     if (!bark_generate_audio(g_contexts[index], prompt, n_threads)) {
+                                     if (!bark_generate_audio(g_contexts[index], prompt.c_str(), n_threads)) {
                                          printf("An error occured.");
                                      }
 
