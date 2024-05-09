@@ -135,7 +135,8 @@ struct bark_context {
     bark_codes coarse_tokens;
     bark_codes fine_tokens;
 
-    std::vector<float> audio_arr;
+    float * generated_audio   = NULL;
+    int n_generated_samples = 0;
 
     // hyperparameters
     bark_context_params params;
@@ -2223,12 +2224,14 @@ bool bark_generate_audio(struct bark_context* bctx, const char * text, int n_thr
         }
     }
 
-    if (!encodec_decompress_audio(bctx->encodec_ctx, encodec_tokens, n_threads)) {
+    if (!encodec_decompress_audio(bctx->encodec_ctx, encodec_tokens.data(), encodec_tokens.size(), n_threads)) {
         printf("%s: Could not generate waveform from tokens with Encodec\n", __func__);
         return false;
     }
 
-    bctx->audio_arr = bctx->encodec_ctx->out_audio;
+    bctx->generated_audio = encodec_get_audio(bctx->encodec_ctx);
+    bctx->n_generated_samples = encodec_get_audio_size(bctx->encodec_ctx);
+
     bctx->stats.t_eval_us = ggml_time_us() - t_start_eval_us;
 
     return true;
@@ -2430,17 +2433,17 @@ bool bark_model_quantize(const char * fname_inp, const char * fname_out, ggml_ft
 }
 
 float * bark_get_audio_data(struct bark_context *bctx) {
-    if (!bctx || bctx->audio_arr.empty()) {
+    if (!bctx) {
         return nullptr;
     }
-    return bctx->audio_arr.data();
+    return bctx->generated_audio;
 }
 
 int bark_get_audio_data_size(struct bark_context *bctx) {
-    if (!bctx || bctx->audio_arr.empty()) {
+    if (!bctx || bctx->generated_audio == NULL) {
         return 0;
     }
-    return bctx->audio_arr.size();
+    return bctx->n_generated_samples;
 }
 
 const bark_statistics * bark_get_statistics(struct bark_context *bctx) {
