@@ -1173,7 +1173,10 @@ static bool bark_load_model_from_file(
 
     // codec model
     {
-        bctx->encodec_ctx = encodec_load_model(fin, n_gpu_layers);
+        const int offset = fin.tellg();
+        fin.close();
+
+        bctx->encodec_ctx = encodec_load_model(fname.c_str(), offset, n_gpu_layers);
         if (!bctx->encodec_ctx) {
             fprintf(stderr, "%s: invalid model file '%s' (bad encodec)\n", __func__, fname.c_str());
             return false;
