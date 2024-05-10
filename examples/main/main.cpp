@@ -5,6 +5,17 @@
 #include "common.h"
 #include "ggml.h"
 
+void bark_print_progress_callback(struct bark_context *bctx, enum bark_encoding_step step, int progress, void *user_data) {
+    if (step == bark_encoding_step::SEMANTIC) {
+        printf("\rGenerating semantic tokens... %d%%", progress);
+    } else if (step == bark_encoding_step::COARSE) {
+        printf("\rGenerating coarse tokens... %d%%", progress);
+    } else if (step == bark_encoding_step::FINE) {
+        printf("\rGenerating fine tokens... %d%%", progress);
+    }
+    fflush(stdout);
+}
+
 int main(int argc, char **argv) {
     ggml_time_init();
     const int64_t t_main_start_us = ggml_time_us();
@@ -17,21 +28,23 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    std::cout << R"(    __               __                          )"
-              << "\n"
-              << R"(   / /_  ____ ______/ /__        _________  ____ )"
-              << "\n"
-              << R"(  / __ \/ __ `/ ___/ //_/       / ___/ __ \/ __ \)"
-              << "\n"
-              << R"( / /_/ / /_/ / /  / ,<    _    / /__/ /_/ / /_/ /)"
-              << "\n"
-              << R"(/_.___/\__,_/_/  /_/|_|  (_)   \___/ .___/ .___/ )"
-              << "\n"
-              << R"(                                  /_/   /_/      )"
-              << "\n";
+    std::cout << R"( _                   _                           )" << "\n"
+              << R"(| |                 | |                          )" << "\n"
+              << R"(| |__    __ _  _ __ | | __     ___  _ __   _ __  )" << "\n"
+              << R"(| '_ \  / _` || '__|| |/ /    / __|| '_ \ | '_ \ )" << "\n"
+              << R"(| |_) || (_| || |   |   <  _ | (__ | |_) || |_) |)" << "\n"
+              << R"(|_.__/  \__,_||_|   |_|\_\(_) \___|| .__/ | .__/ )" << "\n"
+              << R"(                                   | |    | |    )" << "\n"
+              << R"(                                   |_|    |_|    )" << "\n";
 
     // initialize bark context
-    struct bark_context *bctx = bark_load_model(params.model_path.c_str(), verbosity, params.seed);
+    struct bark_context_params ctx_params = bark_context_default_params();
+
+    ctx_params.verbosity = verbosity;
+    ctx_params.progress_callback = bark_print_progress_callback;
+    ctx_params.progress_callback_user_data = nullptr;
+
+    struct bark_context *bctx = bark_load_model(params.model_path.c_str(), ctx_params, params.seed);
     if (!bctx) {
         fprintf(stderr, "%s: Could not load model\n", __func__);
         exit(1);

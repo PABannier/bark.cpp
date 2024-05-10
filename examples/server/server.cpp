@@ -90,10 +90,14 @@ int main(int argc, char **argv) {
     const int64_t t_main_start_us = ggml_time_us();
 
     bark_params params;
+    bark_verbosity_level verbosity = bark_verbosity_level::LOW;
 
     bark_params_parse(argc, argv, params);
 
-    struct bark_context *bctx = bark_load_model(params.model_path.c_str(), bark_verbosity_level::LOW, params.seed);
+    struct bark_context_params ctx_params = bark_context_default_params();
+    ctx_params.verbosity = verbosity;
+
+    struct bark_context *bctx = bark_load_model(params.model_path.c_str(), ctx_params, params.seed);
     if (!bctx) {
         fprintf(stderr, "%s: Could not load model\n", __func__);
         return 1;
