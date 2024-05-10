@@ -34,7 +34,11 @@ actor BarkContext {
     }
 
     static func createContext(path: String, seed: Int) throws -> BarkContext {
-        let context = bark_load_model(path, bark_verbosity_level(0), UInt32(seed))
+        var context_params = bark_context_default_params()
+        context_params.verbosity = bark_verbosity_level(0)
+        context_params.progress_callback = cCallbackBridge
+        
+        let context = bark_load_model(path, context_params, UInt32(seed))
         if let context {
             return BarkContext(context: context)
         } else {
