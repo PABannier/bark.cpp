@@ -8,9 +8,6 @@
 import Foundation
 import AVFoundation
 
-let kSampleRate: Double = 44100;
-let kNumChannels: UInt32 = 1;
-
 
 @MainActor
 class BarkState: NSObject, ObservableObject {
@@ -38,7 +35,6 @@ class BarkState: NSObject, ObservableObject {
             canGenerate = true
         } catch {
             print(error.localizedDescription)
-            messageLog += "\(error.localizedDescription)"
         }
     }
     
@@ -49,6 +45,7 @@ class BarkState: NSObject, ObservableObject {
             messageLog += "Loaded model \(modelUrl.lastPathComponent)"
         } else {
             messageLog += "Could not locate model\n"
+            throw LoadError.couldNotLocateModel
         }
     }
     

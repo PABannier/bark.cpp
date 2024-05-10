@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject var barkState = BarkState()
+    @ObservedObject var progressData = ProgressData.shared
     @State private var textInput: String = ""
     
     var body: some View {
@@ -40,6 +41,17 @@ struct ContentView: View {
                     .buttonStyle(.bordered)
                     .disabled(!barkState.canGenerate)
                 }
+                
+                HStack {
+                    Text(verbatim: progressData.stepTitle)
+                    
+                    Spacer()
+                    
+                    ProgressView(value: progressData.progress)
+                        .frame(width: 150)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
                 
                 ScrollView {
                     Text(verbatim: barkState.messageLog)

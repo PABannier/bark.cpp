@@ -30,6 +30,12 @@ extern "C" {
         HIGH   = 2,
     };
 
+    enum bark_encoding_step {
+        SEMANTIC = 0,
+        COARSE   = 1,
+        FINE     = 2,
+    };
+
     struct bark_context;
     struct bark_model;
 
@@ -38,6 +44,8 @@ extern "C" {
 
     // Define the GPT architecture for the 3 encoders
     struct gpt_model;
+
+    typedef void (*bark_progress_callback)(struct bark_context * bctx, enum bark_encoding_step step, int progress, void * user_data);
 
     struct bark_statistics {
         // Time to load model weights
@@ -116,6 +124,10 @@ extern "C" {
         int32_t n_fine_codebooks;
         // Dimension of the codes
         int32_t codebook_size;
+
+        // called on each progress update
+        bark_progress_callback progress_callback;
+        void * progress_callback_user_data;
     };
 
     /**
@@ -126,16 +138,16 @@ extern "C" {
     struct bark_context_params bark_context_default_params(void);
 
     /**
-     * Loads a BARK model from the specified file path with the given parameters.
+     * Loads a Bark model from the specified file path with the given parameters.
      *
      * @param model_path The directory path of the bark model to load.
-     * @param verbosity  The verbosity level when loading the model.
+     * @param params     The parameters to use for the Bark model.
      * @param seed       The seed to use for random number generation.
      * @return A pointer to the loaded bark model context.
      */
     struct bark_context *bark_load_model(
         const char *model_path,
-        enum bark_verbosity_level verbosity,
+        struct bark_context_params params,
         uint32_t seed);
 
     /**
