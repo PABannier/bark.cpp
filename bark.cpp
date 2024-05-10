@@ -2063,7 +2063,7 @@ static bool bark_eval_fine_encoder(struct bark_context* bctx, int n_threads) {
 
         for (int nn = n_coarse; nn < n_fine_codebooks; nn++) {
             if (params.progress_callback) {
-                const int progress_cur = 100*(n*(n_fine_codebooks-n_coarse)+nn)/(n_loops*(n_fine_codebooks - n_coarse));
+                const int progress_cur = 100*(n*(n_fine_codebooks-n_coarse)+(nn-n_coarse+1))/(n_loops*(n_fine_codebooks-n_coarse));
 
                 params.progress_callback(
                     bctx, bark_encoding_step::FINE, progress_cur, params.progress_callback_user_data);
