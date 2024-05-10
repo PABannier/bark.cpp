@@ -62,7 +62,7 @@ extern "C" {
 
     struct bark_context_params {
         // Verbosity level
-        bark_verbosity_level verbosity;
+        enum bark_verbosity_level verbosity;
 
         // Temperature for sampling (text and coarse encoders)
         float temp;
@@ -135,7 +135,7 @@ extern "C" {
      */
     struct bark_context *bark_load_model(
         const char *model_path,
-        bark_verbosity_level verbosity,
+        enum bark_verbosity_level verbosity,
         uint32_t seed);
 
     /**
@@ -207,7 +207,7 @@ extern "C" {
     bool bark_model_quantize(
         const char *fname_inp,
         const char *fname_out,
-        ggml_ftype ftype);
+        enum ggml_ftype ftype);
 
     /**
      * @brief Frees the memory allocated for a bark context.
