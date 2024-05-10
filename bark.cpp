@@ -163,39 +163,6 @@ struct bark_context {
     bark_statistics stats;
 };
 
-class BarkProgressBar {
-   public:
-    BarkProgressBar(std::string func_name, double needed_progress) {
-        this->func_name = func_name;
-        this->needed_progress = needed_progress;
-    }
-
-    void update(double new_progress) {
-        current_progress += new_progress;
-        amount_of_filler = (int)((current_progress / needed_progress) * (double)pbar_length);
-    }
-    void print() {
-        printf("\r%s: %s", func_name.c_str(), initial_part.c_str());
-        for (int a = 0; a < amount_of_filler; a++) {
-            printf("%s", pbar_filler.c_str());
-        }
-        printf("%s", pbar_updater.c_str());
-        for (int b = 0; b < pbar_length - amount_of_filler; b++) {
-            printf(" ");
-        }
-        printf("%s (%d%%)", last_part.c_str(), (int)(100 * (current_progress / needed_progress)));
-        fflush(stdout);
-    }
-
-    std::string initial_part = "[", last_part = "]";
-    std::string pbar_filler = "=", pbar_updater = ">";
-
-   private:
-    std::string func_name;
-    double needed_progress, current_progress = 0;
-    int amount_of_filler, pbar_length = 50;
-};
-
 template <typename T>
 static void read_safe(std::ifstream& fin, T& dest) {
     fin.read((char*)&dest, sizeof(T));
@@ -1207,20 +1174,18 @@ static bool bark_load_model_from_file(
     return true;
 }
 
-struct bark_context* bark_load_model(const char* model_path, bark_verbosity_level verbosity, uint32_t seed) {
+struct bark_context* bark_load_model(const char* model_path, struct bark_context_params params, uint32_t seed) {
     int64_t t_load_start_us = ggml_time_us();
 
     struct bark_context* bctx = new bark_context();
 
     bctx->text_model = bark_model();
     std::string model_path_str(model_path);
-    if (!bark_load_model_from_file(model_path_str, bctx, verbosity)) {
+    if (!bark_load_model_from_file(model_path_str, bctx, params.verbosity)) {
         fprintf(stderr, "%s: failed to load model weights from '%s'\n", __func__, model_path);
         return nullptr;
     }
 
-    bark_context_params params = bark_context_default_params();
-    params.verbosity = verbosity;
     bctx->rng = std::mt19937(seed);
     bctx->params = params;
     bctx->stats.t_load_us = ggml_time_us() - t_load_start_us;
@@ -1724,8 +1689,6 @@ static bool bark_eval_text_encoder(struct bark_context* bctx, int n_threads) {
     int32_t semantic_vocab_size = params.semantic_vocab_size;
     int32_t semantic_pad_token = params.semantic_pad_token;
 
-    BarkProgressBar progress(std::string("Generating semantic tokens"), n_steps_text_encoder);
-
     auto& model = bctx->text_model.semantic_model;
     auto& allocr = bctx->allocr;
     auto& hparams = model.hparams;
@@ -1768,9 +1731,6 @@ static bool bark_eval_text_encoder(struct bark_context* bctx, int n_threads) {
 
         input.push_back(next);
         output.push_back(next);
-
-        progress.update(1);
-        progress.print();
     }
 
     bctx->semantic_tokens = output;
@@ -1866,8 +1826,6 @@ static bool bark_eval_coarse_encoder(struct bark_context* bctx, int n_threads) {
     assert(n_steps > 0);
     assert(n_steps % n_coarse_codebooks == 0);
 
-    BarkProgressBar progress(std::string("Generating coarse tokens"), n_steps);
-
     int n_window_steps = ceilf(static_cast<float>(n_steps) / sliding_window_size);
 
     int step_idx = 0;
@@ -1932,9 +1890,6 @@ static bool bark_eval_coarse_encoder(struct bark_context* bctx, int n_threads) {
             out.push_back(next);
 
             step_idx += 1;
-
-            progress.update(1);
-            progress.print();
         }
     }
 
@@ -2093,8 +2048,6 @@ static bool bark_eval_fine_encoder(struct bark_context* bctx, int n_threads) {
 
     bark_codes in_arr = input;  // [seq_length, n_codes]
 
-    BarkProgressBar progress(std::string("Generating fine tokens"), n_loops * (n_fine_codebooks - n_coarse));
-
     for (int n = 0; n < n_loops; n++) {
         int start_idx = std::min(n * 512, (int)in_arr.size() - 1024);
         int start_fill_idx = std::min(n * 512, (int)in_arr.size() - 512);
@@ -2132,9 +2085,6 @@ static bool bark_eval_fine_encoder(struct bark_context* bctx, int n_threads) {
 
                 in_buffer[nn * 1024 + rel_start_fill_idx + i] = next;
             }
-
-            progress.update(1);
-            progress.print();
         }
 
         // transfer over info into model_in
@@ -2401,7 +2351,7 @@ bool bark_model_weights_quantize(std::ifstream& fin, std::ofstream& fout, ggml_f
     return true;
 }
 
-bool bark_model_quantize(const char* fname_inp, const char* fname_out, ggml_ftype ftype) {
+bool bark_model_quantize(const char* fname_inp, const char* fname_out, enum ggml_ftype ftype) {
     printf("%s: loading model from '%s'\n", __func__, fname_inp);
 
     std::string fname_inp_str(fname_inp);

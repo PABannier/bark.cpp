@@ -138,16 +138,16 @@ extern "C" {
     struct bark_context_params bark_context_default_params(void);
 
     /**
-     * Loads a BARK model from the specified file path with the given parameters.
+     * Loads a Bark model from the specified file path with the given parameters.
      *
      * @param model_path The directory path of the bark model to load.
-     * @param verbosity  The verbosity level when loading the model.
+     * @param params     The parameters to use for the Bark model.
      * @param seed       The seed to use for random number generation.
      * @return A pointer to the loaded bark model context.
      */
     struct bark_context *bark_load_model(
         const char *model_path,
-        enum bark_verbosity_level verbosity,
+        struct bark_context_params params,
         uint32_t seed);
 
     /**
