@@ -1,0 +1,414 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		E05A4F782BEE15150000CD31 /* bark_swiftuiApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E05A4F772BEE15150000CD31 /* bark_swiftuiApp.swift */; };
+		E05A4F7A2BEE15150000CD31 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E05A4F792BEE15150000CD31 /* ContentView.swift */; };
+		E05A4F7C2BEE15160000CD31 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E05A4F7B2BEE15160000CD31 /* Assets.xcassets */; };
+		E05A4F7F2BEE15160000CD31 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E05A4F7E2BEE15160000CD31 /* Preview Assets.xcassets */; };
+		E05A4F8A2BEE15BA0000CD31 /* LibBark.swift in Sources */ = {isa = PBXBuildFile; fileRef = E05A4F892BEE15BA0000CD31 /* LibBark.swift */; };
+		E05A4F8C2BEE16590000CD31 /* BarkState.swift in Sources */ = {isa = PBXBuildFile; fileRef = E05A4F8B2BEE16590000CD31 /* BarkState.swift */; };
+		E05A4F952BEE284C0000CD31 /* AudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E05A4F942BEE284C0000CD31 /* AudioPlayer.swift */; };
+		E05A4F9A2BEE3DF60000CD31 /* bark in Frameworks */ = {isa = PBXBuildFile; productRef = E05A4F992BEE3DF60000CD31 /* bark */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		E05A4F742BEE15150000CD31 /* bark.swiftui.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = bark.swiftui.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E05A4F772BEE15150000CD31 /* bark_swiftuiApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = bark_swiftuiApp.swift; sourceTree = "<group>"; };
+		E05A4F792BEE15150000CD31 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		E05A4F7B2BEE15160000CD31 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		E05A4F7E2BEE15160000CD31 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		E05A4F892BEE15BA0000CD31 /* LibBark.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LibBark.swift; sourceTree = "<group>"; };
+		E05A4F8B2BEE16590000CD31 /* BarkState.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BarkState.swift; sourceTree = "<group>"; };
+		E05A4F942BEE284C0000CD31 /* AudioPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayer.swift; sourceTree = "<group>"; };
+		E05A4F972BEE3CB90000CD31 /* bark_swift_package */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = bark_swift_package; sourceTree = "<group>"; };
+		E05A4F982BEE3CCB0000CD31 /* bark-swiftui-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "bark-swiftui-Info.plist"; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		E05A4F712BEE15150000CD31 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E05A4F9A2BEE3DF60000CD31 /* bark in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		E05A4F6B2BEE15150000CD31 = {
+			isa = PBXGroup;
+			children = (
+				E05A4F972BEE3CB90000CD31 /* bark_swift_package */,
+				E05A4F762BEE15150000CD31 /* bark.swiftui */,
+				E05A4F752BEE15150000CD31 /* Products */,
+				E05A4F862BEE156B0000CD31 /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		E05A4F752BEE15150000CD31 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E05A4F742BEE15150000CD31 /* bark.swiftui.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		E05A4F762BEE15150000CD31 /* bark.swiftui */ = {
+			isa = PBXGroup;
+			children = (
+				E05A4F982BEE3CCB0000CD31 /* bark-swiftui-Info.plist */,
+				E05A4F962BEE3A230000CD31 /* Bindings */,
+				E05A4F8E2BEE167A0000CD31 /* Views */,
+				E05A4F8D2BEE16640000CD31 /* Models */,
+				E05A4F772BEE15150000CD31 /* bark_swiftuiApp.swift */,
+				E05A4F7B2BEE15160000CD31 /* Assets.xcassets */,
+				E05A4F7D2BEE15160000CD31 /* Preview Content */,
+			);
+			path = bark.swiftui;
+			sourceTree = "<group>";
+		};
+		E05A4F7D2BEE15160000CD31 /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				E05A4F7E2BEE15160000CD31 /* Preview Assets.xcassets */,
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		E05A4F862BEE156B0000CD31 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		E05A4F8D2BEE16640000CD31 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				E05A4F8B2BEE16590000CD31 /* BarkState.swift */,
+				E05A4F942BEE284C0000CD31 /* AudioPlayer.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		E05A4F8E2BEE167A0000CD31 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				E05A4F792BEE15150000CD31 /* ContentView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		E05A4F962BEE3A230000CD31 /* Bindings */ = {
+			isa = PBXGroup;
+			children = (
+				E05A4F892BEE15BA0000CD31 /* LibBark.swift */,
+			);
+			path = Bindings;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E05A4F732BEE15150000CD31 /* bark.swiftui */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E05A4F822BEE15160000CD31 /* Build configuration list for PBXNativeTarget "bark.swiftui" */;
+			buildPhases = (
+				E05A4F702BEE15150000CD31 /* Sources */,
+				E05A4F712BEE15150000CD31 /* Frameworks */,
+				E05A4F722BEE15150000CD31 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = bark.swiftui;
+			packageProductDependencies = (
+				E05A4F992BEE3DF60000CD31 /* bark */,
+			);
+			productName = bark.swiftui;
+			productReference = E05A4F742BEE15150000CD31 /* bark.swiftui.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E05A4F6C2BEE15150000CD31 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1530;
+				LastUpgradeCheck = 1530;
+				TargetAttributes = {
+					E05A4F732BEE15150000CD31 = {
+						CreatedOnToolsVersion = 15.3;
+					};
+				};
+			};
+			buildConfigurationList = E05A4F6F2BEE15150000CD31 /* Build configuration list for PBXProject "bark.swiftui" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = E05A4F6B2BEE15150000CD31;
+			productRefGroup = E05A4F752BEE15150000CD31 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E05A4F732BEE15150000CD31 /* bark.swiftui */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E05A4F722BEE15150000CD31 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E05A4F7F2BEE15160000CD31 /* Preview Assets.xcassets in Resources */,
+				E05A4F7C2BEE15160000CD31 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		E05A4F702BEE15150000CD31 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E05A4F7A2BEE15150000CD31 /* ContentView.swift in Sources */,
+				E05A4F782BEE15150000CD31 /* bark_swiftuiApp.swift in Sources */,
+				E05A4F952BEE284C0000CD31 /* AudioPlayer.swift in Sources */,
+				E05A4F8A2BEE15BA0000CD31 /* LibBark.swift in Sources */,
+				E05A4F8C2BEE16590000CD31 /* BarkState.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		E05A4F802BEE15160000CD31 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		E05A4F812BEE15160000CD31 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		E05A4F832BEE15160000CD31 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"bark.swiftui/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "bark-swiftui-Info.plist";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.PAB.bark-swiftui";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E05A4F842BEE15160000CD31 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"bark.swiftui/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "bark-swiftui-Info.plist";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_CPLUSPLUSFLAGS = "$(OTHER_CFLAGS)";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.PAB.bark-swiftui";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		E05A4F6F2BEE15150000CD31 /* Build configuration list for PBXProject "bark.swiftui" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E05A4F802BEE15160000CD31 /* Debug */,
+				E05A4F812BEE15160000CD31 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E05A4F822BEE15160000CD31 /* Build configuration list for PBXNativeTarget "bark.swiftui" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E05A4F832BEE15160000CD31 /* Debug */,
+				E05A4F842BEE15160000CD31 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E05A4F992BEE3DF60000CD31 /* bark */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = bark;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = E05A4F6C2BEE15150000CD31 /* Project object */;
+}

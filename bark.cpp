@@ -1189,6 +1189,8 @@ static bool bark_load_model_from_file(
 
     // codec model
     {
+        // not optimal: we close the file and reopen it using Encodec.cpp library with a
+        // specific offset
         const int offset = fin.tellg();
         fin.close();
 
@@ -1201,7 +1203,6 @@ static bool bark_load_model_from_file(
 
     printf("\n");
 
-    fin.close();
 
     return true;
 }
