@@ -17,22 +17,14 @@ let package = Package(
         .target(
             name: "bark",
             path: ".",
-            exclude: [
-               "examples",
-               "models",
-               "Dockerfile",
-               "CMakeLists.txt",
-               "download_weights.py",
-               "convert.py",
-            ],
             sources: [
                 "bark.cpp",
-                "encodec.cpp/encodec.cpp",
-                "encodec.cpp/ggml/src/ggml-alloc.c",
-                "encodec.cpp/ggml/src/ggml-backend.c",
-                "encodec.cpp/ggml/src/ggml.c",
+                "encodec.cpp",
+                "ggml-alloc.c",
+                "ggml-backend.c",
+                "ggml.c",
             ],
-            publicHeadersPath: "spm-headers",
+            publicHeadersPath: "include",
             cSettings: [
                 .unsafeFlags(["-Wno-shorten-64-to-32", "-O3", "-DNDEBUG"]),
                 .define("GGML_USE_ACCELERATE"),
