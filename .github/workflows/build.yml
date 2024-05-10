@@ -136,7 +136,7 @@ jobs:
         run: |
           emcmake cmake . -DCMAKE_BUILD_TYPE=${{ matrix.build }}
           make
-  
+
   ios:
     runs-on: macos-latest
 
@@ -145,6 +145,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-        
+
       - name: Build swiftui example
-        run: xcodebuild -project examples/swiftui/BarkCppDemo/BarkCppDemo.xcodeproj -scheme BarkCppDemo -sdk iphonesimulator build
+        run: xcodebuild -project examples/bark.swiftui/bark.swiftui.xcodeproj -scheme bark.swiftui -sdk iphonesimulator build
