@@ -1742,6 +1742,13 @@ static bool bark_eval_text_encoder(struct bark_context* bctx, int n_threads) {
     int n_past = 0;
 
     for (int i = 0; i < n_steps_text_encoder; i++) {
+        if (params.progress_callback) {
+            const int progress_cur = 100*(i+1)/n_steps_text_encoder;
+
+            params.progress_callback(
+                bctx, bark_encoding_step::SEMANTIC, progress_cur, params.progress_callback_user_data);
+        }
+
         if (!bark_eval_encoder_internal(model, allocr, input, logits, &n_past, true, n_threads)) {
             fprintf(stderr, "%s: Could not generate token\n", __func__);
             return false;
@@ -1892,6 +1899,13 @@ static bool bark_eval_coarse_encoder(struct bark_context* bctx, int n_threads) {
         for (int j = 0; j < sliding_window_size; j++) {
             if (step_idx >= n_steps) {
                 continue;
+            }
+
+            if (params.progress_callback) {
+                const int progress_cur = 100*(step_idx+1)/n_steps;
+
+                params.progress_callback(
+                    bctx, bark_encoding_step::COARSE, progress_cur, params.progress_callback_user_data);
             }
 
             if (!bark_eval_encoder_internal(model, allocr, input_in, logits, &n_past, false, n_threads)) {
@@ -2095,6 +2109,13 @@ static bool bark_eval_fine_encoder(struct bark_context* bctx, int n_threads) {
         }
 
         for (int nn = n_coarse; nn < n_fine_codebooks; nn++) {
+            if (params.progress_callback) {
+                const int progress_cur = 100*(n*(n_fine_codebooks-n_coarse)+nn)/(n_loops*(n_fine_codebooks - n_coarse));
+
+                params.progress_callback(
+                    bctx, bark_encoding_step::FINE, progress_cur, params.progress_callback_user_data);
+            }
+
             if (!bark_eval_fine_encoder_internal(bctx, in_buffer, logits, nn, n_threads)) {
                 fprintf(stderr, "%s: Could not generate token\n", __func__);
                 return false;
@@ -2307,6 +2328,8 @@ struct bark_context_params bark_context_default_params() {
         /*.n_coarse_codebooks          =*/2,
         /*.n_fine_codebooks            =*/8,
         /*.codebook_size               =*/1024,
+        /*.progress_callback           =*/nullptr,
+        /*.progress_callback_user_data =*/nullptr,
     };
 
     return result;
