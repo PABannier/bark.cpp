@@ -44,54 +44,69 @@ struct bark_vocab {
     std::map<id, token> id_to_token;
 };
 
+struct gpt_hparams {
+    int32_t n_in_vocab;
+    int32_t n_out_vocab;
+    int32_t n_layer;
+    int32_t n_head;
+    int32_t n_embd;
+    int32_t block_size;
+    int32_t n_lm_heads;
+    int32_t n_wtes;
+    int32_t ftype;
+    int32_t bias;
+
+    int32_t n_codes_given = 1;
+};
+
 struct gpt_layer {
     // normalization
-    struct ggml_tensor *ln_1_g;
-    struct ggml_tensor *ln_1_b;
+    struct ggml_tensor* ln_1_g;
+    struct ggml_tensor* ln_1_b;
 
-    struct ggml_tensor *ln_2_g;
-    struct ggml_tensor *ln_2_b;
+    struct ggml_tensor* ln_2_g;
+    struct ggml_tensor* ln_2_b;
 
     // attention
-    struct ggml_tensor *c_attn_attn_w;
-    struct ggml_tensor *c_attn_attn_b;
+    struct ggml_tensor* c_attn_attn_w;
+    struct ggml_tensor* c_attn_attn_b;
 
-    struct ggml_tensor *c_attn_proj_w;
-    struct ggml_tensor *c_attn_proj_b;
+    struct ggml_tensor* c_attn_proj_w;
+    struct ggml_tensor* c_attn_proj_b;
 
     // mlp
-    struct ggml_tensor *c_mlp_fc_w;
-    struct ggml_tensor *c_mlp_fc_b;
+    struct ggml_tensor* c_mlp_fc_w;
+    struct ggml_tensor* c_mlp_fc_b;
 
-    struct ggml_tensor *c_mlp_proj_w;
-    struct ggml_tensor *c_mlp_proj_b;
+    struct ggml_tensor* c_mlp_proj_w;
+    struct ggml_tensor* c_mlp_proj_b;
 };
 
 struct gpt_model {
     gpt_hparams hparams;
 
     // normalization
-    struct ggml_tensor *ln_f_g;
-    struct ggml_tensor *ln_f_b;
+    struct ggml_tensor* ln_f_g;
+    struct ggml_tensor* ln_f_b;
 
-    struct ggml_tensor *wpe;                     //  position embedding
-    std::vector<struct ggml_tensor *> wtes;      //     token embedding
-    std::vector<struct ggml_tensor *> lm_heads;  // language model head
+    struct ggml_tensor* wpe;                    //  position embedding
+    std::vector<struct ggml_tensor*> wtes;      //     token embedding
+    std::vector<struct ggml_tensor*> lm_heads;  // language model head
 
     std::vector<gpt_layer> layers;
 
     // key + value memory
-    struct ggml_tensor *memory_k;
-    struct ggml_tensor *memory_v;
+    struct ggml_tensor* memory_k;
+    struct ggml_tensor* memory_v;
 
-    struct ggml_context *ctx;
+    struct ggml_context* ctx;
 
     ggml_backend_t backend = NULL;
 
     ggml_backend_buffer_t buffer_w;
     ggml_backend_buffer_t buffer_kv;
 
-    std::map<std::string, struct ggml_tensor *> tensors;
+    std::map<std::string, struct ggml_tensor*> tensors;
 
     //
     int64_t t_sample_us = 0;
@@ -118,13 +133,13 @@ struct bark_model {
 struct bark_context {
     struct bark_model text_model;
 
-    struct encodec_context *encodec_ctx;
+    struct encodec_context* encodec_ctx;
 
     // buffer for model evaluation
     ggml_backend_buffer_t buf_compute;
 
     // custom allocator
-    struct ggml_allocr *allocr = NULL;
+    struct ggml_allocr* allocr = NULL;
     int n_gpu_layers = 0;
 
     std::mt19937 rng;
@@ -135,7 +150,7 @@ struct bark_context {
     bark_codes coarse_tokens;
     bark_codes fine_tokens;
 
-    float * generated_audio_arr = NULL;
+    float* generated_audio = NULL;
     int n_generated_samples = 0;
 
     // hyperparameters
@@ -1192,7 +1207,7 @@ static bool bark_load_model_from_file(
     return true;
 }
 
-struct bark_context* bark_load_model(const char *model_path, bark_verbosity_level verbosity, uint32_t seed) {
+struct bark_context* bark_load_model(const char* model_path, bark_verbosity_level verbosity, uint32_t seed) {
     int64_t t_load_start_us = ggml_time_us();
 
     struct bark_context* bctx = new bark_context();
@@ -2191,11 +2206,13 @@ static bool bark_forward_eval(struct bark_context* bctx, int n_threads) {
     return true;
 }
 
-bool bark_generate_audio(struct bark_context* bctx, const char * text, int n_threads) {
+bool bark_generate_audio(struct bark_context* bctx, const char* text, int n_threads) {
     if (!bctx) {
         fprintf(stderr, "%s: invalid bark context\n", __func__);
         return false;
     }
+
+    bark_reset_statistics(bctx);
 
     int64_t t_start_eval_us = ggml_time_us();
 
@@ -2230,7 +2247,7 @@ bool bark_generate_audio(struct bark_context* bctx, const char * text, int n_thr
         return false;
     }
 
-    bctx->generated_audio_arr = encodec_get_audio(bctx->encodec_ctx);
+    bctx->generated_audio = encodec_get_audio(bctx->encodec_ctx);
     bctx->n_generated_samples = encodec_get_audio_size(bctx->encodec_ctx);
 
     bctx->stats.t_eval_us = ggml_time_us() - t_start_eval_us;
@@ -2361,7 +2378,7 @@ bool bark_model_weights_quantize(std::ifstream& fin, std::ofstream& fout, ggml_f
     return true;
 }
 
-bool bark_model_quantize(const char * fname_inp, const char * fname_out, ggml_ftype ftype) {
+bool bark_model_quantize(const char* fname_inp, const char* fname_out, ggml_ftype ftype) {
     printf("%s: loading model from '%s'\n", __func__, fname_inp);
 
     std::string fname_inp_str(fname_inp);
@@ -2433,28 +2450,35 @@ bool bark_model_quantize(const char * fname_inp, const char * fname_out, ggml_ft
     return true;
 }
 
-float * bark_get_audio_data(struct bark_context *bctx) {
-    if (!bctx || bctx->generated_audio_arr == NULL) {
+float* bark_get_audio_data(struct bark_context* bctx) {
+    if (!bctx) {
         return nullptr;
     }
-    return bctx->generated_audio_arr;
+    return bctx->generated_audio;
 }
 
-int bark_get_audio_data_size(struct bark_context *bctx) {
-    if (!bctx) {
+int bark_get_audio_data_size(struct bark_context* bctx) {
+    if (!bctx || bctx->generated_audio == NULL) {
         return 0;
     }
     return bctx->n_generated_samples;
 }
 
-const bark_statistics * bark_get_statistics(struct bark_context *bctx) {
+int64_t bark_get_load_time(struct bark_context* bctx) {
     if (!bctx) {
-        return nullptr;
+        return 0;
     }
-    return &bctx->stats;
+    return bctx->stats.t_load_us;
 }
 
-void bark_reset_statistics(struct bark_context *bctx) {
+int64_t bark_get_eval_time(struct bark_context* bctx) {
+    if (!bctx) {
+        return 0;
+    }
+    return bctx->stats.t_eval_us;
+}
+
+void bark_reset_statistics(struct bark_context* bctx) {
     if (!bctx) {
         return;
     }
