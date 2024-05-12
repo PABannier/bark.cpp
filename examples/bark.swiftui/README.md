@@ -8,6 +8,10 @@ A sample SwiftUI app using [bark.cpp](https://github.com/PABannier/bark.cpp/) to
 
 **Note:** Pay attention to the folder path: `whisper.swiftui.demo/Resources/models` is the appropriate directory to place resources whilst `whisper.swiftui.demo/Models` is related to actual code.
 
+https://github.com/PABannier/bark.cpp/assets/12958149/bc807c0b-adfa-4c47-a05b-a2d8ba157dd8
+
+
 [^1]: I recommend the Bark small model for running on an iOS device.
 
 [^2]: The `Release` build can boost performance of audio generation. In this project, it also added `-O3 -DNDEBUG` to `Other C Flags`, but adding flags to app proj is not ideal in real world (applies to all C/C++ files), consider splitting xcodeproj in workspace in your own project.
+

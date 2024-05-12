@@ -13,7 +13,7 @@ class ProgressData: ObservableObject {
     static let shared = ProgressData()
 
     @Published var progress: Float = 0.0
-    @Published var stepTitle: String = "Progress..."
+    @Published var stepTitle: String = "Progress (0%)"
 
     private init() {}
 }
