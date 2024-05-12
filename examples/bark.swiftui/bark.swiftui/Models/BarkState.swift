@@ -42,7 +42,7 @@ class BarkState: NSObject, ObservableObject {
         messageLog += "Loading model...\n"
         if let modelUrl {
             barkContext = try BarkContext.createContext(path: modelUrl.path(), seed: 0)
-            messageLog += "Loaded model \(modelUrl.lastPathComponent)"
+            messageLog += "Loaded model \(modelUrl.lastPathComponent)\n"
         } else {
             messageLog += "Could not locate model\n"
             throw LoadError.couldNotLocateModel
