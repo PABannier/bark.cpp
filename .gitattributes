@@ -1,4 +1,1 @@
-assets/audio1.wav filter=lfs diff=lfs merge=lfs -text
-assets/audio2.wav filter=lfs diff=lfs merge=lfs -text
 assets/banner.png filter=lfs diff=lfs merge=lfs -text
-assets/iphone_demo.mov filter=lfs diff=lfs merge=lfs -text
