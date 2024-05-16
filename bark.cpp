@@ -2417,6 +2417,13 @@ bool bark_model_quantize(const char* fname_inp, const char* fname_out, enum ggml
         return false;
     }
 
+    // neural codec (not quantized, since this seriously degrates the audio quality)
+    // copy the rest of fin to fout
+    char c;
+    while (fin.get(c)) {
+        fout.put(c);
+    }
+
     fin.close();
     fout.close();
 
