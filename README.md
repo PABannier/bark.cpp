@@ -138,6 +138,35 @@ Note that to preserve audio quality, we do not quantize the codec model. The bul
 - GPT-3
   - [Language Models are Few-Shot Learners](https://arxiv.org/abs/2005.14165)
 
+### Statistics
+
+Here are some statistics on a MacBook Pro M1. They were obtained by generating the prompt *"this is the last random sentence I will be writing and I am going to stop mid-sent"*
+
+**Bark-small**
+
+|ms/token       | Semantic          | Coarse          | Fine          |
+|---------------|-------------------|-----------------|---------------|
+| Python        |                   |                 |               |
+| F16           |              4.77 |           13.48 |          0.49 |
+| Q8_0          |              4.47 |           14.80 |          0.90 |
+| Q5_0          |              3.79 |           13.41 |          0.92 |
+| Q5_1          |              3.76 |           12.71 |          0.95 |
+| Q4_0          |              3.73 |           13.47 |          0.88 |
+| Q4_1          |              3.54 |           11.90 |          0.84 |
+
+**Bark**
+
+|ms/token       | Semantic          | Coarse          | Fine          |
+|---------------|-------------------|-----------------|---------------|
+| Python        |                   |                 |               |
+| F16           |                   |                 |               |
+| Q8_0          |             12.29 |           42.99 |          2.61 |
+| Q5_0          |             12.84 |           44.71 |          2.75 |
+| Q5_1          |             13.29 |           48.87 |          2.75 |
+| Q4_0          |             14.53 |           51.33 |          2.68 |
+| Q4_1          |             12.75 |           50.96 |          2.80 |
+
+
 ### Contributing
 
 `bark.cpp` is a continuous endeavour that relies on the community efforts to last and evolve. Your contribution is welcome and highly valuable. It can be
