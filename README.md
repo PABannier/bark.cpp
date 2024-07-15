@@ -99,6 +99,8 @@ In order to build bark.cpp you must use `CMake`:
 ```bash
 mkdir build
 cd build
+# To enable nvidia gpu, use the following option
+# cmake -DGGML_CUBLAS=ON ..
 cmake ..
 cmake --build . --config Release
 ```
