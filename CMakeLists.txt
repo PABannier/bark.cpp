@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.12)
 project("bark" C CXX)
 
 set(BARK_BUILD_EXAMPLES ON)
+option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 
 if (NOT XCODE AND NOT MSVC AND NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
@@ -20,7 +21,16 @@ set(BARK_LIB bark)
 
 add_subdirectory(encodec.cpp)
 
+# Always build the static library
 add_library(${BARK_LIB} STATIC bark.cpp bark.h)
+
+# If BUILD_SHARED_LIBS is ON, also build a shared library
+if(BUILD_SHARED_LIBS)
+    add_library(${BARK_LIB}_shared SHARED bark.cpp bark.h)
+    set_target_properties(${BARK_LIB}_shared PROPERTIES OUTPUT_NAME ${BARK_LIB})
+    target_link_libraries(${BARK_LIB}_shared PUBLIC ggml encodec)
+    set_target_properties(${BARK_LIB}_shared PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
 
 if (BARK_BUILD_EXAMPLES)
     add_subdirectory(examples)
@@ -41,3 +51,25 @@ endif()
 if (GGML_METAL)
     add_compile_definitions(GGML_USE_METAL)
 endif()
+
+# Ensure ggml and encodec are built with position-independent code
+set_target_properties(ggml PROPERTIES POSITION_INDEPENDENT_CODE ON)
+set_target_properties(encodec PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# Install the libraries
+install(TARGETS ${BARK_LIB}
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    RUNTIME DESTINATION bin
+)
+
+if(BUILD_SHARED_LIBS)
+    install(TARGETS ${BARK_LIB}_shared
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+        RUNTIME DESTINATION bin
+    )
+endif()
+
+# Install header files
+install(FILES bark.h DESTINATION include)
