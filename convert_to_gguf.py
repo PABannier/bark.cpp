@@ -1,6 +1,15 @@
-"""Convert Bark's GPT and Encodec checkpoints into the GGML format.
+"""Convert Bark's GPT and Encodec checkpoints into a GGUF file format.
 
-The file is structured as follows:
+GGUF file structure:
+
+    +------------+------------+------------+------------+-------------+
+    |    4 B     |    4 B     |    8 B     |    8 B     | rest of file|
+    +------------+------------+------------+------------+-------------+
+    | Magic num  | Version    | Tensor     | Metadata   |   Data      |
+    |   (GGUF)   |            | count      | kv count   |             |
+    +------------+------------+------------+------------+-------------+
+
+The "Rest of File" section holds the following data:
     - Hyperparameters
     - Vocabulary
     - Text model
