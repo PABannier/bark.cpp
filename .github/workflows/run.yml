@@ -82,6 +82,7 @@ jobs:
           -m ./models/bark-small/ggml_weights.bin
           -p "hello"
           -t 4
+          -s 0
 
       - name: Quantize
         id: quantize
@@ -98,6 +99,7 @@ jobs:
           -m ./models/bark-small/ggml_weights_q4.bin
           -p "hello"
           -t 4
+          -s 0
 
   macOS-latest-run:
     runs-on: macos-latest
@@ -148,6 +150,7 @@ jobs:
           -m ./models/bark-small/ggml_weights.bin
           -p "hello"
           -t 4
+          -s 0
 
       - name: Quantize
         id: quantize
@@ -164,3 +167,4 @@ jobs:
           -m ./models/bark-small/ggml_weights_q4.bin
           -p "hello"
           -t 4
+          -s 0
