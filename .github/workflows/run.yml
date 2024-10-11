@@ -82,6 +82,24 @@ jobs:
           -m ./models/bark-small/ggml_weights.bin
           -p "hello"
           -t 4
+          -s 0
+
+      - name: Quantize
+        id: quantize
+        run: >-
+          ./build/examples/quantize/quantize
+          ./models/bark-small/ggml_weights.bin
+          ./models/bark-small/ggml_weights_q4.bin
+          q4_0
+
+      - name: Run quantized
+        id: load_and_run_quantized
+        run: >-
+          ./build/examples/main/main
+          -m ./models/bark-small/ggml_weights_q4.bin
+          -p "hello"
+          -t 4
+          -s 0
 
   macOS-latest-run:
     runs-on: macos-latest
@@ -132,3 +150,21 @@ jobs:
           -m ./models/bark-small/ggml_weights.bin
           -p "hello"
           -t 4
+          -s 0
+
+      - name: Quantize
+        id: quantize
+        run: >-
+          ./build/examples/quantize/quantize
+          ./models/bark-small/ggml_weights.bin
+          ./models/bark-small/ggml_weights_q4.bin
+          q4_0
+
+      - name: Run quantized
+        id: load_and_run_quantized
+        run: >-
+          ./build/examples/main/main
+          -m ./models/bark-small/ggml_weights_q4.bin
+          -p "hello"
+          -t 4
+          -s 0
