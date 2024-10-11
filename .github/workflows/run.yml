@@ -1,0 +1,170 @@
+name: run
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      [
+        ".github/workflows/**",
+        "**/CMakeLists.txt",
+        "**/Makefile",
+        "**/*.h",
+        "**/*.hpp",
+        "**/*.c",
+        "**/*.cpp",
+        "**/*.cu",
+      ]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      [
+        ".github/workflows/**",
+        "**/CMakeLists.txt",
+        "**/Makefile",
+        "**/*.h",
+        "**/*.hpp",
+        "**/*.c",
+        "**/*.cpp",
+        "**/*.cu",
+      ]
+
+env:
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+  GGML_NLOOP: 3
+  GGML_NITER: 1
+  GGML_N_THREADS: 4
+
+jobs:
+  ubuntu-latest-run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Dependencies
+        id: depends
+        run: |
+          sudo apt-get update
+          sudo apt-get install build-essential python3.10 python3.10-venv python3.10-dev
+          python3.10 -m venv venv
+          source venv/bin/activate
+          python3 -m pip install -r requirements.txt
+
+      - name: Download
+        id: download
+        run: |
+          source venv/bin/activate
+          python3 download_weights.py --out-dir ./models --models bark-small
+
+      - name: Convert
+        id: convert
+        run: |
+          source venv/bin/activate
+          python3 convert.py --dir-model ./models/bark-small --use-f16
+
+      - name: Build
+        id: cmake_build
+        run: |
+          mkdir build
+          cd build
+          cmake ..
+          cmake --build . --config Release
+
+      - name: Run
+        id: load_and_run
+        run: >-
+          ./build/examples/main/main
+          -m ./models/bark-small/ggml_weights.bin
+          -p "hello"
+          -t 4
+          -s 0
+
+      - name: Quantize
+        id: quantize
+        run: >-
+          ./build/examples/quantize/quantize
+          ./models/bark-small/ggml_weights.bin
+          ./models/bark-small/ggml_weights_q4.bin
+          q4_0
+
+      - name: Run quantized
+        id: load_and_run_quantized
+        run: >-
+          ./build/examples/main/main
+          -m ./models/bark-small/ggml_weights_q4.bin
+          -p "hello"
+          -t 4
+          -s 0
+
+  macOS-latest-run:
+    runs-on: macos-latest
+
+    steps:
+      - name: Clone
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Dependencies
+        id: depends
+        continue-on-error: true
+        run: |
+          brew update
+          brew install python@3.10
+          python3.10 -m pip install --upgrade pip
+          python3.10 -m venv venv
+          source venv/bin/activate
+          python3.10 -m pip install -r requirements.txt
+
+      - name: Download
+        id: download
+        run: |
+          source venv/bin/activate
+          python3 download_weights.py --out-dir ./models --models bark-small
+
+      - name: Convert
+        id: convert
+        run: |
+          source venv/bin/activate
+          python3 convert.py --dir-model ./models/bark-small --use-f16
+
+      - name: Build
+        id: cmake_build
+        run: |
+          sysctl -a
+          mkdir build
+          cd build
+          cmake ..
+          cmake --build . --config Release
+
+      - name: Run
+        id: load_and_run
+        run: >-
+          ./build/examples/main/main
+          -m ./models/bark-small/ggml_weights.bin
+          -p "hello"
+          -t 4
+          -s 0
+
+      - name: Quantize
+        id: quantize
+        run: >-
+          ./build/examples/quantize/quantize
+          ./models/bark-small/ggml_weights.bin
+          ./models/bark-small/ggml_weights_q4.bin
+          q4_0
+
+      - name: Run quantized
+        id: load_and_run_quantized
+        run: >-
+          ./build/examples/main/main
+          -m ./models/bark-small/ggml_weights_q4.bin
+          -p "hello"
+          -t 4
+          -s 0
