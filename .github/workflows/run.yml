@@ -38,9 +38,6 @@ env:
 jobs:
   ubuntu-latest-run:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        quant_type: [q4_0, q8_0]
 
     steps:
       - name: Clone
@@ -91,22 +88,19 @@ jobs:
         run: >-
           ./build/examples/quantize/quantize
           ./models/bark-small/ggml_weights.bin
-          ./models/bark-small/ggml_weights_${{ matrix.quant_type }}.bin
-          ${{ matrix.quant_type }}
+          ./models/bark-small/ggml_weights_q4.bin
+          q4_0
 
       - name: Run quantized
         id: load_and_run_quantized
         run: >-
           ./build/examples/main/main
-          -m ./models/bark-small/ggml_weights_${{ matrix.quant_type }}.bin
+          -m ./models/bark-small/ggml_weights_q4.bin
           -p "hello"
           -t 4
 
   macOS-latest-run:
     runs-on: macos-latest
-    strategy:
-      matrix:
-        quant_type: [q4_0, q8_0]
 
     steps:
       - name: Clone
@@ -155,18 +149,18 @@ jobs:
           -p "hello"
           -t 4
 
-      - name: Quantize ${{ matrix.quant_type }}
+      - name: Quantize
         id: quantize
         run: >-
           ./build/examples/quantize/quantize
           ./models/bark-small/ggml_weights.bin
-          ./models/bark-small/ggml_weights_${{ matrix.quant_type }}.bin
-          ${{ matrix.quant_type }}
+          ./models/bark-small/ggml_weights_q4.bin
+          q4_0
 
-      - name: Run quantized ${{ matrix.quant_type }}
+      - name: Run quantized
         id: load_and_run_quantized
         run: >-
           ./build/examples/main/main
-          -m ./models/bark-small/ggml_weights_${{ matrix.quant_type }}.bin
+          -m ./models/bark-small/ggml_weights_q4.bin
           -p "hello"
           -t 4
