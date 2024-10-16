@@ -29,7 +29,18 @@ if(BUILD_SHARED_LIBS)
     add_library(${BARK_LIB}_shared SHARED bark.cpp bark.h)
     set_target_properties(${BARK_LIB}_shared PROPERTIES OUTPUT_NAME ${BARK_LIB})
     target_link_libraries(${BARK_LIB}_shared PUBLIC ggml encodec)
-    set_target_properties(${BARK_LIB}_shared PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    set_target_properties(${BARK_LIB}_shared PROPERTIES 
+                            PUBLIC_HEADER bark.h
+                            POSITION_INDEPENDENT_CODE ON
+    )
+    
+    # Add EXPORTING_BARK definition when building the shared library
+    target_compile_definitions(${BARK_LIB}_shared PRIVATE EXPORTING_BARK)
+    
+    # Ensure all symbols are exported on Windows
+    if(MSVC)
+        set_target_properties(${BARK_LIB}_shared PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+    endif()
 endif()
 
 if (BARK_BUILD_EXAMPLES)
