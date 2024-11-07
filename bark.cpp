@@ -2,7 +2,7 @@
 #include "ggml-backend.h"
 #include "ggml.h"
 
-#ifdef GGML_USE_CUBLAS
+#ifdef GGML_USE_CUDA
 #include "ggml-cuda.h"
 #endif
 
@@ -24,6 +24,8 @@
 
 #include "bark.h"
 #include "encodec.h"
+
+#define BARK_MAX_NODES 4096
 
 #define EPS_NORM 1e-5f
 
@@ -99,7 +101,8 @@ struct gpt_model {
     struct ggml_tensor* memory_k;
     struct ggml_tensor* memory_v;
 
-    struct ggml_context* ctx;
+    struct ggml_context* ctx_w;
+    struct ggml_context* ctx_kv;
 
     ggml_backend_t backend = NULL;
 
@@ -139,7 +142,7 @@ struct bark_context {
     ggml_backend_buffer_t buf_compute;
 
     // custom allocator
-    struct ggml_allocr* allocr = NULL;
+    ggml_gallocr_t allocr = NULL;
     int n_gpu_layers = 0;
 
     std::mt19937 rng;
@@ -410,39 +413,39 @@ static bool ggml_quantize_weights(
             size_t cur_size = 0;
             std::vector<int64_t> hist_cur(1 << 4, 0);
 
-            switch ((ggml_type)ttype) {
-                case GGML_TYPE_Q4_0: {
-                    cur_size = ggml_quantize_q4_0(data_f32.data(), work.data(), nelements, ne[0], hist_cur.data());
-                } break;
-                case GGML_TYPE_Q4_1: {
-                    cur_size = ggml_quantize_q4_1(data_f32.data(), work.data(), nelements, ne[0], hist_cur.data());
-                } break;
-                case GGML_TYPE_Q5_0: {
-                    cur_size = ggml_quantize_q5_0(data_f32.data(), work.data(), nelements, ne[0], hist_cur.data());
-                } break;
-                case GGML_TYPE_Q5_1: {
-                    cur_size = ggml_quantize_q5_1(data_f32.data(), work.data(), nelements, ne[0], hist_cur.data());
-                } break;
-                case GGML_TYPE_Q8_0: {
-                    cur_size = ggml_quantize_q8_0(data_f32.data(), work.data(), nelements, ne[0], hist_cur.data());
-                } break;
-                case GGML_TYPE_F32:
-                case GGML_TYPE_F16:
-                case GGML_TYPE_I8:
-                case GGML_TYPE_I16:
-                case GGML_TYPE_I32:
-                case GGML_TYPE_Q8_1:
-                case GGML_TYPE_Q2_K:
-                case GGML_TYPE_Q3_K:
-                case GGML_TYPE_Q4_K:
-                case GGML_TYPE_Q5_K:
-                case GGML_TYPE_Q6_K:
-                case GGML_TYPE_Q8_K:
-                case GGML_TYPE_COUNT: {
-                    fprintf(stderr, "%s: unsupported quantization type %d (%s)\n", __func__, ttype, ggml_type_name((ggml_type)ttype));
-                    return false;
-                }
-            }
+            // switch ((ggml_type)ttype) {
+            //     case GGML_TYPE_Q4_0: {
+            //         cur_size = ggml_quantize_q4_0(data_f32.data(), work.data(), nelements, ne[0], hist_cur.data());
+            //     } break;
+            //     case GGML_TYPE_Q4_1: {
+            //         cur_size = ggml_quantize_q4_1(data_f32.data(), work.data(), nelements, ne[0], hist_cur.data());
+            //     } break;
+            //     case GGML_TYPE_Q5_0: {
+            //         cur_size = ggml_quantize_q5_0(data_f32.data(), work.data(), nelements, ne[0], hist_cur.data());
+            //     } break;
+            //     case GGML_TYPE_Q5_1: {
+            //         cur_size = ggml_quantize_q5_1(data_f32.data(), work.data(), nelements, ne[0], hist_cur.data());
+            //     } break;
+            //     case GGML_TYPE_Q8_0: {
+            //         cur_size = ggml_quantize_q8_0(data_f32.data(), work.data(), nelements, ne[0], hist_cur.data());
+            //     } break;
+            //     case GGML_TYPE_F32:
+            //     case GGML_TYPE_F16:
+            //     case GGML_TYPE_I8:
+            //     case GGML_TYPE_I16:
+            //     case GGML_TYPE_I32:
+            //     case GGML_TYPE_Q8_1:
+            //     case GGML_TYPE_Q2_K:
+            //     case GGML_TYPE_Q3_K:
+            //     case GGML_TYPE_Q4_K:
+            //     case GGML_TYPE_Q5_K:
+            //     case GGML_TYPE_Q6_K:
+            //     case GGML_TYPE_Q8_K:
+            //     case GGML_TYPE_COUNT: {
+            //         fprintf(stderr, "%s: unsupported quantization type %d (%s)\n", __func__, ttype, ggml_type_name((ggml_type)ttype));
+            //         return false;
+            //     }
+            // }
 
             fout.write(reinterpret_cast<char*>(work.data()), cur_size);
             total_size_new += cur_size;
@@ -740,8 +743,6 @@ static bool bark_model_load(std::ifstream& fin, gpt_model& model, int n_gpu_laye
         return false;
     }
 
-    auto& ctx = model.ctx;
-
     size_t buffer_size = 0;
     size_t n_tensors = 0;
 
@@ -809,6 +810,8 @@ static bool bark_model_load(std::ifstream& fin, gpt_model& model, int n_gpu_laye
         }
     }
 
+    auto & ctx = model.ctx_w;
+
     // create the ggml context
     {
         struct ggml_init_params params = {
@@ -817,14 +820,14 @@ static bool bark_model_load(std::ifstream& fin, gpt_model& model, int n_gpu_laye
             /*.no_alloc   =*/true,
         };
 
-        model.ctx = ggml_init(params);
-        if (!model.ctx) {
+        ctx = ggml_init(params);
+        if (!ctx) {
             fprintf(stderr, "%s: ggml_init() failed\n", __func__);
             return false;
         }
     }
 
-#ifdef GGML_USE_CUBLAS
+#ifdef GGML_USE_CUDA
     if (n_gpu_layers > 0) {
         fprintf(stderr, "%s: using CUDA backend\n", __func__);
         model.backend = ggml_backend_cuda_init();
@@ -859,9 +862,6 @@ static bool bark_model_load(std::ifstream& fin, gpt_model& model, int n_gpu_laye
 
         return false;
     }
-
-    // allocate weights buffer
-    model.buffer_w = ggml_backend_alloc_buffer(model.backend, buffer_size);
 
     // prepare memory for the weights
     {
@@ -947,8 +947,13 @@ static bool bark_model_load(std::ifstream& fin, gpt_model& model, int n_gpu_laye
         }
     }
 
+    // allocate weights buffer
+    model.buffer_w = ggml_backend_alloc_ctx_tensors(model.ctx_w, model.backend);
+
     // key + value memory
     {
+        auto * ctx = model.ctx_kv;
+
         const auto& hparams = model.hparams;
 
         const int n_embd = hparams.n_embd;
@@ -974,28 +979,13 @@ static bool bark_model_load(std::ifstream& fin, gpt_model& model, int n_gpu_laye
                 printf("%s: memory size = %8.2f MB, n_mem = %d\n", __func__, memory_size / 1024.0 / 1024.0, n_mem);
             }
 
-            // create a backend buffer (can be in host or device memory)
-            model.buffer_kv = ggml_backend_alloc_buffer(model.backend, memory_size + 256);
-
-            // allocate the tensors into the backend buffer
-            {
-                ggml_allocr* alloc = ggml_allocr_new_from_buffer(model.buffer_kv);
-
-                // this updates the pointers in the tensors to point to the correct location in the buffer
-                // this is necessary since the ggml_context is .no_alloc == true
-                // note that the buffer can actually be a device buffer, depending on the backend
-                ggml_allocr_alloc(alloc, model.memory_k);
-                ggml_allocr_alloc(alloc, model.memory_v);
-
-                ggml_allocr_free(alloc);
-            }
+            // allocate the KV memory in a backend buffer
+            model.buffer_kv = ggml_backend_alloc_ctx_tensors(ctx, model.backend);
         }
     }
 
     // load weights
     {
-        ggml_allocr* alloc = ggml_allocr_new_from_buffer(model.buffer_w);
-
         size_t total_size = 0;
 
         std::vector<char> read_buf;
@@ -1053,13 +1043,7 @@ static bool bark_model_load(std::ifstream& fin, gpt_model& model, int n_gpu_laye
                 return false;
             }
 
-            ggml_allocr_alloc(alloc, tensor);
-
-            if (ggml_backend_is_cpu(model.backend)
-#ifdef GGML_USE_METAL
-                || ggml_backend_is_metal(model.backend)
-#endif
-            ) {
+            if (ggml_backend_buffer_is_host(model.buffer_w)) {
                 // for the CPU and Metal backends, we can read directly into the device memory
                 fin.read(reinterpret_cast<char*>(tensor->data), ggml_nbytes(tensor));
             } else {
@@ -1075,8 +1059,6 @@ static bool bark_model_load(std::ifstream& fin, gpt_model& model, int n_gpu_laye
 
             total_size += ggml_nbytes(tensor);
         }
-
-        ggml_allocr_free(alloc);
 
         if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
             printf("%s: model size  = %8.2f MB\n", __func__, total_size / 1024.0 / 1024.0);
@@ -1170,7 +1152,6 @@ static bool bark_load_model_from_file(
 
     printf("\n");
 
-
     return true;
 }
 
@@ -1193,13 +1174,11 @@ struct bark_context* bark_load_model(const char* model_path, struct bark_context
     return bctx;
 }
 
-static struct ggml_cgraph* bark_build_gpt_graph(
-    gpt_model* model,
-    ggml_allocr* allocr,
-    bark_sequence& tokens,
-    int* n_past,
-    bool merge_ctx,
-    int n_threads) {
+static struct ggml_cgraph * bark_build_gpt_graph(
+          const gpt_model * model,
+          bark_sequence   & tokens,
+          int             * n_past,
+          bool              merge_ctx) {
     if (!n_past) {
         fprintf(stderr, "%s: n_past is null\n", __func__);
         return NULL;
@@ -1207,35 +1186,31 @@ static struct ggml_cgraph* bark_build_gpt_graph(
 
     int N = tokens.size();
 
-    const auto& hparams = model->hparams;
+    const auto & hparams = model->hparams;
 
-    const int n_embd = hparams.n_embd;
+    const int n_embd  = hparams.n_embd;
     const int n_layer = hparams.n_layer;
-    const int n_ctx = hparams.block_size;
-    const int n_head = hparams.n_head;
+    const int n_ctx   = hparams.block_size;
+    const int n_head  = hparams.n_head;
     const int n_vocab = hparams.n_out_vocab;
-    const int bias = hparams.bias;
+    const int bias    = hparams.bias;
 
-    static size_t buf_size = ggml_tensor_overhead() * GGML_MAX_NODES + ggml_graph_overhead();
+    static size_t buf_size = ggml_tensor_overhead() * BARK_MAX_NODES + ggml_graph_overhead_custom(BARK_MAX_NODES, false);
     static std::vector<uint8_t> buf(buf_size);
 
     struct ggml_init_params ggml_params = {
-        /*.mem_size   =*/buf_size,
-        /*.mem_buffer =*/buf.data(),
-        /*.no_alloc   =*/true,
+        /*.mem_size   =*/ buf_size,
+        /*.mem_buffer =*/ buf.data(),
+        /*.no_alloc   =*/ true,
     };
 
-    struct ggml_context* ctx0 = ggml_init(ggml_params);
+    struct ggml_context * ctx0 = ggml_init(ggml_params);
 
-    struct ggml_cgraph* gf = ggml_new_graph(ctx0);
+    struct ggml_cgraph * gf = ggml_new_graph_custom(ctx0, BARK_MAX_NODES, false);
 
-    struct ggml_tensor* input = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
-    ggml_allocr_alloc(allocr, input);
-
-    // avoid writing to tensors if we are only measuring the memory usage
-    if (!ggml_allocr_is_measure(allocr)) {
-        ggml_backend_tensor_set(input, tokens.data(), 0, N * ggml_element_size(input));
-    }
+    struct ggml_tensor * input = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
+    ggml_set_input(input);
+    ggml_set_name(input, "input");
 
     struct ggml_tensor* tok_emb;
 
@@ -1251,14 +1226,14 @@ static struct ggml_cgraph* bark_build_gpt_graph(
         }
 
         if (merge_ctx) {
-            struct ggml_tensor* seq_embd = ggml_get_rows(ctx0, model->wtes[0], ggml_view_1d(ctx0, input, 256, 0));
-            struct ggml_tensor* ctx_embd = ggml_get_rows(ctx0, model->wtes[0], ggml_view_1d(ctx0, input, 256, 256 * ggml_element_size(input)));
-            struct ggml_tensor* rem_embd = ggml_get_rows(ctx0, model->wtes[0], ggml_view_1d(ctx0, input, 1, 512 * ggml_element_size(input)));
+            struct ggml_tensor * seq_embd = ggml_get_rows(ctx0, model->wtes[0], ggml_view_1d(ctx0, input, 256, 0));
+            struct ggml_tensor * ctx_embd = ggml_get_rows(ctx0, model->wtes[0], ggml_view_1d(ctx0, input, 256, 256 * ggml_element_size(input)));
+            struct ggml_tensor * rem_embd = ggml_get_rows(ctx0, model->wtes[0], ggml_view_1d(ctx0, input, 1, 512 * ggml_element_size(input)));
 
-            struct ggml_tensor* cat_emb = ggml_add(ctx0, seq_embd, ctx_embd);
+            struct ggml_tensor * cat_emb = ggml_add(ctx0, seq_embd, ctx_embd);
 
             tok_emb = ggml_new_tensor_2d(ctx0, cat_emb->type, cat_emb->ne[0], cat_emb->ne[1] + rem_embd->ne[1]);
-            ggml_allocr_alloc(allocr, tok_emb);
+            ggml_set_input(tok_emb);
 
             tok_emb = ggml_set_1d(ctx0, tok_emb, cat_emb, 0);
             tok_emb = ggml_set_1d(ctx0, tok_emb, rem_embd, cat_emb->ne[0] * cat_emb->ne[1] * ggml_element_size(cat_emb));
@@ -1267,21 +1242,9 @@ static struct ggml_cgraph* bark_build_gpt_graph(
         }
     }
 
-    struct ggml_tensor* position = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
-    ggml_allocr_alloc(allocr, position);
-    if (!ggml_allocr_is_measure(allocr)) {
-        for (int i = 0; i < N; ++i) {
-            int32_t v = *n_past + i;
-            ggml_backend_tensor_set(position, &v, i * sizeof(int32_t), sizeof(v));
-        }
-    }
-
-    struct ggml_tensor* KQ_scale = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, 1);
-    ggml_allocr_alloc(allocr, KQ_scale);
-    if (!ggml_allocr_is_measure(allocr)) {
-        float s = 1.0f / sqrtf(float(n_embd) / n_head);
-        ggml_backend_tensor_set(KQ_scale, &s, 0, sizeof(s));
-    }
+    struct ggml_tensor * position = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
+    ggml_set_input(position);
+    ggml_set_name(position, "position");
 
     // wte + wpe
     struct ggml_tensor* inpL = ggml_add(ctx0, tok_emb, ggml_get_rows(ctx0, model->wpe, position));
@@ -1343,7 +1306,7 @@ static struct ggml_cgraph* bark_build_gpt_graph(
 
             struct ggml_tensor* KQ = ggml_mul_mat(ctx0, K, Q);
 
-            struct ggml_tensor* KQ_scaled = ggml_scale_inplace(ctx0, KQ, KQ_scale);
+            struct ggml_tensor* KQ_scaled = ggml_scale_inplace(ctx0, KQ, 1.0f/sqrtf(float(n_embd)/n_head));
 
             struct ggml_tensor* KQ_masked = ggml_diag_mask_inf_inplace(ctx0, KQ_scaled, *n_past);
 
@@ -1431,6 +1394,8 @@ static struct ggml_cgraph* bark_build_gpt_graph(
     inpL = ggml_mul_mat(ctx0,
                         model->lm_heads[0],
                         ggml_view_1d(ctx0, inpL, inpL->ne[0], (inpL->ne[1] - 1) * inpL->nb[1]));
+    ggml_set_name(inpL, "logits");
+    ggml_set_output(inpL);
 
     ggml_build_forward_expand(gf, inpL);
 
@@ -1439,52 +1404,47 @@ static struct ggml_cgraph* bark_build_gpt_graph(
     return gf;
 }
 
-static ggml_cgraph* bark_build_fine_gpt_graph(
-    gpt_model* model,
-    ggml_allocr* allocr,
-    bark_sequence& tokens,
-    int codebook_idx,
-    int n_fine_codebooks,
-    int n_threads) {
+static ggml_cgraph * bark_build_fine_gpt_graph(
+    const gpt_model * model,
+    bark_sequence   & tokens,
+    int               codebook_idx,
+    int               n_fine_codebooks) {
     // tokens: [n_channels, N]
     const int N = tokens.size() / n_fine_codebooks;
     const int n_channels = n_fine_codebooks;
 
     const auto& hparams = model->hparams;
 
-    const int n_embd = hparams.n_embd;
+    const int n_embd  = hparams.n_embd;
     const int n_layer = hparams.n_layer;
-    const int n_ctx = hparams.block_size;
-    const int n_head = hparams.n_head;
+    const int n_ctx   = hparams.block_size;
+    const int n_head  = hparams.n_head;
 
     const int n_codes_given = hparams.n_codes_given;
 
     assert(N <= n_ctx);
     assert(codebook_idx > 0);
 
-    static size_t buf_size = ggml_tensor_overhead() * GGML_MAX_NODES + ggml_graph_overhead();
+    static size_t buf_size = ggml_tensor_overhead() * BARK_MAX_NODES + ggml_graph_overhead_custom(BARK_MAX_NODES, false);
     static std::vector<uint8_t> buf(buf_size);
 
     struct ggml_init_params ggml_params = {
-        /*.mem_size   =*/buf_size,
-        /*.mem_buffer =*/buf.data(),
-        /*.no_alloc   =*/true,
+        /*.mem_size   =*/ buf_size,
+        /*.mem_buffer =*/ buf.data(),
+        /*.no_alloc   =*/ true,
     };
 
     struct ggml_context* ctx0 = ggml_init(ggml_params);
 
-    struct ggml_cgraph* gf = ggml_new_graph(ctx0);
+    struct ggml_cgraph* gf = ggml_new_graph_custom(ctx0, BARK_MAX_NODES, false);
 
     struct ggml_tensor* input = ggml_new_tensor_2d(ctx0, GGML_TYPE_I32, N, n_channels);
-    ggml_allocr_alloc(allocr, input);
+    ggml_set_input(input);
+    ggml_set_name(input, "input");
 
     struct ggml_tensor* tok_emb = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N);
-    ggml_allocr_alloc(allocr, tok_emb);
-
-    if (!ggml_allocr_is_measure(allocr)) {
-        ggml_backend_tensor_set(input, tokens.data(), 0, N * n_channels * ggml_element_size(input));
-        ggml_set_zero(tok_emb);
-    }
+    ggml_set_input(tok_emb);
+    ggml_set_name(tok_emb, "tok_emb");
 
     for (int wte_ix = 0; wte_ix < codebook_idx + 1; wte_ix++) {
         struct ggml_tensor* cur = ggml_get_rows(ctx0,
@@ -1493,26 +1453,12 @@ static ggml_cgraph* bark_build_fine_gpt_graph(
 
         tok_emb = ggml_add(ctx0, tok_emb, cur);
     }
-    ggml_set_name(tok_emb, "tok_emb");
 
-    struct ggml_tensor* position = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
-    ggml_allocr_alloc(allocr, position);
-    if (!ggml_allocr_is_measure(allocr)) {
-        for (int32_t i = 0; i < N; ++i) {
-            ggml_backend_tensor_set(position, &i, i * sizeof(int32_t), sizeof(i));
-        }
-    }
+    struct ggml_tensor * position = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, N);
+    ggml_set_input(position);
     ggml_set_name(position, "position");
 
-    struct ggml_tensor* pos_emb = ggml_get_rows(ctx0, model->wpe, position);
-    ggml_set_name(pos_emb, "pos_emb");
-
-    struct ggml_tensor* KQ_scale = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, 1);
-    ggml_allocr_alloc(allocr, KQ_scale);
-    if (!ggml_allocr_is_measure(allocr)) {
-        float s = 1.0f / sqrtf(float(n_embd) / n_head);
-        ggml_backend_tensor_set(KQ_scale, &s, 0, sizeof(s));
-    }
+    struct ggml_tensor * pos_emb = ggml_get_rows(ctx0, model->wpe, position);
 
     // wte + wpe
     struct ggml_tensor* inpL = ggml_add(ctx0, tok_emb, pos_emb);
@@ -1554,7 +1500,7 @@ static ggml_cgraph* bark_build_fine_gpt_graph(
 
             struct ggml_tensor* KQ = ggml_mul_mat(ctx0, K, Q);
 
-            struct ggml_tensor* KQ_scaled = ggml_scale_inplace(ctx0, KQ, KQ_scale);
+            struct ggml_tensor* KQ_scaled = ggml_scale_inplace(ctx0, KQ, 1.0f/sqrtf(float(n_embd)/n_head));
 
             struct ggml_tensor* KQ_soft_max = ggml_soft_max_inplace(ctx0, KQ_scaled);
 
@@ -1619,6 +1565,9 @@ static ggml_cgraph* bark_build_fine_gpt_graph(
     struct ggml_tensor* lm_head = model->lm_heads[codebook_idx - n_codes_given];
     inpL = ggml_mul_mat(ctx0, lm_head, inpL);
 
+    ggml_set_output(inpL);
+    ggml_set_name(inpL, "logits");
+
     ggml_build_forward_expand(gf, inpL);
 
     ggml_free(ctx0);
@@ -1627,44 +1576,46 @@ static ggml_cgraph* bark_build_fine_gpt_graph(
 }
 
 static bool bark_eval_encoder_internal(
-    gpt_model& model,
-    ggml_allocr* allocr,
-    bark_sequence& input,
-    std::vector<float>& logits,
-    int* n_past,
-    bool merge_ctx,
-    int n_threads) {
-    auto& hparams = model.hparams;
+    gpt_model          & model,
+    ggml_gallocr_t       allocr,
+    bark_sequence      & input_sequence,
+    std::vector<float> & logits,
+    int                * n_past,
+    bool                 merge_ctx,
+    int                  n_threads) {
+    auto & hparams = model.hparams;
     const int n_vocab = hparams.n_out_vocab;
 
     const int64_t t_predict_us_start = ggml_time_us();
 
-    // reset the allocator to free all the memory allocated during the previous inference
-    ggml_allocr_reset(allocr);
+    struct ggml_cgraph* gf = bark_build_gpt_graph(&model, input_sequence, n_past, merge_ctx);
 
-    struct ggml_cgraph* gf = bark_build_gpt_graph(
-        &model, allocr, input, n_past, merge_ctx, n_threads);
+    // allocate the graph tensors
+    ggml_gallocr_alloc_graph(allocr, gf);
 
-    // allocate tensors
-    ggml_allocr_alloc_graph(allocr, gf);
+    // set the graph inputs
+    struct ggml_tensor * input = ggml_graph_get_tensor(gf, "input");
+    ggml_backend_tensor_set(input, input_sequence.data(), 0, input_sequence.size() * sizeof(int32_t));
 
-    // run the computation
+    struct ggml_tensor * position = ggml_graph_get_tensor(gf, "position");
+    for (int i = 0; i < input_sequence.size(); i++) {
+        int32_t pos = i + *n_past;
+        ggml_backend_tensor_set(position, &pos, i * sizeof(int32_t), sizeof(pos));
+    }
+
+    // set backend options
     if (ggml_backend_is_cpu(model.backend)) {
         ggml_backend_cpu_set_n_threads(model.backend, n_threads);
     }
-#ifdef GGML_USE_METAL
-    if (ggml_backend_is_metal(model.backend)) {
-        ggml_backend_metal_set_n_cb(model.backend, n_threads);
-    }
-#endif
+
+    // run the computation
     ggml_backend_graph_compute(model.backend, gf);
 
-    struct ggml_tensor* inpL = gf->nodes[gf->n_nodes - 1];
+    struct ggml_tensor * inpL = ggml_graph_get_tensor(gf, "logits");
 
-    int N = input.size();
-    if (merge_ctx && *n_past == 0) {
+    int N = input_sequence.size();
+    if (merge_ctx && *n_past == 0)
         N -= 256;
-    }
 
     logits.resize(n_vocab);
     ggml_backend_tensor_get(inpL, logits.data(), 0, sizeof(float) * n_vocab);
@@ -1686,23 +1637,22 @@ static bool bark_eval_text_encoder(struct bark_context* bctx, int n_threads) {
     auto& params = bctx->params;
 
     int32_t n_steps_text_encoder = params.n_steps_text_encoder;
-    int32_t semantic_vocab_size = params.semantic_vocab_size;
-    int32_t semantic_pad_token = params.semantic_pad_token;
+    int32_t semantic_vocab_size  = params.semantic_vocab_size;
+    int32_t semantic_pad_token   = params.semantic_pad_token;
 
-    auto& model = bctx->text_model.semantic_model;
-    auto& allocr = bctx->allocr;
-    auto& hparams = model.hparams;
+    auto & model   = bctx->text_model.semantic_model;
+    auto & allocr  = bctx->allocr;
+    auto & hparams = model.hparams;
 
     const int n_vocab = hparams.n_out_vocab;
-
-    float min_eos_p = bctx->params.min_eos_p;
-    float temp = bctx->params.temp;
+    float min_eos_p   = bctx->params.min_eos_p;
+    float temp        = bctx->params.temp;
 
     std::vector<float> logits;
     logits.resize(n_vocab);
 
     float eos_p = 0;
-    int n_past = 0;
+    int n_past  = 0;
 
     for (int i = 0; i < n_steps_text_encoder; i++) {
         if (params.progress_callback) {
@@ -1725,15 +1675,14 @@ static bool bark_eval_text_encoder(struct bark_context* bctx, int n_threads) {
         bark_token next = gpt_sample(
             logits, bctx->rng, temp, &eos_p, &model.t_sample_us, &model.n_sample);
 
-        if (next == semantic_vocab_size || eos_p >= min_eos_p) {
+        if (next == semantic_vocab_size || eos_p >= min_eos_p)
             break;
-        }
 
         input.push_back(next);
         output.push_back(next);
     }
 
-    bctx->semantic_tokens = output;
+    bctx->semantic_tokens         = output;
     bctx->stats.n_sample_semantic = model.n_sample;
 
     return true;
@@ -1742,30 +1691,23 @@ static bool bark_eval_text_encoder(struct bark_context* bctx, int n_threads) {
 bool bark_forward_text_encoder(struct bark_context* bctx, int n_threads) {
     const int64_t t_main_start_us = ggml_time_us();
 
-    auto& model = bctx->text_model.semantic_model;
-    auto& allocr = bctx->allocr;
-    auto& hparams = model.hparams;
-    auto& verbosity = bctx->params.verbosity;
+    auto & model     = bctx->text_model.semantic_model;
+    auto & allocr    = bctx->allocr;
+    auto & hparams   = model.hparams;
+    auto & verbosity = bctx->params.verbosity;
 
     // allocate the compute buffer
     {
-        // alignment required by the backend
-        size_t align = ggml_backend_get_alignment(model.backend);
-        bctx->allocr = ggml_allocr_new_measure(align);
+        bctx->allocr = ggml_gallocr_new(ggml_backend_get_default_buffer_type(model.backend));
 
         // create the worst-case graph for memory usage estimation
         int n_past = 0;
         std::vector<bark_vocab::id> decoy_tokens(256 + 256 + 1, 0);
-        struct ggml_cgraph* gf = bark_build_gpt_graph(
-            &model, allocr, decoy_tokens, &n_past, true /* merge_ctx */, n_threads);
+        struct ggml_cgraph * gf = bark_build_gpt_graph(&model, decoy_tokens, &n_past, true /* merge_ctx */);
 
-        // compute the required memory
-        size_t mem_size = ggml_allocr_alloc_graph(bctx->allocr, gf);
-
-        // recreate the allocator with the required memory
-        ggml_allocr_free(bctx->allocr);
-        bctx->buf_compute = ggml_backend_alloc_buffer(model.backend, mem_size);
-        bctx->allocr = ggml_allocr_new_from_buffer(bctx->buf_compute);
+        // pre-allocate the compute buffer for the worst case
+        ggml_gallocr_reserve(allocr, gf);
+        size_t mem_size =  ggml_gallocr_get_buffer_size(allocr, 0);
 
         if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
             fprintf(stderr, "%s: compute buffer size: %.2f MB\n\n", __func__, mem_size / 1024.0 / 1024.0);
@@ -1782,8 +1724,8 @@ bool bark_forward_text_encoder(struct bark_context* bctx, int n_threads) {
 
     bark_print_statistics(&model);
 
+    ggml_gallocr_free(bctx->allocr);
     ggml_backend_buffer_free(bctx->buf_compute);
-    ggml_allocr_free(bctx->allocr);
 
     return true;
 }
@@ -1794,27 +1736,27 @@ static bool bark_eval_coarse_encoder(struct bark_context* bctx, int n_threads) {
 
     bark_sequence input = bctx->semantic_tokens;
 
-    auto& model = bctx->text_model.coarse_model;
-    auto& allocr = bctx->allocr;
-    auto& hparams = model.hparams;
-    auto& params = bctx->params;
+    auto & model   = bctx->text_model.coarse_model;
+    auto & allocr  = bctx->allocr;
+    auto & hparams = model.hparams;
+    auto & params  = bctx->params;
 
     const int n_vocab = hparams.n_out_vocab;
 
     std::vector<float> logits;
     logits.resize(n_vocab);
 
-    int max_coarse_history = params.max_coarse_history;
+    int max_coarse_history  = params.max_coarse_history;
     int sliding_window_size = params.sliding_window_size;
-    int n_coarse_codebooks = params.n_coarse_codebooks;
+    int n_coarse_codebooks  = params.n_coarse_codebooks;
     int semantic_vocab_size = params.semantic_vocab_size;
-    int codebook_size = params.codebook_size;
+    int codebook_size       = params.codebook_size;
 
-    float coarse_rate_hz = params.coarse_rate_hz;
+    float coarse_rate_hz   = params.coarse_rate_hz;
     float semantic_rate_hz = params.semantic_rate_hz;
 
     int32_t coarse_semantic_pad_token = params.coarse_semantic_pad_token;
-    int32_t coarse_infer_token = params.coarse_infer_token;
+    int32_t coarse_infer_token        = params.coarse_infer_token;
 
     float temp = params.temp;
 
@@ -1855,9 +1797,8 @@ static bool bark_eval_coarse_encoder(struct bark_context* bctx, int n_threads) {
         int n_past = 0;
 
         for (int j = 0; j < sliding_window_size; j++) {
-            if (step_idx >= n_steps) {
+            if (step_idx >= n_steps)
                 continue;
-            }
 
             if (params.progress_callback) {
                 const int progress_cur = 100*(step_idx+1)/n_steps;
@@ -1875,11 +1816,9 @@ static bool bark_eval_coarse_encoder(struct bark_context* bctx, int n_threads) {
 
             bool is_major = step_idx % n_coarse_codebooks == 0;
             int start_idx = semantic_vocab_size + (1 - is_major) * codebook_size;
-            int end_idx = semantic_vocab_size + (2 - is_major) * codebook_size;
+            int end_idx   = semantic_vocab_size + (2 - is_major) * codebook_size;
 
-            std::vector<float> relevant_logits(
-                logits.begin() + start_idx,
-                logits.begin() + end_idx);
+            std::vector<float> relevant_logits(logits.begin() + start_idx, logits.begin() + end_idx);
 
             bark_token next = gpt_sample(
                 relevant_logits, bctx->rng, temp, NULL, &model.t_sample_us, &model.n_sample);
@@ -1905,7 +1844,7 @@ static bool bark_eval_coarse_encoder(struct bark_context* bctx, int n_threads) {
         out_coarse.push_back(_tmp);
     }
 
-    bctx->coarse_tokens = out_coarse;
+    bctx->coarse_tokens         = out_coarse;
     bctx->stats.n_sample_coarse = model.n_sample;
 
     return true;
@@ -1914,34 +1853,27 @@ static bool bark_eval_coarse_encoder(struct bark_context* bctx, int n_threads) {
 bool bark_forward_coarse_encoder(struct bark_context* bctx, int n_threads) {
     const int64_t t_main_start_us = ggml_time_us();
 
-    auto& model = bctx->text_model.coarse_model;
-    auto& allocr = bctx->allocr;
-    auto& hparams = model.hparams;
-    auto& verbosity = bctx->params.verbosity;
+    auto & model     = bctx->text_model.coarse_model;
+    auto & allocr    = bctx->allocr;
+    auto & hparams   = model.hparams;
+    auto & verbosity = bctx->params.verbosity;
 
     // allocate the compute buffer
     {
-        // alignment required by the backend
-        size_t align = ggml_backend_get_alignment(model.backend);
-        bctx->allocr = ggml_allocr_new_measure(align);
+        // create a graph allocator with the backend's default buffer type
+        bctx->allocr = ggml_gallocr_new(ggml_backend_get_default_buffer_type(model.backend));
 
         // create the worst-case graph for memory usage estimation
         int n_past = 0;
         std::vector<bark_vocab::id> decoy_tokens(hparams.block_size, 0);
-        struct ggml_cgraph* gf = bark_build_gpt_graph(
-            &model, allocr, decoy_tokens, &n_past, false /* merge_ctx */, n_threads);
+        struct ggml_cgraph * gf = bark_build_gpt_graph(&model, decoy_tokens, &n_past, false /* merge_ctx */);
 
-        // compute the required memory
-        size_t mem_size = ggml_allocr_alloc_graph(bctx->allocr, gf);
+        // pre-allocate the compute buffer for the worst case (optional)
+        ggml_gallocr_reserve(allocr, gf);
+        size_t mem_size =  ggml_gallocr_get_buffer_size(allocr, 0);
 
-        // recreate the allocator with the required memory
-        ggml_allocr_free(bctx->allocr);
-        bctx->buf_compute = ggml_backend_alloc_buffer(model.backend, mem_size);
-        bctx->allocr = ggml_allocr_new_from_buffer(bctx->buf_compute);
-
-        if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
+        if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH)
             fprintf(stderr, "%s: compute buffer size: %.2f MB\n\n", __func__, mem_size / 1024.0 / 1024.0);
-        }
     }
 
     if (!bark_eval_coarse_encoder(bctx, n_threads)) {
@@ -1955,50 +1887,52 @@ bool bark_forward_coarse_encoder(struct bark_context* bctx, int n_threads) {
     bark_print_statistics(&model);
 
     ggml_backend_buffer_free(bctx->buf_compute);
-    ggml_allocr_free(bctx->allocr);
+    ggml_gallocr_free(bctx->allocr);
 
     return true;
 }
 
 static bool bark_eval_fine_encoder_internal(
-    struct bark_context* bctx,
-    bark_sequence& input,
-    std::vector<float>& logits,
-    int nn,
-    int n_threads) {
-    auto& model = bctx->text_model.fine_model;
-    auto& allocr = bctx->allocr;
+    struct bark_context * bctx,
+    bark_sequence       & input_sequence,
+    std::vector<float>  & logits,
+    int                   nn,
+    int                   n_threads) {
+    auto& model   = bctx->text_model.fine_model;
+    auto& allocr  = bctx->allocr;
     auto& hparams = model.hparams;
-    auto& params = bctx->params;
+    auto& params  = bctx->params;
 
-    const int n_vocab = hparams.n_out_vocab;
+    const int n_vocab    = hparams.n_out_vocab;
     const int block_size = hparams.block_size;
 
     const int n_fine_codebooks = params.n_fine_codebooks;
 
     const int64_t t_predict_us_start = ggml_time_us();
 
-    // reset the allocator to free all the memory allocated during the previous inference
-    ggml_allocr_reset(allocr);
+    struct ggml_cgraph* gf = bark_build_fine_gpt_graph(&model, input_sequence, nn, n_fine_codebooks);
 
-    struct ggml_cgraph* gf = bark_build_fine_gpt_graph(
-        &model, allocr, input, nn, n_fine_codebooks, n_threads);
+    // allocate the graph tensors
+    ggml_gallocr_alloc_graph(allocr, gf);
 
-    // allocate tensors
-    ggml_allocr_alloc_graph(allocr, gf);
+    // set the graph inputs
+    struct ggml_tensor * input = ggml_graph_get_tensor(gf, "input");
+    ggml_backend_tensor_set(input, input_sequence.data(), 0, sizeof(int32_t) * input_sequence.size());
 
-    // run the computation
+    struct ggml_tensor * position = ggml_graph_get_tensor(gf, "position");
+    for (int i = 0; i < (int)input_sequence.size(); i++) {
+        ggml_backend_tensor_set(position, &i, i * sizeof(int32_t), sizeof(i));
+    }
+
+    // set backend options
     if (ggml_backend_is_cpu(model.backend)) {
         ggml_backend_cpu_set_n_threads(model.backend, n_threads);
     }
-#ifdef GGML_USE_METAL
-    if (ggml_backend_is_metal(model.backend)) {
-        ggml_backend_metal_set_n_cb(model.backend, n_threads);
-    }
-#endif
+
+    // run the computation
     ggml_backend_graph_compute(model.backend, gf);
 
-    struct ggml_tensor* inpL = gf->nodes[gf->n_nodes - 1];
+    struct ggml_tensor* inpL = ggml_graph_get_tensor(gf, "logits");
 
     ggml_backend_tensor_get(inpL, logits.data(), 0, sizeof(float) * n_vocab * block_size);
 
@@ -2014,18 +1948,18 @@ static bool bark_eval_fine_encoder(struct bark_context* bctx, int n_threads) {
     std::vector<float> logits;
     logits.resize(1024 * 1056);
 
-    auto& model = bctx->text_model.fine_model;
-    auto& hparams = model.hparams;
-    auto& params = bctx->params;
+    auto & model   = bctx->text_model.fine_model;
+    auto & hparams = model.hparams;
+    auto & params  = bctx->params;
 
     float temp = params.fine_temp;
 
     int32_t n_coarse_codebooks = params.n_coarse_codebooks;
-    int32_t n_fine_codebooks = params.n_fine_codebooks;
-    int32_t codebook_size = params.codebook_size;
+    int32_t n_fine_codebooks   = params.n_fine_codebooks;
+    int32_t codebook_size      = params.codebook_size;
 
-    int n_coarse = input[0].size();
-    int original_seq_len = input.size();
+    int n_coarse          = input[0].size();
+    int original_seq_len  = input.size();
     int n_remove_from_end = 0;
 
     // channel padding
@@ -2110,32 +2044,26 @@ static bool bark_eval_fine_encoder(struct bark_context* bctx, int n_threads) {
 bool bark_forward_fine_encoder(struct bark_context* bctx, int n_threads) {
     const int64_t t_main_start_us = ggml_time_us();
 
-    auto& model = bctx->text_model.fine_model;
-    auto& allocr = bctx->allocr;
-    auto& hparams = model.hparams;
-    auto& params = bctx->params;
-    auto& verbosity = bctx->params.verbosity;
+    auto & model     = bctx->text_model.fine_model;
+    auto & allocr    = bctx->allocr;
+    auto & hparams   = model.hparams;
+    auto & params    = bctx->params;
+    auto & verbosity = bctx->params.verbosity;
 
     int32_t n_fine_codebooks = params.n_fine_codebooks;
 
     // allocate the compute buffer
     {
         // alignment required by the backend
-        size_t align = ggml_backend_get_alignment(model.backend);
-        bctx->allocr = ggml_allocr_new_measure(align);
+        bctx->allocr = ggml_gallocr_new(ggml_backend_get_default_buffer_type(model.backend));
 
         // create the worst-case graph for memory usage estimation
         std::vector<bark_vocab::id> decoy_tokens(hparams.block_size * n_fine_codebooks, 0);
-        struct ggml_cgraph* gf = bark_build_fine_gpt_graph(
-            &model, allocr, decoy_tokens, 2 /* codebook_idx */, n_fine_codebooks, n_threads);
+        struct ggml_cgraph* gf = bark_build_fine_gpt_graph(&model, decoy_tokens, 2 /* codebook_idx */, n_fine_codebooks);
 
-        // compute the required memory
-        size_t mem_size = ggml_allocr_alloc_graph(bctx->allocr, gf);
-
-        // recreate the allocator with the required memory
-        ggml_allocr_free(bctx->allocr);
-        bctx->buf_compute = ggml_backend_alloc_buffer(model.backend, mem_size);
-        bctx->allocr = ggml_allocr_new_from_buffer(bctx->buf_compute);
+        // pre-allocate the compute buffer for the worst case (optional)
+        ggml_gallocr_reserve(allocr, gf);
+        size_t mem_size =  ggml_gallocr_get_buffer_size(allocr, 0);
 
         if (verbosity == bark_verbosity_level::MEDIUM || verbosity == bark_verbosity_level::HIGH) {
             fprintf(stderr, "%s: compute buffer size: %.2f MB\n\n", __func__, mem_size / 1024.0 / 1024.0);
@@ -2153,7 +2081,7 @@ bool bark_forward_fine_encoder(struct bark_context* bctx, int n_threads) {
     bark_print_statistics(&model);
 
     ggml_backend_buffer_free(bctx->buf_compute);
-    ggml_allocr_free(bctx->allocr);
+    ggml_gallocr_free(bctx->allocr);
 
     return true;
 }
@@ -2227,15 +2155,17 @@ bool bark_generate_audio(struct bark_context* bctx, const char* text, int n_thre
 }
 
 static void bark_free_model(struct gpt_model* model) {
-    if (!model) {
+    if (!model)
         return;
-    }
 
-    if (model->ctx) {
-        ggml_free(model->ctx);
-    }
+    if (model->ctx_w)
+        ggml_free(model->ctx_w);
+
+    if (model->ctx_kv)
+        ggml_free(model->ctx_kv);
 
     ggml_backend_buffer_free(model->buffer_w);
+    ggml_backend_buffer_free(model->buffer_kv);
     ggml_backend_free(model->backend);
 }
 
