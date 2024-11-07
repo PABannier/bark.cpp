@@ -1175,6 +1175,7 @@ static bool bark_load_model_from_file(
 }
 
 struct bark_context* bark_load_model(const char* model_path, struct bark_context_params params, uint32_t seed) {
+    ggml_time_init();
     int64_t t_load_start_us = ggml_time_us();
 
     struct bark_context* bctx = new bark_context();
