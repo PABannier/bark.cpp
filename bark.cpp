@@ -111,15 +111,12 @@ struct gpt_model {
 
     std::map<std::string, struct ggml_tensor*> tensors;
 
-    //
     int64_t t_sample_us = 0;
     int64_t t_predict_us = 0;
     int64_t t_main_us = 0;
 
-    //
     int64_t n_sample = 0;
 
-    //
     int64_t memsize = 0;
 };
 
@@ -953,7 +950,22 @@ static bool bark_model_load(std::ifstream & fin,
 
     // key + value memory
     {
-        auto * ctx = model.ctx_kv;
+        auto & ctx = model.ctx_kv;
+
+        // create the ggml context for key + value memory
+        {
+            struct ggml_init_params params = {
+                /*.mem_size   =*/ ggml_tensor_overhead() * n_tensors,
+                /*.mem_buffer =*/ NULL,
+                /*.no_alloc   =*/ true,
+            };
+
+            ctx = ggml_init(params);
+            if (!ctx) {
+                fprintf(stderr, "%s: ggml_init() failed\n", __func__);
+                return false;
+            }
+        }
 
         const auto & hparams = model.hparams;
 
