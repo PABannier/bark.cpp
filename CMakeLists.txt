@@ -20,6 +20,8 @@ set(BARK_LIB bark)
 
 add_subdirectory(encodec.cpp)
 
+add_definitions(-DEXPORTING_BARK)
+
 add_library(${BARK_LIB} STATIC bark.cpp bark.h)
 
 if (BARK_BUILD_EXAMPLES)
