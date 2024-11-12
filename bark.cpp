@@ -1456,8 +1456,8 @@ static ggml_cgraph * bark_build_fine_gpt_graph(
     ggml_set_input(input);
     ggml_set_name(input, "input");
 
+    // TODO: can we ensure that tok_emb is set to zero?
     struct ggml_tensor * tok_emb = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N);
-    ggml_set_input(tok_emb);
     ggml_set_name(tok_emb, "tok_emb");
 
     for (int wte_ix = 0; wte_ix < codebook_idx + 1; wte_ix++) {
@@ -1599,6 +1599,7 @@ static bool bark_eval_encoder_internal(
     int                  n_threads) {
     auto & hparams = model.hparams;
     const int n_vocab = hparams.n_out_vocab;
+    int N = input_sequence.size();
 
     const int64_t t_predict_us_start = ggml_time_us();
 
@@ -1609,12 +1610,19 @@ static bool bark_eval_encoder_internal(
 
     // set the graph inputs
     struct ggml_tensor * input = ggml_graph_get_tensor(gf, "input");
-    ggml_backend_tensor_set(input, input_sequence.data(), 0, input_sequence.size() * sizeof(int32_t));
+    ggml_backend_tensor_set(input, input_sequence.data(), 0, N * ggml_element_size(input));
+
+    if (*n_past == 0 && merge_ctx) {
+        // if we are merging contexts, we need to subtract the context tokens from the input size
+        // this adapts the number of positions
+        N -= 256;
+    }
 
     struct ggml_tensor * position = ggml_graph_get_tensor(gf, "position");
-    for (int i = 0; i < input_sequence.size(); i++) {
+
+    for (int i = 0; i < N; i++) {
         int32_t pos = i + *n_past;
-        ggml_backend_tensor_set(position, &pos, i * sizeof(int32_t), sizeof(pos));
+        ggml_backend_tensor_set(position, &pos, i * sizeof(int32_t), sizeof(int32_t));
     }
 
     // set backend options
@@ -1626,10 +1634,6 @@ static bool bark_eval_encoder_internal(
     ggml_backend_graph_compute(model.backend, gf);
 
     struct ggml_tensor * inpL = ggml_graph_get_tensor(gf, "logits");
-
-    int N = input_sequence.size();
-    if (merge_ctx && *n_past == 0)
-        N -= 256;
 
     logits.resize(n_vocab);
     ggml_backend_tensor_get(inpL, logits.data(), 0, sizeof(float) * n_vocab);
@@ -1922,20 +1926,25 @@ static bool bark_eval_fine_encoder_internal(
 
     const int n_fine_codebooks = params.n_fine_codebooks;
 
+    const int N = input_sequence.size() / n_fine_codebooks;
+
     const int64_t t_predict_us_start = ggml_time_us();
 
-    struct ggml_cgraph* gf = bark_build_fine_gpt_graph(&model, input_sequence, nn, n_fine_codebooks);
+    struct ggml_cgraph * gf = bark_build_fine_gpt_graph(&model, input_sequence, nn, n_fine_codebooks);
 
     // allocate the graph tensors
     ggml_gallocr_alloc_graph(allocr, gf);
 
     // set the graph inputs
     struct ggml_tensor * input = ggml_graph_get_tensor(gf, "input");
-    ggml_backend_tensor_set(input, input_sequence.data(), 0, sizeof(int32_t) * input_sequence.size());
+    ggml_backend_tensor_set(input, input_sequence.data(), 0, N * ggml_element_size(input));
+
+    // TODO: set to zero
+    struct ggml_tensor * tok_emb = ggml_graph_get_tensor(gf, "tok_emb");
 
     struct ggml_tensor * position = ggml_graph_get_tensor(gf, "position");
-    for (int i = 0; i < (int)input_sequence.size(); i++) {
-        ggml_backend_tensor_set(position, &i, i * sizeof(int32_t), sizeof(i));
+    for (int i = 0; i < N; i++) {
+        ggml_backend_tensor_set(position, &i, i * sizeof(int32_t), sizeof(int32_t));
     }
 
     // set backend options
