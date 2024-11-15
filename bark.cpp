@@ -1456,7 +1456,6 @@ static ggml_cgraph * bark_build_fine_gpt_graph(
     ggml_set_input(input);
     ggml_set_name(input, "input");
 
-    // TODO: can we ensure that tok_emb is set to zero?
     struct ggml_tensor * tok_emb = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, n_embd, N);
     ggml_set_name(tok_emb, "tok_emb");
 
@@ -1939,8 +1938,8 @@ static bool bark_eval_fine_encoder_internal(
     struct ggml_tensor * input = ggml_graph_get_tensor(gf, "input");
     ggml_backend_tensor_set(input, input_sequence.data(), 0, N * ggml_element_size(input));
 
-    // TODO: set to zero
     struct ggml_tensor * tok_emb = ggml_graph_get_tensor(gf, "tok_emb");
+    ggml_set_zero(tok_emb);
 
     struct ggml_tensor * position = ggml_graph_get_tensor(gf, "position");
     for (int i = 0; i < N; i++) {
