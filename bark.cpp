@@ -1916,10 +1916,10 @@ static bool bark_eval_fine_encoder_internal(
     std::vector<float>  & logits,
     int                   nn,
     int                   n_threads) {
-    auto& model   = bctx->text_model.fine_model;
-    auto& allocr  = bctx->allocr;
-    auto& hparams = model.hparams;
-    auto& params  = bctx->params;
+    auto & model   = bctx->text_model.fine_model;
+    auto & allocr  = bctx->allocr;
+    auto & hparams = model.hparams;
+    auto & params  = bctx->params;
 
     const int n_vocab    = hparams.n_out_vocab;
     const int block_size = hparams.block_size;
@@ -1937,7 +1937,7 @@ static bool bark_eval_fine_encoder_internal(
 
     // set the graph inputs
     struct ggml_tensor * input = ggml_graph_get_tensor(gf, "input");
-    ggml_backend_tensor_set(input, input_sequence.data(), 0, N * ggml_element_size(input));
+    ggml_backend_tensor_set(input, input_sequence.data(), 0, N * n_fine_codebooks * ggml_element_size(input));
 
     struct ggml_tensor * tok_emb = ggml_graph_get_tensor(gf, "tok_emb");
     ggml_set_zero(tok_emb);
