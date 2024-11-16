@@ -1,9 +1,15 @@
+#include <string>
 #include <iostream>
 #include <tuple>
 
 #include "bark.h"
 #include "common.h"
 #include "ggml.h"
+
+
+const std::string DARK_GREEN = "\033[32;2m";
+const std::string RESET = "\033[0m";
+
 
 void bark_print_progress_callback(struct bark_context *bctx, enum bark_encoding_step step, int progress, void *user_data) {
     if (step == bark_encoding_step::SEMANTIC) {
@@ -28,14 +34,16 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    std::cout << R"( _                   _                           )" << "\n"
-              << R"(| |                 | |                          )" << "\n"
-              << R"(| |__    __ _  _ __ | | __     ___  _ __   _ __  )" << "\n"
-              << R"(| '_ \  / _` || '__|| |/ /    / __|| '_ \ | '_ \ )" << "\n"
-              << R"(| |_) || (_| || |   |   <  _ | (__ | |_) || |_) |)" << "\n"
-              << R"(|_.__/  \__,_||_|   |_|\_\(_) \___|| .__/ | .__/ )" << "\n"
-              << R"(                                   | |    | |    )" << "\n"
-              << R"(                                   |_|    |_|    )" << "\n";
+    std::cout << DARK_GREEN;
+    std::cout << "\n";
+
+    std::cout << R"(██████╗  █████╗ ██████╗ ██╗  ██╗    ██████╗██████╗ ██████╗ )" << "\n"
+              << R"(██╔══██╗██╔══██╗██╔══██╗██║ ██╔╝   ██╔════╝██╔══██╗██╔══██╗)" << "\n"
+              << R"(██████╔╝███████║██████╔╝█████╔╝    ██║     ██████╔╝██████╔╝)" << "\n"
+              << R"(██╔══██╗██╔══██║██╔══██╗██╔═██╗    ██║     ██╔═══╝ ██╔═══╝ )" << "\n"
+              << R"(██████╔╝██║  ██║██║  ██║██║  ██╗██╗╚██████╗██║     ██║     )" << "\n"
+              << R"(╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝ ╚═════╝╚═╝     ╚═╝     )" << "\n"
+              << RESET << "\n";
 
     // initialize bark context
     struct bark_context_params ctx_params = bark_context_default_params();
