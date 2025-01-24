@@ -31,7 +31,7 @@ With `bark.cpp`, our goal is to bring **real-time realistic multilingual** text-
 - [ ] [AudioLDM2](https://audioldm.github.io/audioldm2/) ([#82](https://github.com/PABannier/bark.cpp/issues/82))
 - [ ] [Piper](https://github.com/rhasspy/piper) ([#135](https://github.com/PABannier/bark.cpp/issues/135))
 
-Demo on [Google Colab](https://colab.research.google.com/drive/1JVtJ6CDwxtKfFmEd8J4FGY2lzdL0d0jT?usp=sharing) ([#95](https://github.com/PABannier/bark.cpp/issues/95))
+Demo on [Google Colab](https://colab.research.google.com/drive/1j8osRVX4J_DAXMUDked7AgR9_cYGdPOz?usp=sharing)
 
 ---
 
