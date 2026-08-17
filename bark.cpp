@@ -339,6 +339,10 @@ static bool ggml_quantize_weights(
         read_safe(fin, length);
         read_safe(fin, ttype);
 
+        if (n_dims < 1 || n_dims > 4) {
+              fprintf(stderr, "%s: invalid n_dims %d in model file (expected 1 <= n_dims <= 4)\n", __func__, n_dims);
+              return false;
+          }
         int32_t nelements = 1;
         int32_t ne[4] = {1, 1, 1, 1};
         for (int i = 0; i < n_dims; ++i) {
@@ -1013,6 +1017,10 @@ static bool bark_model_load(std::ifstream & fin,
             read_safe(fin, length);
             read_safe(fin, ttype);
 
+            if (n_dims < 1 || n_dims > 2) {
+                  fprintf(stderr, "%s: invalid n_dims %d in model file (expected 1 <= n_dims <= 2)\n", __func__, n_dims);
+                  return false;
+              }
             int32_t nelements = 1;
             int32_t ne[2] = {1, 1};
             for (int i = 0; i < n_dims; ++i) {
